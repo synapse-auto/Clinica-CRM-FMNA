@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Test-Path \"e:\\\\Projetos Synapse\\\\Clinica CRM FMNA\"; [System.IO.Directory]::GetFiles\\(\"e:\\\\Projetos Synapse\\\\Clinica CRM FMNA\"\\); [System.IO.Directory]::GetDirectories\\(\"e:\\\\Projetos Synapse\\\\Clinica CRM FMNA\"\\))",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"e:\\\\Projetos Synapse\\\\Clinica CRM FMNA\\\\.specify\\\\memory\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"e:\\\\Projetos Synapse\\\\Clinica CRM FMNA\\\\.specify\\\\templates\\\\commands\")",
+      "Bash(gh --version)",
+      "PowerShell(gh --version 2>&1)",
+      "PowerShell(winget --version 2>&1)",
+      "PowerShell(winget install --id GitHub.cli --silent --accept-package-agreements --accept-source-agreements)"
+    ]
+  }
+}
