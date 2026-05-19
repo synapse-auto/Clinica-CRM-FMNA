@@ -7,7 +7,10 @@
       "Bash(gh --version)",
       "PowerShell(gh --version 2>&1)",
       "PowerShell(winget --version 2>&1)",
-      "PowerShell(winget install --id GitHub.cli --silent --accept-package-agreements --accept-source-agreements)"
+      "PowerShell(winget install --id GitHub.cli --silent --accept-package-agreements --accept-source-agreements)",
+      "PowerShell(git commit -m \"Initial commit: Clinica CRM FMNA project\" 2>&1)",
+      "PowerShell(Get-Item \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" -ErrorAction SilentlyContinue; Get-Item \"$env:LOCALAPPDATA\\\\Programs\\\\gh\\\\gh.exe\" -ErrorAction SilentlyContinue)",
+      "PowerShell(git push -u origin main 2>&1)"
     ]
   }
 }
