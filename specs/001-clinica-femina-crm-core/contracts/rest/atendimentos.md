@@ -11,9 +11,22 @@ Lista atendimentos visíveis ao usuário corrente. Recepcionista vê próprios +
 |-------|------|-------|
 | filtro | `TODOS` \| `IA` \| `HUMANO` | default `TODOS` |
 | q | string | busca por nome ou telefone do paciente |
+| atendenteId | int64 | **opcional** — filtra por atendente responsável (recepcionista). Ausente = "Todos os atendentes" (sem filtro) |
+| tagId | int64 | **opcional** — filtra atendimentos cujo paciente possui a tag. Ausente = "Todas as tags" (sem filtro) |
 | status | `ATIVO` \| `TRANSFERIDO` \| `ENCERRADO` \| `IA_AUTOMATICO` | default `ATIVO,IA_AUTOMATICO` |
 | pagina | int | default 0 |
 | tamanho | int | default 30, max 100 |
+
+**Semântica dos filtros** (FR-CHAT-02a/02b/02c):
+- `atendenteId` e `tagId` são independentes e opcionais — cada um pode ser aplicado ou omitido.
+- Filtros ativos combinam com AND entre si e com `filtro` (TODOS/IA/HUMANO) e `q`.
+  Ex: `?filtro=HUMANO&atendenteId=7&tagId=5&q=maria` → atendimentos humanos, da atendente 7, cujo paciente tem tag 5, e nome/telefone casando "maria".
+- Omitir `atendenteId` = dropdown em "Todos os atendentes". Omitir `tagId` = dropdown em "Todas as tags".
+- Resposta inclui `contadores` recalculados para o conjunto filtrado (ver abaixo).
+
+**Endpoints de apoio aos dropdowns de filtro**:
+- `GET /api/atendimentos/filtros/atendentes` → lista de recepcionistas selecionáveis `[{ "id", "nome" }]`.
+- `GET /api/tags` → lista de tags (contrato em [operational.md](./operational.md)).
 
 **Response 200**
 ```json
@@ -40,9 +53,12 @@ Lista atendimentos visíveis ao usuário corrente. Recepcionista vê próprios +
       "naoLidas": 2
     }
   ],
+  "contadores": { "todos": 27, "ia": 19, "humano": 8 },
   "pagina": 0, "tamanho": 30, "totalElementos": 47, "totalPaginas": 2
 }
 ```
+
+`contadores` reflete o conjunto após aplicar `atendenteId` + `tagId` + `q` — ou seja, as abas Todos/IA/Humano mostram a contagem dentro do escopo filtrado.
 
 ---
 

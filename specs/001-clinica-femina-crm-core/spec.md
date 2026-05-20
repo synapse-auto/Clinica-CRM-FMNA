@@ -84,6 +84,20 @@ Specialized clinical CRM whose patient and appointment data is consumed unidirec
 - Clicking the notification opens the conversation directly to the latest message.
 - The right-hand patient context panel populates with phone, email, current attendant, doctor, preferred time, tags, consultation history, last procedure, and active reminders.
 
+### 3.1a Scenario — Filtering the Conversation List
+
+**As a** receptionist or manager
+**I want to** narrow the conversation list by responsible attendant and/or by tag
+**So that** I can focus on a subset of conversations without losing the All/AI/Human view
+
+**Acceptance criteria**:
+- An "atendente" dropdown lists all receptionists plus a default "Todos os atendentes" option (no filter).
+- A "tag" dropdown lists all clinic tags plus a default "Todas as tags" option (no filter).
+- Each filter is optional: leaving a dropdown at its default applies no constraint for that dimension.
+- Active filters combine with AND: attendant filter AND tag filter AND All/AI/Human tab AND free-text search.
+- Changing any filter re-queries the list and updates the per-tab counts (Todos / IA / Humano).
+- Clearing a filter (selecting the default option) immediately removes that constraint.
+
 ### 3.2 Scenario — Sending a Quick Message Template
 
 **As an** attendant in an active conversation
@@ -289,6 +303,10 @@ Specialized clinical CRM whose patient and appointment data is consumed unidirec
 |----|-------------|
 | FR-CHAT-01 | The platform MUST provide a WhatsApp-style chat interface to communicate with patients. |
 | FR-CHAT-02 | The conversation list MUST support filters: All, AI, Human, plus free-text search. |
+| FR-CHAT-02a | The conversation list MUST support an optional filter by responsible attendant (receptionist), exposed as a dropdown defaulting to "Todos os atendentes" (no filter applied). |
+| FR-CHAT-02b | The conversation list MUST support an optional filter by tag, exposed as a dropdown defaulting to "Todas as tags" (no filter applied). |
+| FR-CHAT-02c | The attendant and tag filters MUST be independently activatable: each can be enabled or left at its "all" default, and active filters combine (AND) with the All/AI/Human filter and the free-text search. |
+| FR-CHAT-02d | The tag and attendant filter controls MUST be positioned in a filter bar **above the lead list** (top of the left panel of the Atendimentos tab), visible without scrolling the list. Maps to RF23. |
 | FR-CHAT-03 | A patient context panel MUST be available on the right side showing phone, email, current attendant, responsible doctor, preferred time, tags, consultation history, last procedure, and active reminders. |
 | FR-CHAT-04 | Messages MUST support text, voice notes recorded by the attendant, images, and documents. |
 | FR-CHAT-05 | Inbound messages MUST trigger a visual + audible notification on the responsible attendant's screen within 2 seconds of arrival. |
