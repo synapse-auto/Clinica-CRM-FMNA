@@ -21,7 +21,7 @@ spring:
 app:
   security:
     jwt:
-      secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      secret: ${JWT_SECRET}
       expiration-ms: 86400000
   crypto:
-    master-key: ${ENCRYPTION_MASTER_KEY:12345678901234567890123456789012} # 32 bytes for AES-256
+    master-key: ${APP_ENCRYPTION_KEY_V1}
