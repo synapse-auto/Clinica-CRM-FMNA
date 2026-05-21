@@ -1,0 +1,15 @@
+com\synapse\clinicafemina\security\JwtService.class
+com\synapse\clinicafemina\security\crypto\AesGcmConverter.class
+com\synapse\clinicafemina\config\ApplicationConfig.class
+com\synapse\clinicafemina\domain\Paciente.class
+com\synapse\clinicafemina\exception\GlobalExceptionHandler.class
+com\synapse\clinicafemina\domain\Atendimento.class
+com\synapse\clinicafemina\BackendApplication.class
+com\synapse\clinicafemina\domain\Clinica.class
+com\synapse\clinicafemina\domain\Mensagem.class
+com\synapse\clinicafemina\domain\Gestor.class
+com\synapse\clinicafemina\security\JwtAuthenticationFilter.class
+com\synapse\clinicafemina\config\SecurityConfig.class
+com\synapse\clinicafemina\domain\Medico.class
+com\synapse\clinicafemina\domain\Usuario.class
+com\synapse\clinicafemina\domain\Recepcionista.class
