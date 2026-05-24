@@ -1,0 +1,89 @@
+package com.synapse.clinicafemina.integration;
+
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+
+import java.util.Map;
+
+/**
+ * Cliente HTTP para envio de mensagens outbound via Meta WhatsApp Cloud API.
+ *
+ * Estratégia de retry (conforme contrato {@code whatsapp.md}):
+ * <ul>
+ *   <li>Retries: 5, backoff exponencial, base 1s, máx 16s</li>
+ *   <li>Circuit breaker: 50% falha → abre 60s</li>
+ *   <li>Em falha final: motivo persistido + publicado na DLX pelo {@link MensagemService}</li>
+ * </ul>
+ */
+@Slf4j
+@Component
+public class WhatsappOutboundClient {
+
+    @Value("${app.whatsapp.access-token}")
+    private String accessToken;
+
+    @Value("${app.whatsapp.phone-number-id}")
+    private String phoneNumberId;
+
+    @Value("${app.whatsapp.graph-api-url}")
+    private String graphApiUrl;
+
+    private final RestClient restClient;
+
+    public WhatsappOutboundClient() {
+        this.restClient = RestClient.builder().build();
+    }
+
+    /**
+     * Envia uma mensagem de texto simples e retorna o {@code wamid} (ID da Meta).
+     */
+    @Retry(name = "whatsapp-send")
+    @CircuitBreaker(name = "whatsapp-send", fallbackMethod = "enviarTextoFallback")
+    public String enviarTexto(String telefoneE164, String corpo) {
+        String url = graphApiUrl + "/" + phoneNumberId + "/messages";
+
+        Map<String, Object> body = Map.of(
+                "messaging_product", "whatsapp",
+                "to", telefoneE164,
+                "type", "text",
+                "text", Map.of("preview_url", false, "body", corpo)
+        );
+
+        log.debug("Enviando mensagem WhatsApp para {}", telefoneE164);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = restClient.post()
+                .uri(url)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .body(Map.class);
+
+        if (response == null || !response.containsKey("messages")) {
+            throw new IllegalStateException("Resposta inesperada da Meta API: " + response);
+        }
+
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, String>> messages =
+                (java.util.List<Map<String, String>>) response.get("messages");
+
+        return messages.getFirst().get("id");
+    }
+
+    /**
+     * Fallback do circuit breaker — lança exceção para que o MensagemService
+     * registre a falha e publique na DLX.
+     */
+    @SuppressWarnings("unused")
+    public String enviarTextoFallback(String telefoneE164, String corpo, Throwable t) {
+        log.error("Circuit breaker ativado para envio WhatsApp ({}): {}", telefoneE164, t.getMessage());
+        throw new RuntimeException("WhatsApp indisponível (circuit breaker aberto): " + t.getMessage(), t);
+    }
+}

@@ -25,3 +25,34 @@ app:
       expiration-ms: 86400000
   crypto:
     master-key: ${APP_ENCRYPTION_KEY_V1}
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+
+  whatsapp:
+    verify-token: ${META_WHATSAPP_VERIFY_TOKEN}
+    app-secret: ${META_WHATSAPP_APP_SECRET}
+    access-token: ${META_WHATSAPP_ACCESS_TOKEN}
+    phone-number-id: ${META_WHATSAPP_PHONE_NUMBER_ID}
+    graph-api-url: https://graph.facebook.com/v20.0
+
+resilience4j:
+  retry:
+    instances:
+      whatsapp-send:
+        max-attempts: 5
+        wait-duration: 1s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        max-wait-duration: 16s
+  circuitbreaker:
+    instances:
+      whatsapp-send:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 10
+
