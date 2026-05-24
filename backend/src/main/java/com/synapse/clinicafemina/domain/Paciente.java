@@ -89,6 +89,9 @@ public class Paciente {
     @Column(name = "darwin_id_externo", length = 100, unique = true)
     private String darwinIdExterno;
 
+    @Column(name = "darwin_dados_importados", columnDefinition = "jsonb")
+    private String darwinDadosImportados;
+
     @Column(name = "requer_revisao", nullable = false)
     private Boolean requerRevisao = false;
 
@@ -103,6 +106,16 @@ public class Paciente {
 
     @Column(name = "atualizado_em", nullable = false)
     private OffsetDateTime atualizadoEm;
+
+    /** Usuário que criou o registro — auditoria LGPD. Coluna: criado_por */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "criado_por")
+    private Usuario criadoPor;
+
+    /** Último usuário que alterou o registro — auditoria LGPD. Coluna: atualizado_por */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "atualizado_por")
+    private Usuario atualizadoPor;
 
     @PrePersist
     protected void onCreate() {

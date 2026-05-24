@@ -1,61 +1,113 @@
 package com.synapse.clinicafemina.exception;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // ── 401 Credenciais inválidas ─────────────────────────────────────────────
+    @ExceptionHandler({BadCredentialsException.class, UsernameNotFoundException.class})
+    public ResponseEntity<Object> handleAuthFailure(RuntimeException ex, WebRequest request) {
+        // Logamos internamente para rastreabilidade, mas retornamos mensagem genérica
+        // para não confirmar ao atacante se o email existe ou a senha está errada.
+        log.warn("Falha de autenticação em [{}]: {}",
+                request.getDescription(false).replace("uri=", ""),
+                ex.getMessage());
+        return buildResponse(HttpStatus.UNAUTHORIZED, "Credenciais inválidas.", request);
+    }
+
+    // ── 403 Acesso negado ─────────────────────────────────────────────────────
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Object> handleAccessDenied(AccessDeniedException ex, WebRequest request) {
+        log.warn("Acesso negado em [{}]: {}",
+                request.getDescription(false).replace("uri=", ""),
+                ex.getMessage());
+        return buildResponse(HttpStatus.FORBIDDEN, "Acesso negado.", request);
+    }
+
+    // ── 404 / rotas não encontradas (elimina o falso 500 anterior) ────────────
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<Object> handleNotFound(NotFoundException ex, WebRequest request) {
+        log.debug("Recurso não encontrado: {}", ex.getMessage());
         return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request);
     }
 
+    // Captura NoResourceFoundException e HttpRequestMethodNotSupportedException
+    @ExceptionHandler(ErrorResponseException.class)
+    public ResponseEntity<Object> handleErrorResponse(ErrorResponseException ex, WebRequest request) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
+        String message = status == HttpStatus.NOT_FOUND
+                ? "Recurso não encontrado."
+                : ex.getMessage();
+        log.debug("ErrorResponseException [{}] em {}: {}",
+                status.value(),
+                request.getDescription(false).replace("uri=", ""),
+                ex.getMessage());
+        return buildResponse(status, message, request);
+    }
+
+    // ── 409 Conflito de estado ────────────────────────────────────────────────
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Object> handleIllegalState(IllegalStateException ex, WebRequest request) {
+        log.warn("IllegalStateException: {}", ex.getMessage());
         return buildResponse(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 
+    // ── 501 Não implementado ──────────────────────────────────────────────────
     @ExceptionHandler(UnsupportedOperationException.class)
     public ResponseEntity<Object> handleUnsupported(UnsupportedOperationException ex, WebRequest request) {
+        log.warn("Operação não suportada: {}", ex.getMessage());
         return buildResponse(HttpStatus.NOT_IMPLEMENTED, ex.getMessage(), request);
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<Object> handleAllExceptions(Exception ex, WebRequest request) {
-        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR,
-                "Um erro inesperado ocorreu.", request);
-    }
-
+    // ── 400 Validação de campos ───────────────────────────────────────────────
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Object> handleValidationExceptions(MethodArgumentNotValidException ex, WebRequest request) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.BAD_REQUEST.value());
-        body.put("error", "Bad Request");
-
         Map<String, String> fieldErrors = new HashMap<>();
         ex.getBindingResult().getFieldErrors().forEach(error ->
-            fieldErrors.put(error.getField(), error.getDefaultMessage()));
+                fieldErrors.put(error.getField(), error.getDefaultMessage()));
 
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", OffsetDateTime.now());
+        body.put("status", HttpStatus.BAD_REQUEST.value());
+        body.put("error", "Bad Request");
         body.put("message", "Erro de validação nos campos informados.");
         body.put("details", fieldErrors);
         body.put("path", request.getDescription(false).replace("uri=", ""));
-
         return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
     }
 
+    // ── 500 Catchall — SEMPRE loga a stack trace completa internamente ─────────
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Object> handleAllExceptions(Exception ex, WebRequest request) {
+        // log.error registra a stack trace completa no console/arquivo de log.
+        // O cliente NUNCA recebe a mensagem técnica.
+        log.error("Exceção não tratada em [{}]",
+                request.getDescription(false).replace("uri=", ""), ex);
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Um erro inesperado ocorreu. Contacte o suporte.", request);
+    }
+
+    // ── Builder ───────────────────────────────────────────────────────────────
     private ResponseEntity<Object> buildResponse(HttpStatus status, String message, WebRequest request) {
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
+        body.put("timestamp", OffsetDateTime.now());
         body.put("status", status.value());
         body.put("error", status.getReasonPhrase());
         body.put("message", message);
@@ -63,4 +115,3 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(body, status);
     }
 }
-

@@ -78,6 +78,96 @@ public class WhatsappOutboundClient {
     }
 
     /**
+     * Faz upload de um arquivo de mídia para os servidores da Meta.
+     * Retorna o {@code media_id} para uso posterior no envio.
+     */
+    @Retry(name = "whatsapp-send")
+    @CircuitBreaker(name = "whatsapp-send", fallbackMethod = "uploadMidiaFallback")
+    public String uploadMidia(byte[] conteudo, String contentType, String nomeArquivo) {
+        String url = graphApiUrl + "/" + phoneNumberId + "/media";
+
+        // Constrói o body como multipart/form-data manualmente via byte array
+        String boundary = "----WhatsappUpload" + System.currentTimeMillis();
+
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken);
+        headers.set(HttpHeaders.CONTENT_TYPE, "multipart/form-data; boundary=" + boundary);
+
+        // Para simplificar e evitar dependência extra, usamos RestClient com resource
+        org.springframework.core.io.ByteArrayResource resource =
+                new org.springframework.core.io.ByteArrayResource(conteudo) {
+                    @Override public String getFilename() { return nomeArquivo; }
+                };
+
+        org.springframework.util.MultiValueMap<String, Object> parts =
+                new org.springframework.util.LinkedMultiValueMap<>();
+        parts.add("file", resource);
+        parts.add("type", contentType);
+        parts.add("messaging_product", "whatsapp");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = restClient.post()
+                .uri(url)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(parts)
+                .retrieve()
+                .body(Map.class);
+
+        if (response == null || !response.containsKey("id")) {
+            throw new IllegalStateException("Resposta inesperada no upload de mídia: " + response);
+        }
+        return (String) response.get("id");
+    }
+
+    @SuppressWarnings("unused")
+    public String uploadMidiaFallback(byte[] conteudo, String contentType, String nomeArquivo, Throwable t) {
+        log.error("Circuit breaker: upload de mídia falhou: {}", t.getMessage());
+        throw new RuntimeException("Upload de mídia indisponível: " + t.getMessage(), t);
+    }
+
+    /**
+     * Envia uma mensagem de mídia referenciando um {@code media_id} já carregado.
+     *
+     * @param tipo um de: image, audio, video, document
+     */
+    @Retry(name = "whatsapp-send")
+    @CircuitBreaker(name = "whatsapp-send", fallbackMethod = "enviarMidiaFallback")
+    public String enviarMidia(String telefoneE164, String tipo, String mediaId) {
+        String url = graphApiUrl + "/" + phoneNumberId + "/messages";
+
+        Map<String, Object> body = Map.of(
+                "messaging_product", "whatsapp",
+                "to", telefoneE164,
+                "type", tipo,
+                tipo, Map.of("id", mediaId)
+        );
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = restClient.post()
+                .uri(url)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .body(Map.class);
+
+        if (response == null || !response.containsKey("messages")) {
+            throw new IllegalStateException("Resposta inesperada no envio de mídia: " + response);
+        }
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, String>> messages =
+                (java.util.List<Map<String, String>>) response.get("messages");
+        return messages.getFirst().get("id");
+    }
+
+    @SuppressWarnings("unused")
+    public String enviarMidiaFallback(String telefoneE164, String tipo, String mediaId, Throwable t) {
+        log.error("Circuit breaker: envio de mídia falhou para {}: {}", telefoneE164, t.getMessage());
+        throw new RuntimeException("Envio de mídia indisponível: " + t.getMessage(), t);
+    }
+
+    /**
      * Fallback do circuit breaker — lança exceção para que o MensagemService
      * registre a falha e publique na DLX.
      */

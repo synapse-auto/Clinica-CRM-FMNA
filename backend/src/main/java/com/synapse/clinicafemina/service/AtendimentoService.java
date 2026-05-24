@@ -11,6 +11,7 @@ import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.messaging.MensagemEntradaEvent;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
+import com.synapse.clinicafemina.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -28,6 +29,7 @@ public class AtendimentoService {
 
     private final AtendimentoRepository atendimentoRepository;
     private final ClinicaRepository clinicaRepository;
+    private final UsuarioRepository usuarioRepository;
     private final RabbitTemplate rabbitTemplate;
     private final RealtimeBroadcastService broadcastService;
 
@@ -61,12 +63,42 @@ public class AtendimentoService {
     public AtendimentoDetalheDTO transferir(Long id, TransferirAtendimentoRequest req,
                                              Long clinicaId) {
         Atendimento atendimento = buscarOuFalhar(id);
-        Usuario antigoAtendente = atendimento.getAtendentePrincipal();
 
-        // Busca o novo atendente — deve pertencer à mesma clínica (verificação simplificada)
-        // Em produção: buscar por UsuarioRepository + validar clinicaId
-        throw new UnsupportedOperationException(
-                "Implementação completa após criação do UsuarioRepository");
+        if (!"ATIVO".equals(atendimento.getStatus())) {
+            throw new IllegalStateException("Só é possível transferir atendimentos ATIVOS");
+        }
+
+        Usuario novoAtendente = usuarioRepository.findById(req.novoAtendenteId())
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado: " + req.novoAtendenteId()));
+
+        // Garante que o novo atendente pertence à mesma clínica
+        if (!novoAtendente.getClinica().getId().equals(clinicaId)) {
+            throw new IllegalStateException("O atendente não pertence à mesma clínica");
+        }
+
+        Usuario antigoAtendente = atendimento.getAtendentePrincipal();
+        atendimento.setAtendentePrincipal(novoAtendente);
+        atendimento.setTratadoPorIa(false); // Ao transferir para humano, sai do modo IA
+        atendimentoRepository.save(atendimento);
+
+        log.info("Atendimento {} transferido de {} para {}",
+                id,
+                antigoAtendente != null ? antigoAtendente.getId() : "IA",
+                novoAtendente.getId());
+
+        // Broadcast STOMP para o novo atendente
+        Paciente paciente = atendimento.getPaciente();
+        broadcastService.broadcastTransferencia(
+                novoAtendente.getId(),
+                atendimento.getId(),
+                antigoAtendente != null ? antigoAtendente.getId() : 0L,
+                antigoAtendente != null ? antigoAtendente.getNome() : "IA",
+                paciente.getId(),
+                paciente.getNomeBusca(),
+                req.motivo()
+        );
+
+        return toDetalheDTO(atendimento);
     }
 
     // ─── Encerramento ─────────────────────────────────────────────────────

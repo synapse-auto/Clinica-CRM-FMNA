@@ -106,13 +106,37 @@ public class RealtimeBroadcastService {
 
     /**
      * Broadcast de presença de equipe para todos os conectados.
+     *
+     * @param status "ONLINE" | "OFFLINE"
+     * @param em     timestamp do evento
      */
-    public void broadcastPresenca(Long usuarioId, String nome, boolean online) {
+    public void broadcastPresenca(Long usuarioId, String nome, String status,
+                                   java.time.OffsetDateTime em) {
         Map<String, Object> payload = Map.of(
+                "tipo", "PRESENCA",
                 "usuarioId", usuarioId,
                 "nome", nome,
-                "online", online
+                "status", status,
+                "em", em.toString()
         );
         messagingTemplate.convertAndSend("/topic/presenca-equipe", payload);
+    }
+
+    /**
+     * Broadcast de indicador de digitação para o atendimento específico.
+     * Destino: {@code /topic/atendimento/{id}/digitando}
+     */
+    public void broadcastDigitando(Long atendimentoId, Long usuarioId,
+                                    String nomeUsuario, boolean digitando) {
+        Map<String, Object> payload = Map.of(
+                "tipo", "DIGITANDO",
+                "atendimentoId", atendimentoId,
+                "usuarioId", usuarioId,
+                "nome", nomeUsuario,
+                "digitando", digitando,
+                "em", java.time.OffsetDateTime.now().toString()
+        );
+        messagingTemplate.convertAndSend(
+                "/topic/atendimento/" + atendimentoId + "/digitando", payload);
     }
 }

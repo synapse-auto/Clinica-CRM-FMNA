@@ -1,5 +1,6 @@
 package com.synapse.clinicafemina.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.integration.WhatsappInboundMapper;
 import com.synapse.clinicafemina.service.RealtimeBroadcastService;
@@ -96,8 +97,7 @@ public class WhatsappWebhookController {
         // 2. Parseia payload
         Map<String, Object> payload;
         try {
-            //noinspection unchecked
-            payload = objectMapper.readValue(rawBody, Map.class);
+            payload = objectMapper.readValue(rawBody, new TypeReference<Map<String, Object>>() {});
         } catch (IOException e) {
             log.error("Erro ao parsear payload WhatsApp: {}", e.getMessage());
             return ResponseEntity.badRequest().build();

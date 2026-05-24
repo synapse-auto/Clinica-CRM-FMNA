@@ -1,0 +1,76 @@
+{
+  "properties": [
+    {
+      "name": "app.security.jwt.secret",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.security.jwt.expiration-ms",
+      "type": "java.lang.Long"
+    },
+    {
+      "name": "app.crypto.master-key",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.rabbitmq.host",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.rabbitmq.port",
+      "type": "java.lang.Integer"
+    },
+    {
+      "name": "app.rabbitmq.username",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.rabbitmq.password",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.rabbitmq.virtual-host",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.whatsapp.verify-token",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.whatsapp.app-secret",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.whatsapp.access-token",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.whatsapp.phone-number-id",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.whatsapp.graph-api-url",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.darwin.api-url",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.darwin.api-token",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.darwin.sync-cron",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.darwin.page-size",
+      "type": "java.lang.Integer"
+    },
+    {
+      "name": "app.darwin.enabled",
+      "type": "java.lang.Boolean"
+    }
+  ]
+}

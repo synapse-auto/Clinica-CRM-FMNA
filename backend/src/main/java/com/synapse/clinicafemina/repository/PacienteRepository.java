@@ -9,4 +9,8 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
 
     /** Localiza paciente pelo número E.164 normalizado (usado na integração WhatsApp). */
     Optional<Paciente> findByClinicaIdAndTelefoneNormalizado(Long clinicaId, String telefoneNormalizado);
+
+    Optional<Paciente> findByDarwinIdExterno(String darwinIdExterno);
+
+    Optional<Paciente> findByCpfHash(String cpfHash);
 }

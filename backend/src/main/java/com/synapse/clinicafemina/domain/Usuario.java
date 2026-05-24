@@ -3,7 +3,13 @@ package com.synapse.clinicafemina.domain;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.List;
 
 @Entity
 @Table(name = "usuario")
@@ -11,7 +17,7 @@ import java.time.OffsetDateTime;
 @DiscriminatorColumn(name = "perfil", discriminatorType = DiscriminatorType.STRING)
 @Getter
 @Setter
-public abstract class Usuario {
+public abstract class Usuario implements UserDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -67,4 +73,29 @@ public abstract class Usuario {
     protected void onUpdate() {
         atualizadoEm = OffsetDateTime.now();
     }
+
+    // ─── UserDetails ──────────────────────────────────────────────────────
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return List.of(new SimpleGrantedAuthority("ROLE_" + perfil));
+    }
+
+    @Override
+    public String getPassword() { return senhaHash; }
+
+    @Override
+    public String getUsername() { return email; }
+
+    @Override
+    public boolean isAccountNonExpired()  { return true; }
+
+    @Override
+    public boolean isAccountNonLocked()   { return ativo != null && ativo; }
+
+    @Override
+    public boolean isCredentialsNonExpired() { return true; }
+
+    @Override
+    public boolean isEnabled() { return ativo != null && ativo && deletadoEm == null; }
 }

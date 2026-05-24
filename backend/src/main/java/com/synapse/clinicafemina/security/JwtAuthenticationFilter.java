@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,6 +17,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -30,17 +32,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
         final String authHeader = request.getHeader("Authorization");
-        final String jwt;
-        final String userEmail;
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        jwt = authHeader.substring(7);
+        final String jwt = authHeader.substring(7);
         try {
-            userEmail = jwtService.extractUsername(jwt);
+            final String userEmail = jwtService.extractUsername(jwt);
             if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
 
@@ -52,11 +52,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                } else {
+                    log.warn("Token JWT inválido ou expirado para [{}] na rota [{}]",
+                            userEmail, request.getRequestURI());
                 }
             }
-        } catch (Exception e) {
-            // Log error or ignore to let Spring Security handle unauthorized
+        } catch (io.jsonwebtoken.ExpiredJwtException ex) {
+            log.warn("Token JWT expirado: {}", ex.getMessage());
+            // Não popula o SecurityContext — Spring Security rejeitará com 401 automaticamente
+        } catch (io.jsonwebtoken.JwtException ex) {
+            // MalformedJwt, SignatureException, etc.
+            log.warn("Token JWT malformado ou com assinatura inválida: {}", ex.getMessage());
+        } catch (Exception ex) {
+            log.error("Erro inesperado no JwtAuthenticationFilter para a rota [{}]: {}",
+                    request.getRequestURI(), ex.getMessage(), ex);
         }
+
         filterChain.doFilter(request, response);
     }
 }

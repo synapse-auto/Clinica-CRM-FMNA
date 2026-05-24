@@ -1,5 +1,6 @@
 package com.synapse.clinicafemina.config;
 
+import com.synapse.clinicafemina.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,14 +17,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @RequiredArgsConstructor
 public class ApplicationConfig {
 
-    // private final UsuarioRepository repository;
+    private final UsuarioRepository usuarioRepository;
 
     @Bean
     public UserDetailsService userDetailsService() {
-        return username -> {
-            // return repository.findByEmail(username).orElseThrow(() -> new UsernameNotFoundException("User not found"));
-            throw new UsernameNotFoundException("User not found"); // Placeholder until repository is created
-        };
+        // IMPORTANTE: mensagem genérica — não confirma ao atacante se o email existe no sistema.
+        return username -> usuarioRepository.findAtivoByEmail(username)
+                .orElseThrow(() -> new UsernameNotFoundException("Credenciais inválidas"));
     }
 
     @Bean
@@ -41,6 +41,6 @@ public class ApplicationConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(12); // BCrypt cost 12 requested
+        return new BCryptPasswordEncoder(12);
     }
 }
