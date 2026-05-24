@@ -1,12 +1,10 @@
 package com.synapse.clinicafemina.controller;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.synapse.clinicafemina.integration.WhatsappInboundMapper;
-import com.synapse.clinicafemina.service.RealtimeBroadcastService;
+import com.synapse.clinicafemina.config.RabbitMQConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,8 +18,6 @@ import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Controller de webhooks inbound da Meta WhatsApp Cloud API.
@@ -51,9 +47,7 @@ public class WhatsappWebhookController {
     @Value("${app.whatsapp.app-secret}")
     private String appSecret;
 
-    private final WhatsappInboundMapper inboundMapper;
-    private final RealtimeBroadcastService broadcastService;
-    private final ObjectMapper objectMapper;
+    private final RabbitTemplate rabbitTemplate;
 
     // ─── GET: Verification handshake ─────────────────────────────────────
 
@@ -94,70 +88,15 @@ public class WhatsappWebhookController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        // 2. Parseia payload
-        Map<String, Object> payload;
-        try {
-            payload = objectMapper.readValue(rawBody, new TypeReference<Map<String, Object>>() {});
-        } catch (IOException e) {
-            log.error("Erro ao parsear payload WhatsApp: {}", e.getMessage());
-            return ResponseEntity.badRequest().build();
-        }
+        // 2. Envia para o RabbitMQ para processamento assíncrono rápido
+        rabbitTemplate.convertAndSend(
+                RabbitMQConfig.WHATSAPP_EXCHANGE,
+                RabbitMQConfig.INBOUND_ROUTING_KEY,
+                rawBody
+        );
 
-        // 3. Itera entries/changes e despacha
-        despachar(payload);
-
-        // 4. Responde 200 < 5s (requisito Meta)
+        // 3. Responde 200 < 5s (requisito Meta)
         return ResponseEntity.ok().build();
-    }
-
-    // ─── Lógica de despacho ───────────────────────────────────────────────
-
-    @SuppressWarnings("unchecked")
-    private void despachar(Map<String, Object> payload) {
-        List<Map<String, Object>> entries =
-                (List<Map<String, Object>>) payload.get("entry");
-        if (entries == null) return;
-
-        for (Map<String, Object> entry : entries) {
-            List<Map<String, Object>> changes =
-                    (List<Map<String, Object>>) entry.get("changes");
-            if (changes == null) continue;
-
-            for (Map<String, Object> change : changes) {
-                if (!"messages".equals(change.get("field"))) continue;
-
-                Map<String, Object> value = (Map<String, Object>) change.get("value");
-                if (value == null) continue;
-
-                // Mensagens inbound
-                List<?> messages = (List<?>) value.get("messages");
-                if (messages != null && !messages.isEmpty()) {
-                    try {
-                        inboundMapper.processarMensagemTexto(value);
-                    } catch (Exception e) {
-                        log.error("Erro ao processar mensagem inbound: {}", e.getMessage(), e);
-                    }
-                }
-
-                // Status updates (entregue, lida)
-                List<Map<String, Object>> statuses =
-                        (List<Map<String, Object>>) value.get("statuses");
-                if (statuses != null) {
-                    for (Map<String, Object> status : statuses) {
-                        try {
-                            inboundMapper.processarStatusUpdate(status).ifPresent(mensagem -> {
-                                // TODO: buscar o atendente responsável pelo atendimento
-                                // e publicar STOMP via broadcastService.broadcastStatusMensagem(...)
-                                log.debug("Status de mensagem {} atualizado para {}",
-                                        mensagem.getId(), mensagem.getWhatsappStatus());
-                            });
-                        } catch (Exception e) {
-                            log.error("Erro ao processar status update: {}", e.getMessage(), e);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     // ─── Validação HMAC-SHA256 ────────────────────────────────────────────

@@ -25,15 +25,18 @@ public class RabbitMQConfig {
     public static final String EXCHANGE_MENSAGEM_ENTRADA   = "mensagem.entrada";
     public static final String EXCHANGE_WHATSAPP_SAIDA     = "whatsapp.saida";
     public static final String EXCHANGE_WHATSAPP_SAIDA_DLX = "whatsapp.saida.dlx";
+    public static final String WHATSAPP_EXCHANGE           = "whatsapp.exchange";
 
     // ─── Nomes de Filas ────────────────────────────────────────────────────
     public static final String QUEUE_MENSAGEM_ENTRADA      = "mensagem.entrada";
     public static final String QUEUE_WHATSAPP_SAIDA        = "whatsapp.saida";
     public static final String QUEUE_WHATSAPP_SAIDA_DLQ    = "whatsapp.saida.dlq";
+    public static final String INBOUND_QUEUE               = "whatsapp.inbound.queue";
 
     // ─── Routing Keys ──────────────────────────────────────────────────────
     public static final String ROUTING_KEY_MENSAGEM_ENTRADA = "mensagem.entrada";
     public static final String ROUTING_KEY_WHATSAPP_SAIDA   = "whatsapp.saida";
+    public static final String INBOUND_ROUTING_KEY          = "whatsapp.inbound.routing";
 
     // ─── Exchanges ─────────────────────────────────────────────────────────
 
@@ -52,6 +55,12 @@ public class RabbitMQConfig {
     @Bean
     public DirectExchange whatsappSaidaDlxExchange() {
         return ExchangeBuilder.directExchange(EXCHANGE_WHATSAPP_SAIDA_DLX)
+                .durable(true).build();
+    }
+
+    @Bean
+    public DirectExchange whatsappExchange() {
+        return ExchangeBuilder.directExchange(WHATSAPP_EXCHANGE)
                 .durable(true).build();
     }
 
@@ -75,6 +84,11 @@ public class RabbitMQConfig {
         return QueueBuilder.durable(QUEUE_WHATSAPP_SAIDA_DLQ).build();
     }
 
+    @Bean
+    public Queue inboundQueue() {
+        return QueueBuilder.durable(INBOUND_QUEUE).build();
+    }
+
     // ─── Bindings ──────────────────────────────────────────────────────────
 
     @Bean
@@ -96,6 +110,13 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(whatsappSaidaDlq())
                 .to(whatsappSaidaDlxExchange())
                 .with(ROUTING_KEY_WHATSAPP_SAIDA);
+    }
+
+    @Bean
+    public Binding inboundBinding() {
+        return BindingBuilder.bind(inboundQueue())
+                .to(whatsappExchange())
+                .with(INBOUND_ROUTING_KEY);
     }
 
     // ─── Infraestrutura ────────────────────────────────────────────────────
