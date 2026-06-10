@@ -7,6 +7,8 @@ COPY gradlew .
 COPY gradle gradle
 COPY build.gradle settings.gradle ./
 
+RUN chmod +x ./gradlew
+
 # Fazer o download das dependências offline para otimização do cache
 RUN ./gradlew dependencies --no-daemon
 
