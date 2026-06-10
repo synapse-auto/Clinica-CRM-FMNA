@@ -129,7 +129,7 @@ public class MensagemService {
 
         try {
             // 2. Faz upload do arquivo para a Meta e obtém o media_id
-            String mediaId = whatsappOutboundClient.uploadMidia(arquivo.getBytes(), contentType, nomeArquivo);
+            String mediaId = whatsappOutboundClient.uploadMidia(arquivo.getResource(), contentType, nomeArquivo);
 
             // 3. Envia a mensagem de mídia referenciando o media_id
             String wamid = whatsappOutboundClient.enviarMidia(telefone, tipoMedia.toLowerCase(), mediaId);

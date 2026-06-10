@@ -83,7 +83,7 @@ public class WhatsappOutboundClient {
      */
     @Retry(name = "whatsapp-send")
     @CircuitBreaker(name = "whatsapp-send", fallbackMethod = "uploadMidiaFallback")
-    public String uploadMidia(byte[] conteudo, String contentType, String nomeArquivo) {
+    public String uploadMidia(org.springframework.core.io.Resource recurso, String contentType, String nomeArquivo) {
         String url = graphApiUrl + "/" + phoneNumberId + "/media";
 
         // Constrói o body como multipart/form-data manualmente via byte array
@@ -93,15 +93,9 @@ public class WhatsappOutboundClient {
         headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken);
         headers.set(HttpHeaders.CONTENT_TYPE, "multipart/form-data; boundary=" + boundary);
 
-        // Para simplificar e evitar dependência extra, usamos RestClient com resource
-        org.springframework.core.io.ByteArrayResource resource =
-                new org.springframework.core.io.ByteArrayResource(conteudo) {
-                    @Override public String getFilename() { return nomeArquivo; }
-                };
-
         org.springframework.util.MultiValueMap<String, Object> parts =
                 new org.springframework.util.LinkedMultiValueMap<>();
-        parts.add("file", resource);
+        parts.add("file", recurso);
         parts.add("type", contentType);
         parts.add("messaging_product", "whatsapp");
 
@@ -121,7 +115,7 @@ public class WhatsappOutboundClient {
     }
 
     @SuppressWarnings("unused")
-    public String uploadMidiaFallback(byte[] conteudo, String contentType, String nomeArquivo, Throwable t) {
+    public String uploadMidiaFallback(org.springframework.core.io.Resource recurso, String contentType, String nomeArquivo, Throwable t) {
         log.error("Circuit breaker: upload de mídia falhou: {}", t.getMessage());
         throw new RuntimeException("Upload de mídia indisponível: " + t.getMessage(), t);
     }

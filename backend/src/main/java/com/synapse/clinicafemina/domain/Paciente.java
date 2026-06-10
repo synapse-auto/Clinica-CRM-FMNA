@@ -32,7 +32,7 @@ public class Paciente {
     @Convert(converter = AesGcmConverter.class)
     private String cpf;
 
-    @Column(name = "cpf_hash", length = 64, unique = true)
+    @Column(name = "cpf_hash", columnDefinition = "char(64)", unique = true)
     private String cpfHash;
 
     @Column(name = "data_nascimento")
@@ -42,7 +42,7 @@ public class Paciente {
     @Convert(converter = AesGcmConverter.class)
     private String email;
 
-    @Column(name = "email_hash", length = 64)
+    @Column(name = "email_hash", columnDefinition = "char(64)")
     private String emailHash;
 
     @Column(nullable = false)

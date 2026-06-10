@@ -1,13 +1,13 @@
 spring:
   application:
-    name: clinicafemina
+    name: clinica_auto
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:clinicafemina}
-    username: ${DB_USER:postgres}
-    password: ${DB_PASS}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://2.24.97.199:5432/clinica_auto}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:2EYBFYAZK328PLEE594C53}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     open-in-view: false
     show-sql: true
     properties:
@@ -26,28 +26,28 @@ spring:
 app:
   security:
     jwt:
-      secret: ${JWT_SECRET}
-      expiration-ms: 86400000
+      secret: ${JWT_SECRET:minha_chave_secreta_local_muito_longa_para_testes_clinica_crm_2026}
+      expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   crypto:
-    master-key: ${APP_ENCRYPTION_KEY_V1}
+    master-key: ${CRYPTO_MASTER_KEY:0123456789abcdef0123456789abcdef}
 
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:guest}
-    password: ${RABBITMQ_PASS:guest}
-    virtual-host: ${RABBITMQ_VHOST:/}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
 
   whatsapp:
-    verify-token: ${META_WHATSAPP_VERIFY_TOKEN}
-    app-secret: ${META_WHATSAPP_APP_SECRET}
-    access-token: ${META_WHATSAPP_ACCESS_TOKEN}
-    phone-number-id: ${META_WHATSAPP_PHONE_NUMBER_ID}
-    graph-api-url: https://graph.facebook.com/v20.0
+    verify-token: ${WHATSAPP_VERIFY_TOKEN:sandbox}
+    app-secret: ${WHATSAPP_APP_SECRET:sandbox}
+    access-token: ${WHATSAPP_ACCESS_TOKEN:sandbox}
+    phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:12345}
+    graph-api-url: ${WHATSAPP_GRAPH_API_URL:https://graph.facebook.com/v20.0}
 
   darwin:
     api-url: ${DARWIN_API_URL:https://sandbox.api.darwin.health/v1}
-    api-token: ${DARWIN_API_TOKEN}
+    api-token: ${DARWIN_API_TOKEN:sandbox}
     sync-cron: ${DARWIN_SYNC_CRON:0 0/15 * * * ?}
-    page-size: ${DARWIN_SYNC_PAGE_SIZE:100}
-    enabled: ${DARWIN_SYNC_ENABLED:true}
+    page-size: ${DARWIN_PAGE_SIZE:100}
+    enabled: ${DARWIN_ENABLED:true}
