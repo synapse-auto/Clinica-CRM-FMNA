@@ -38,6 +38,34 @@ services:
       timeout: 5s
       retries: 5
 
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: clinicafemina-pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@clinicafemina.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin_pgadmin_local}
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+      # Evita rebaixar privilegio quando rodando como root no container
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      # Pre-cadastra a conexao com a DB remota (clinica_auto)
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+
+  adminer:
+    image: adminer:4
+    container_name: clinicafemina-adminer
+    restart: always
+    environment:
+      # Pre-preenche host/banco da DB remota na tela de login
+      ADMINER_DEFAULT_SERVER: ${ADMINER_DEFAULT_SERVER:-2.24.97.199}
+      ADMINER_DESIGN: pepa-linha
+    ports:
+      - "8081:8080"
+
   backend:
     build:
       context: ./backend
@@ -60,3 +88,4 @@ services:
 volumes:
   postgres_data:
   rabbitmq_data:
+  pgadmin_data:
