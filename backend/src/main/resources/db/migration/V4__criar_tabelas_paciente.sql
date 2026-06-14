@@ -22,6 +22,7 @@ CREATE TABLE paciente (
     chave_criptografia_id       VARCHAR(20) NOT NULL DEFAULT 'v1',
     darwin_id_externo           VARCHAR(100) UNIQUE,
     darwin_dados_importados     JSONB,
+    google_drive_folder_id      VARCHAR(255) DEFAULT NULL,
     requer_revisao              BOOLEAN NOT NULL DEFAULT FALSE,
     ultima_interacao_em         TIMESTAMPTZ,
     deletado_em                 TIMESTAMPTZ,
