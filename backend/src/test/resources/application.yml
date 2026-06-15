@@ -1,0 +1,36 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:clinica_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: none
+
+app:
+  clinic:
+    slug: fmna
+  security:
+    jwt:
+      secret: test-secret-with-more-than-32-characters
+      expiration-ms: 3600000
+  crypto:
+    master-key: test-master-key-32-byte-value!!!
+  dev-seed:
+    enabled: false
+  rabbitmq:
+    username: guest
+    password: guest
+  whatsapp:
+    verify-token: test
+    app-secret: test-secret
+    access-token: test-token
+    phone-number-id: test-phone-number-id
+    graph-api-url: https://graph.facebook.com/v20.0
+  darwin:
+    api-url: https://darwin.test
+    api-token: test-token
+    enabled: false
