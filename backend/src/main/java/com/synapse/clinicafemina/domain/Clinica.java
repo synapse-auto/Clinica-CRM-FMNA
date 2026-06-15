@@ -1,5 +1,6 @@
 package com.synapse.clinicafemina.domain;
 
+import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -17,6 +18,17 @@ public class Clinica {
 
     @Column(nullable = false, length = 200)
     private String nome;
+
+    @Column(nullable = false, unique = true, length = 80)
+    private String slug;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tipo_clinica", nullable = false, length = 30)
+    private TipoClinica tipoClinica = TipoClinica.PRE_NATAL;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "external_provider", nullable = false, length = 20)
+    private ExternalProviderType externalProvider = ExternalProviderType.DARWIN;
 
     @Column(name = "razao_social", nullable = false, length = 200)
     private String razaoSocial;
@@ -44,6 +56,24 @@ public class Clinica {
 
     @Column(name = "ia_24h", nullable = false)
     private Boolean ia24h = false;
+
+    @Column(name = "usa_cirurgias_na_agenda", nullable = false)
+    private Boolean usaCirurgiasNaAgenda = true;
+
+    @Column(name = "follow_up_automatico", nullable = false)
+    private Boolean followUpAutomatico = false;
+
+    @Column(name = "usa_n8n", nullable = false)
+    private Boolean usaN8n = false;
+
+    @Column(name = "n8n_webhook_url", length = 500)
+    private String n8nWebhookUrl;
+
+    @Column(name = "whatsapp_phone_number_id", unique = true, length = 80)
+    private String whatsappPhoneNumberId;
+
+    @Column(name = "whatsapp_business_account_id", length = 80)
+    private String whatsappBusinessAccountId;
 
     @Column(name = "criado_em", nullable = false, updatable = false)
     private OffsetDateTime criadoEm;
