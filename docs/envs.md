@@ -67,11 +67,20 @@ Uso esperado: deploy FMNA. Integracao read-only.
 ## Medware
 
 ```text
-MEDWARE_API_URL=<url-medware>
-MEDWARE_API_TOKEN=<token-read-only>
+MEDWARE_API_URL=<url-publica-da-instalacao-medware-ultramedical>/api
+MEDWARE_USERNAME=<usuario-api-medware>
+MEDWARE_PASSWORD=<senha-ou-hash>
+MEDWARE_PASSWORD_IS_HASH=true
+MEDWARE_TOKEN_REFRESH_MARGIN_SECONDS=300
+MEDWARE_TIMEOUT_SECONDS=30
+MEDWARE_DEFAULT_START_DAYS_BACK=30
+MEDWARE_DEFAULT_END_DAYS_FORWARD=60
+MEDWARE_WEBHOOK_TOKEN=<token-webhook-apenas-etapa-futura>
 ```
 
-Uso esperado: deploy UltraMedical. O provider ainda e skeleton ate existir documentacao oficial da API.
+Uso esperado: deploy UltraMedical. A URL real deve ser a URL publica da instalacao Medware da UltraMedical, mantendo o sufixo `/api` quando a publicacao seguir o padrao da documentacao oficial.
+
+O provider Medware atual usa somente leitura: login em `POST /Acesso/login`, `Authorization: Bearer` nas chamadas e endpoints `GET` de pacientes, agendamentos e catalogos auxiliares. Nao configure credenciais reais em arquivos versionados. `MEDWARE_WEBHOOK_TOKEN` fica documentado para etapa futura de webhook, mas nao e usado pelo CRM nesta fase read-only.
 
 ## N8N
 
