@@ -39,5 +39,12 @@ app:
     api-token: token-read-only-darwin
 
   medware:
-    api-url: https://api.medware.example/v1
-    api-token: token-read-only-medware
+    api-url: https://medware.ultramedical.example/api
+    username: usuario-api-medware
+    password: senha-ou-hash-configurado-fora-do-git
+    password-is-hash: true
+    token-refresh-margin-seconds: 300
+    timeout-seconds: 30
+    default-start-days-back: 30
+    default-end-days-forward: 60
+    webhook-token: token-webhook-apenas-etapa-futura

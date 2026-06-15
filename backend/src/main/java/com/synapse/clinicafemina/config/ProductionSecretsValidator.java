@@ -53,7 +53,8 @@ public class ProductionSecretsValidator implements ApplicationRunner {
             }
             if (clinica.getExternalProvider() == ExternalProviderType.MEDWARE) {
                 required.add("app.medware.api-url");
-                required.add("app.medware.api-token");
+                required.add("app.medware.username");
+                required.add("app.medware.password");
             }
         }
 
