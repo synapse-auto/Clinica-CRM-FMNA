@@ -58,14 +58,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
             }
         } catch (io.jsonwebtoken.ExpiredJwtException ex) {
-            log.warn("Token JWT expirado: {}", ex.getMessage());
+            log.warn("Token JWT expirado. tipoErro={}", ex.getClass().getSimpleName());
             // Não popula o SecurityContext — Spring Security rejeitará com 401 automaticamente
         } catch (io.jsonwebtoken.JwtException ex) {
             // MalformedJwt, SignatureException, etc.
-            log.warn("Token JWT malformado ou com assinatura inválida: {}", ex.getMessage());
+            log.warn("Token JWT malformado ou com assinatura invalida. tipoErro={}", ex.getClass().getSimpleName());
         } catch (Exception ex) {
-            log.error("Erro inesperado no JwtAuthenticationFilter para a rota [{}]: {}",
-                    request.getRequestURI(), ex.getMessage(), ex);
+            log.error("Erro inesperado no JwtAuthenticationFilter para a rota [{}]. tipoErro={}",
+                    request.getRequestURI(), ex.getClass().getSimpleName());
         }
 
         filterChain.doFilter(request, response);

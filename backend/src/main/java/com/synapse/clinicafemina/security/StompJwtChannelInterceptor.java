@@ -49,8 +49,8 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
         try {
             username = jwtService.extractUsername(jwt);
         } catch (JwtException e) {
-            log.warn("STOMP CONNECT com JWT inválido: {}", e.getMessage());
-            throw new JwtException("TOKEN_INVALIDO: " + e.getMessage());
+            log.warn("STOMP CONNECT com JWT invalido. tipoErro={}", e.getClass().getSimpleName());
+            throw new JwtException("TOKEN_INVALIDO: token invalido");
         }
 
         if (username != null) {
@@ -62,7 +62,7 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor {
                 accessor.setUser(auth);
                 log.debug("STOMP autenticado: {}", username);
             } else {
-                log.warn("STOMP CONNECT com token expirado para usuário: {}", username);
+                log.warn("STOMP CONNECT com token expirado");
                 throw new JwtException("TOKEN_INVALIDO: token expirado");
             }
         }

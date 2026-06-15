@@ -1,0 +1,43 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/clinica_auto
+    username: postgres
+    password: changeme
+
+app:
+  clinic:
+    slug: fmna
+    name: Clínica Femina CRM
+    external-provider: DARWIN
+    whatsapp-phone-number-id: phone-number-id-do-deploy
+
+  security:
+    jwt:
+      secret: troque-por-um-segredo-com-32-ou-mais-caracteres
+
+  crypto:
+    master-key: troque-por-32-caracteres-exatos
+
+  dev-seed:
+    enabled: true
+    email: gestor@clinica.local
+    password: troque-esta-senha-local
+
+  rabbitmq:
+    username: guest
+    password: guest
+
+  whatsapp:
+    verify-token: token-configurado-na-meta
+    app-secret: app-secret-da-meta
+    access-token: token-whatsapp-cloud-api
+    phone-number-id: phone-number-id-do-deploy
+
+  darwin:
+    enabled: true
+    api-url: https://api.darwin.example/v1
+    api-token: token-read-only-darwin
+
+  medware:
+    api-url: https://api.medware.example/v1
+    api-token: token-read-only-medware
