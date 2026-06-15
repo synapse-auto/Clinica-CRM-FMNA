@@ -27,7 +27,7 @@ public class WhatsappInboundListener {
         try {
             payload = objectMapper.readValue(rawBody, new TypeReference<Map<String, Object>>() {});
         } catch (IOException e) {
-            log.error("Erro ao parsear payload WhatsApp no RabbitMQ: {}", e.getMessage());
+            log.error("Erro ao parsear payload WhatsApp no RabbitMQ. tipoErro={}", e.getClass().getSimpleName());
             return;
         }
 
@@ -57,7 +57,7 @@ public class WhatsappInboundListener {
                     try {
                         inboundMapper.processarMensagemTexto(value);
                     } catch (Exception e) {
-                        log.error("Erro ao processar mensagem inbound: {}", e.getMessage(), e);
+                        log.error("Erro ao processar mensagem inbound. tipoErro={}", e.getClass().getSimpleName());
                     }
                 }
 
@@ -67,14 +67,14 @@ public class WhatsappInboundListener {
                 if (statuses != null) {
                     for (Map<String, Object> status : statuses) {
                         try {
-                            inboundMapper.processarStatusUpdate(status).ifPresent(mensagem -> {
+                            inboundMapper.processarStatusUpdate(value, status).ifPresent(mensagem -> {
                                 // TODO: buscar o atendente responsável pelo atendimento
                                 // e publicar STOMP via broadcastService.broadcastStatusMensagem(...)
                                 log.debug("Status de mensagem {} atualizado para {}",
                                         mensagem.getId(), mensagem.getWhatsappStatus());
                             });
                         } catch (Exception e) {
-                            log.error("Erro ao processar status update: {}", e.getMessage(), e);
+                            log.error("Erro ao processar status update. tipoErro={}", e.getClass().getSimpleName());
                         }
                     }
                 }

@@ -33,17 +33,17 @@ public class MensagemService {
     // ─── Histórico paginado ───────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public Page<MensagemDTO> listarHistorico(Long atendimentoId, Pageable pageable) {
+    public Page<MensagemDTO> listarHistorico(Long atendimentoId, Long clinicaId, Pageable pageable) {
         return mensagemRepository
-                .findByAtendimentoId(atendimentoId, pageable)
+                .findByAtendimentoIdAndClinicaId(atendimentoId, clinicaId, pageable)
                 .map(this::toDTO);
     }
 
     // ─── Envio de mensagem outbound ───────────────────────────────────────
 
     @Transactional
-    public MensagemDTO enviar(Long atendimentoId, EnviarMensagemRequest req, Long remetenteUsuarioId) {
-        Atendimento atendimento = atendimentoRepository.findById(atendimentoId)
+    public MensagemDTO enviar(Long atendimentoId, Long clinicaId, EnviarMensagemRequest req, Long remetenteUsuarioId) {
+        Atendimento atendimento = atendimentoRepository.findByIdAndClinicaId(atendimentoId, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado: " + atendimentoId));
 
         if (!"ATIVO".equals(atendimento.getStatus())) {
@@ -78,12 +78,12 @@ public class MensagemService {
             mensagem.setWhatsappMessageId(wamid);
             mensagem.setWhatsappStatus("ENVIADA");
             mensagemRepository.save(mensagem);
-            log.info("Mensagem {} enviada ao WhatsApp, wamid={}", mensagemId, wamid);
+            log.info("Mensagem {} enviada ao WhatsApp", mensagemId);
         } catch (Exception e) {
-            mensagem.setMotivoFalha(e.getMessage());
+            mensagem.setMotivoFalha(motivoFalhaSeguro(e));
             mensagem.setWhatsappStatus("FALHA");
             mensagemRepository.save(mensagem);
-            log.error("Falha ao enviar mensagem {} para WhatsApp: {}", mensagemId, e.getMessage());
+            log.error("Falha ao enviar mensagem {} para WhatsApp. tipoErro={}", mensagemId, e.getClass().getSimpleName());
             // Publica na DLX para reprocessamento futuro
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.EXCHANGE_WHATSAPP_SAIDA,
@@ -97,8 +97,8 @@ public class MensagemService {
     // ─── Upload e envio de mídia outbound ─────────────────────────────────
 
     @Transactional
-    public MensagemDTO enviarMidia(Long atendimentoId, MultipartFile arquivo, Long remetenteUsuarioId) {
-        Atendimento atendimento = atendimentoRepository.findById(atendimentoId)
+    public MensagemDTO enviarMidia(Long atendimentoId, Long clinicaId, MultipartFile arquivo, Long remetenteUsuarioId) {
+        Atendimento atendimento = atendimentoRepository.findByIdAndClinicaId(atendimentoId, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado: " + atendimentoId));
 
         if (!"ATIVO".equals(atendimento.getStatus())) {
@@ -137,13 +137,13 @@ public class MensagemService {
             mensagem.setWhatsappMessageId(wamid);
             mensagem.setWhatsappStatus("ENVIADA");
             mensagemRepository.save(mensagem);
-            log.info("Mídia {} enviada ao WhatsApp, wamid={}, mediaId={}", mensagemId, wamid, mediaId);
+            log.info("Midia {} enviada ao WhatsApp", mensagemId);
 
         } catch (Exception e) {
-            mensagem.setMotivoFalha(e.getMessage());
+            mensagem.setMotivoFalha(motivoFalhaSeguro(e));
             mensagem.setWhatsappStatus("FALHA");
             mensagemRepository.save(mensagem);
-            log.error("Falha ao enviar mídia {} para WhatsApp: {}", mensagemId, e.getMessage());
+            log.error("Falha ao enviar midia {} para WhatsApp. tipoErro={}", mensagemId, e.getClass().getSimpleName());
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.EXCHANGE_WHATSAPP_SAIDA,
                     RabbitMQConfig.ROUTING_KEY_WHATSAPP_SAIDA,
@@ -160,6 +160,10 @@ public class MensagemService {
             case "video/mp4", "video/3gpp"               -> "VIDEO";
             default                                      -> "DOCUMENTO";
         };
+    }
+
+    private String motivoFalhaSeguro(Exception e) {
+        return "Falha no envio WhatsApp: " + e.getClass().getSimpleName();
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────

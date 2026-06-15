@@ -5,13 +5,13 @@ import com.synapse.clinicafemina.dto.AtendimentoResumoDTO;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.service.AtendimentoService;
+import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.MensagemService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,6 +34,7 @@ public class AtendimentoController {
 
     private final AtendimentoService atendimentoService;
     private final MensagemService mensagemService;
+    private final ClinicaConfigService clinicaConfigService;
 
     /**
      * Lista atendimentos da clínica com filtros.
@@ -45,10 +46,10 @@ public class AtendimentoController {
     @GetMapping
     @PreAuthorize("hasAnyRole('GESTOR', 'MEDICO', 'RECEPCIONISTA')")
     public Page<AtendimentoResumoDTO> listar(
-            @RequestParam Long clinicaId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false, defaultValue = "TODOS") String tipo,
             @PageableDefault(size = 20, sort = "ultimaMensagemEm") Pageable pageable) {
+        Long clinicaId = clinicaConfigService.obterClinicaAtual().getId();
         return atendimentoService.listar(clinicaId, status, tipo, pageable);
     }
 
@@ -58,7 +59,8 @@ public class AtendimentoController {
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('GESTOR', 'MEDICO', 'RECEPCIONISTA')")
     public AtendimentoDetalheDTO buscar(@PathVariable Long id) {
-        return atendimentoService.buscarPorId(id);
+        Long clinicaId = clinicaConfigService.obterClinicaAtual().getId();
+        return atendimentoService.buscarPorId(id, clinicaId);
     }
 
     /**
@@ -69,7 +71,8 @@ public class AtendimentoController {
     public Page<MensagemDTO> mensagens(
             @PathVariable Long id,
             @PageableDefault(size = 30, sort = "dataHora") Pageable pageable) {
-        return mensagemService.listarHistorico(id, pageable);
+        Long clinicaId = clinicaConfigService.obterClinicaAtual().getId();
+        return mensagemService.listarHistorico(id, clinicaId, pageable);
     }
 
     /**
@@ -79,8 +82,8 @@ public class AtendimentoController {
     @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public AtendimentoDetalheDTO transferir(
             @PathVariable Long id,
-            @RequestBody @Valid TransferirAtendimentoRequest req,
-            @RequestParam Long clinicaId) {
+            @RequestBody @Valid TransferirAtendimentoRequest req) {
+        Long clinicaId = clinicaConfigService.obterClinicaAtual().getId();
         return atendimentoService.transferir(id, req, clinicaId);
     }
 
@@ -92,6 +95,7 @@ public class AtendimentoController {
     public AtendimentoDetalheDTO encerrar(
             @PathVariable Long id,
             @RequestParam(required = false) String motivo) {
-        return atendimentoService.encerrar(id, motivo);
+        Long clinicaId = clinicaConfigService.obterClinicaAtual().getId();
+        return atendimentoService.encerrar(id, clinicaId, motivo);
     }
 }

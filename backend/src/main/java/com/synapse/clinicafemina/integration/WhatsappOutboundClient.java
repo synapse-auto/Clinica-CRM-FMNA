@@ -55,7 +55,7 @@ public class WhatsappOutboundClient {
                 "text", Map.of("preview_url", false, "body", corpo)
         );
 
-        log.debug("Enviando mensagem WhatsApp para {}", telefoneE164);
+        log.debug("Enviando mensagem WhatsApp via Meta Cloud API");
 
         @SuppressWarnings("unchecked")
         Map<String, Object> response = restClient.post()
@@ -67,7 +67,7 @@ public class WhatsappOutboundClient {
                 .body(Map.class);
 
         if (response == null || !response.containsKey("messages")) {
-            throw new IllegalStateException("Resposta inesperada da Meta API: " + response);
+            throw new IllegalStateException("Resposta inesperada da Meta API");
         }
 
         @SuppressWarnings("unchecked")
@@ -109,15 +109,15 @@ public class WhatsappOutboundClient {
                 .body(Map.class);
 
         if (response == null || !response.containsKey("id")) {
-            throw new IllegalStateException("Resposta inesperada no upload de mídia: " + response);
+            throw new IllegalStateException("Resposta inesperada no upload de midia");
         }
         return (String) response.get("id");
     }
 
     @SuppressWarnings("unused")
     public String uploadMidiaFallback(org.springframework.core.io.Resource recurso, String contentType, String nomeArquivo, Throwable t) {
-        log.error("Circuit breaker: upload de mídia falhou: {}", t.getMessage());
-        throw new RuntimeException("Upload de mídia indisponível: " + t.getMessage(), t);
+        log.error("Circuit breaker: upload de midia falhou. tipoErro={}", t.getClass().getSimpleName());
+        throw new RuntimeException("Upload de midia indisponivel", t);
     }
 
     /**
@@ -147,7 +147,7 @@ public class WhatsappOutboundClient {
                 .body(Map.class);
 
         if (response == null || !response.containsKey("messages")) {
-            throw new IllegalStateException("Resposta inesperada no envio de mídia: " + response);
+            throw new IllegalStateException("Resposta inesperada no envio de midia");
         }
         @SuppressWarnings("unchecked")
         java.util.List<Map<String, String>> messages =
@@ -157,8 +157,8 @@ public class WhatsappOutboundClient {
 
     @SuppressWarnings("unused")
     public String enviarMidiaFallback(String telefoneE164, String tipo, String mediaId, Throwable t) {
-        log.error("Circuit breaker: envio de mídia falhou para {}: {}", telefoneE164, t.getMessage());
-        throw new RuntimeException("Envio de mídia indisponível: " + t.getMessage(), t);
+        log.error("Circuit breaker: envio de midia falhou. tipoErro={}", t.getClass().getSimpleName());
+        throw new RuntimeException("Envio de midia indisponivel", t);
     }
 
     /**
@@ -167,7 +167,7 @@ public class WhatsappOutboundClient {
      */
     @SuppressWarnings("unused")
     public String enviarTextoFallback(String telefoneE164, String corpo, Throwable t) {
-        log.error("Circuit breaker ativado para envio WhatsApp ({}): {}", telefoneE164, t.getMessage());
-        throw new RuntimeException("WhatsApp indisponível (circuit breaker aberto): " + t.getMessage(), t);
+        log.error("Circuit breaker ativado para envio WhatsApp. tipoErro={}", t.getClass().getSimpleName());
+        throw new RuntimeException("WhatsApp indisponivel (circuit breaker aberto)", t);
     }
 }

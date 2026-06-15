@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.controller;
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.domain.Usuario;
+import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.MensagemService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class MensagemController {
 
     private final MensagemService mensagemService;
+    private final ClinicaConfigService clinicaConfigService;
 
     /**
      * Envia uma mensagem outbound para o paciente via WhatsApp.
@@ -42,7 +44,8 @@ public class MensagemController {
             @RequestBody @Valid EnviarMensagemRequest req,
             @AuthenticationPrincipal Usuario usuario) {
         Long remetenteId = usuario != null ? usuario.getId() : null;
-        return mensagemService.enviar(atendimentoId, req, remetenteId);
+        Long clinicaId = clinicaConfigService.obterClinicaAtual().getId();
+        return mensagemService.enviar(atendimentoId, clinicaId, req, remetenteId);
     }
 
     /**
@@ -60,6 +63,7 @@ public class MensagemController {
             @RequestPart("arquivo") MultipartFile arquivo,
             @AuthenticationPrincipal Usuario usuario) {
         Long remetenteId = usuario != null ? usuario.getId() : null;
-        return mensagemService.enviarMidia(atendimentoId, arquivo, remetenteId);
+        Long clinicaId = clinicaConfigService.obterClinicaAtual().getId();
+        return mensagemService.enviarMidia(atendimentoId, clinicaId, arquivo, remetenteId);
     }
 }

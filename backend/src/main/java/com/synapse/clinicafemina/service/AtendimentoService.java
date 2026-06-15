@@ -10,7 +10,6 @@ import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.messaging.MensagemEntradaEvent;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
-import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +27,6 @@ import java.time.OffsetDateTime;
 public class AtendimentoService {
 
     private final AtendimentoRepository atendimentoRepository;
-    private final ClinicaRepository clinicaRepository;
     private final UsuarioRepository usuarioRepository;
     private final RabbitTemplate rabbitTemplate;
     private final RealtimeBroadcastService broadcastService;
@@ -52,8 +50,8 @@ public class AtendimentoService {
     // ─── Detalhe ──────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public AtendimentoDetalheDTO buscarPorId(Long id) {
-        Atendimento a = buscarOuFalhar(id);
+    public AtendimentoDetalheDTO buscarPorId(Long id, Long clinicaId) {
+        Atendimento a = buscarOuFalhar(id, clinicaId);
         return toDetalheDTO(a);
     }
 
@@ -62,7 +60,7 @@ public class AtendimentoService {
     @Transactional
     public AtendimentoDetalheDTO transferir(Long id, TransferirAtendimentoRequest req,
                                              Long clinicaId) {
-        Atendimento atendimento = buscarOuFalhar(id);
+        Atendimento atendimento = buscarOuFalhar(id, clinicaId);
 
         if (!"ATIVO".equals(atendimento.getStatus())) {
             throw new IllegalStateException("Só é possível transferir atendimentos ATIVOS");
@@ -104,8 +102,8 @@ public class AtendimentoService {
     // ─── Encerramento ─────────────────────────────────────────────────────
 
     @Transactional
-    public AtendimentoDetalheDTO encerrar(Long id, String motivo) {
-        Atendimento atendimento = buscarOuFalhar(id);
+    public AtendimentoDetalheDTO encerrar(Long id, Long clinicaId, String motivo) {
+        Atendimento atendimento = buscarOuFalhar(id, clinicaId);
 
         if ("ENCERRADO".equals(atendimento.getStatus())) {
             throw new IllegalStateException("Atendimento já encerrado");
@@ -116,14 +114,14 @@ public class AtendimentoService {
         atendimento.setMotivoEncerramento(motivo);
         atendimentoRepository.save(atendimento);
 
-        log.info("Atendimento {} encerrado. Motivo: {}", id, motivo);
+        log.info("Atendimento {} encerrado", id);
         return toDetalheDTO(atendimento);
     }
 
     // ─── Helpers privados ─────────────────────────────────────────────────
 
-    private Atendimento buscarOuFalhar(Long id) {
-        return atendimentoRepository.findById(id)
+    private Atendimento buscarOuFalhar(Long id, Long clinicaId) {
+        return atendimentoRepository.findByIdAndClinicaId(id, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado: " + id));
     }
 

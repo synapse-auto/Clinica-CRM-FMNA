@@ -120,7 +120,7 @@ public class WhatsappWebhookController {
                     signatureHeader.getBytes(StandardCharsets.UTF_8));
 
         } catch (NoSuchAlgorithmException | InvalidKeyException e) {
-            log.error("Erro ao validar assinatura HMAC: {}", e.getMessage());
+            log.error("Erro ao validar assinatura HMAC. tipoErro={}", e.getClass().getSimpleName());
             return false;
         }
     }

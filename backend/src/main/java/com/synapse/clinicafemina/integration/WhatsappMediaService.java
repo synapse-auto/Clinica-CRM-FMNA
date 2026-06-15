@@ -42,7 +42,7 @@ public class WhatsappMediaService {
      * @param targetPath O local no disco temporário ou permanente onde salvar a mídia
      */
     public void downloadMidiaStream(String mediaId, Path targetPath) {
-        log.info("Iniciando requisição de metadados da mídia {} para stream-download em {}", mediaId, targetPath);
+        log.info("Iniciando requisicao de metadados de midia WhatsApp para stream-download");
 
         // Passo 1: Fazer um GET para o Graph API obter a URL final da mídia
         String metadataUrl = graphApiUrl + "/" + mediaId;
@@ -55,11 +55,11 @@ public class WhatsappMediaService {
                 .body(Map.class);
 
         if (metadata == null || !metadata.containsKey("url")) {
-            throw new IllegalStateException("Não foi possível obter a URL da mídia " + mediaId);
+            throw new IllegalStateException("Nao foi possivel obter a URL da midia WhatsApp");
         }
 
         String downloadUrl = metadata.get("url");
-        log.debug("URL final da mídia {} recuperada, iniciando stream do binário.", mediaId);
+        log.debug("URL final da midia recuperada, iniciando stream do binario.");
 
         // Passo 2: Usar o restClient .exchange() para aceder diretamente à stream da resposta
         restClient.get()
@@ -76,9 +76,9 @@ public class WhatsappMediaService {
                     // O try-with-resources também previne o memory leak das handles da stream.
                     try (InputStream inputStream = response.getBody()) {
                         long bytesCopied = Files.copy(inputStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
-                        log.info("Mídia {} baixada com sucesso ({} bytes) e stream encerrada de forma segura", mediaId, bytesCopied);
+                        log.info("Midia baixada com sucesso ({} bytes) e stream encerrada de forma segura", bytesCopied);
                     } catch (Exception e) {
-                        log.error("Exceção ao copiar stream de mídia para o disco local: {}", e.getMessage(), e);
+                        log.error("Excecao ao copiar stream de midia para o disco local. tipoErro={}", e.getClass().getSimpleName());
                         throw e;
                     }
                     return null; // Interface exchange requer um objeto de retorno, nulo atende à assinatura

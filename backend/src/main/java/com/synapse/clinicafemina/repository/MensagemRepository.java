@@ -9,23 +9,65 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.time.OffsetDateTime;
+import java.util.List;
 
 public interface MensagemRepository extends JpaRepository<Mensagem, Long> {
 
     /** Histórico paginado de mensagens de um atendimento (mais recentes primeiro). */
-    @Query("SELECT m FROM Mensagem m WHERE m.atendimento.id = :atendimentoId ORDER BY m.dataHora DESC")
-    Page<Mensagem> findByAtendimentoId(@Param("atendimentoId") Long atendimentoId, Pageable pageable);
+    @Query("""
+            SELECT m FROM Mensagem m
+            WHERE m.atendimento.id = :atendimentoId
+              AND m.atendimento.clinica.id = :clinicaId
+            ORDER BY m.dataHora DESC
+            """)
+    Page<Mensagem> findByAtendimentoIdAndClinicaId(@Param("atendimentoId") Long atendimentoId,
+                                                   @Param("clinicaId") Long clinicaId,
+                                                   Pageable pageable);
 
-    /** Localiza mensagem por ID externo do WhatsApp (idempotência no processamento do webhook). */
-    Optional<Mensagem> findByWhatsappMessageId(String whatsappMessageId);
+    /** Localiza mensagem por ID externo do WhatsApp dentro da clínica resolvida no webhook. */
+    @Query("""
+            SELECT m FROM Mensagem m
+            WHERE m.atendimento.clinica.id = :clinicaId
+              AND m.whatsappMessageId = :whatsappMessageId
+            """)
+    Optional<Mensagem> findByClinicaIdAndWhatsappMessageId(@Param("clinicaId") Long clinicaId,
+                                                           @Param("whatsappMessageId") String whatsappMessageId);
+
+    @Query("""
+            SELECT COUNT(m) FROM Mensagem m
+            WHERE m.atendimento.clinica.id = :clinicaId
+              AND m.dataHora >= :inicio
+              AND m.dataHora < :fim
+            """)
+    long countByClinicaAndPeriodo(@Param("clinicaId") Long clinicaId,
+                                  @Param("inicio") OffsetDateTime inicio,
+                                  @Param("fim") OffsetDateTime fim);
+
+    @Query(value = """
+            SELECT EXTRACT(HOUR FROM data_hora AT TIME ZONE 'America/Sao_Paulo')::int AS hora, COUNT(*) AS total
+            FROM mensagem m
+            JOIN atendimento a ON a.id = m.atendimento_id
+            WHERE a.clinica_id = :clinicaId
+              AND m.data_hora >= :inicio
+              AND m.data_hora < :fim
+            GROUP BY hora
+            ORDER BY hora
+            """, nativeQuery = true)
+    List<Object[]> countMensagensPorHora(@Param("clinicaId") Long clinicaId,
+                                         @Param("inicio") OffsetDateTime inicio,
+                                         @Param("fim") OffsetDateTime fim);
 
     /** Marca mensagens não lidas de um atendimento como lidas (zera contador no app). */
     @Modifying
     @Query("""
-            UPDATE Mensagem m SET m.whatsappStatus = 'LIDA', m.lidaEm = CURRENT_TIMESTAMP
+            UPDATE Mensagem m SET m.whatsappStatus = 'LIDA', m.lidaEm = :lidaEm
             WHERE m.atendimento.id = :atendimentoId
+              AND m.atendimento.clinica.id = :clinicaId
               AND m.direcao = 'SAIDA'
               AND (m.whatsappStatus IS NULL OR m.whatsappStatus != 'LIDA')
             """)
-    int marcarComoLidas(@Param("atendimentoId") Long atendimentoId);
+    int marcarComoLidas(@Param("atendimentoId") Long atendimentoId,
+                        @Param("clinicaId") Long clinicaId,
+                        @Param("lidaEm") OffsetDateTime lidaEm);
 }

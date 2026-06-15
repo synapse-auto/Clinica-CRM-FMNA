@@ -25,6 +25,8 @@ public interface AtendimentoRepository extends JpaRepository<Atendimento, Long> 
                                     @Param("tratadoPorIa") Boolean tratadoPorIa,
                                     Pageable pageable);
 
+    Optional<Atendimento> findByIdAndClinicaId(Long id, Long clinicaId);
+
     /** Atendimento ativo de um paciente numa clínica. */
     @Query("""
             SELECT a FROM Atendimento a
@@ -59,4 +61,26 @@ public interface AtendimentoRepository extends JpaRepository<Atendimento, Long> 
     boolean existeEncerradoDesde(@Param("clinicaId") Long clinicaId,
                                   @Param("pacienteId") Long pacienteId,
                                   @Param("desde") OffsetDateTime desde);
+
+    @Query(value = """
+            SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (saida.data_hora - entrada.data_hora)) / 60.0), 0)
+            FROM mensagem entrada
+            JOIN atendimento a ON a.id = entrada.atendimento_id
+            JOIN LATERAL (
+                SELECT m2.data_hora
+                FROM mensagem m2
+                WHERE m2.atendimento_id = entrada.atendimento_id
+                  AND m2.direcao = 'SAIDA'
+                  AND m2.data_hora > entrada.data_hora
+                ORDER BY m2.data_hora ASC
+                LIMIT 1
+            ) saida ON TRUE
+            WHERE a.clinica_id = :clinicaId
+              AND entrada.direcao = 'ENTRADA'
+              AND entrada.data_hora >= :inicio
+              AND entrada.data_hora < :fim
+            """, nativeQuery = true)
+    Double calcularTempoMedioRespostaMinutos(@Param("clinicaId") Long clinicaId,
+                                             @Param("inicio") OffsetDateTime inicio,
+                                             @Param("fim") OffsetDateTime fim);
 }
