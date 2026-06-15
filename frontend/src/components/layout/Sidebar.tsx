@@ -30,7 +30,11 @@ const MENU_ITEMS = [
   { name: 'Configurações', icon: Settings, href: '/configuracoes' },
 ];
 
-export function Sidebar() {
+type SidebarProps = {
+  clinicName?: string;
+};
+
+export function Sidebar({ clinicName = 'Clínica' }: SidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -43,7 +47,7 @@ export function Sidebar() {
           </div>
           <div>
             <h1 className="text-white font-bold text-sm tracking-tight leading-tight">
-              Clínica Bem Estar
+              {clinicName}
             </h1>
             <span className="text-slate-500 text-xs">CRM</span>
           </div>

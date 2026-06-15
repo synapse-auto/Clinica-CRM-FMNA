@@ -1,4 +1,3 @@
-import { Search, Filter, UserPlus, Phone, MoreVertical, Paperclip, Smile, Send } from 'lucide-react';
 import { ChatList } from '@/components/chat/ChatList';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ContactDetails } from '@/components/chat/ContactDetails';

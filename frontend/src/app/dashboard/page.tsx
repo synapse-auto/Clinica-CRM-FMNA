@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import {
   Calendar as CalendarIcon,
   User,
@@ -7,261 +8,369 @@ import {
   AlertCircle,
   Clock,
   TrendingUp,
-  TrendingDown,
   LineChart,
   BarChart3,
   PieChart,
+  Stethoscope,
+  type LucideIcon,
 } from 'lucide-react';
+import { getClinicaAtual, getDashboardData } from '@/services/backend';
+import type { DashboardPeriodo, DashboardResponse } from '@/types/dashboard';
 
-export default function DashboardPage() {
+type DashboardPageProps = {
+  searchParams?: Promise<{
+    periodo?: string;
+    data?: string;
+  }>;
+};
+
+const PERIODOS: Array<{ label: string; value: DashboardPeriodo }> = [
+  { label: 'Dia', value: 'DIA' },
+  { label: 'Semana', value: 'SEMANA' },
+  { label: 'Mês', value: 'MES' },
+];
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  const params = (await searchParams) ?? {};
+  const periodo = normalizePeriodo(params.periodo);
+  const data = normalizeDate(params.data);
+  const [clinica, dashboard] = await Promise.all([
+    getClinicaAtual(),
+    getDashboardData(periodo, data),
+  ]);
+
+  const agendaLabel = clinica.usaCirurgiasNaAgenda
+    ? 'Consultas Agendadas'
+    : 'Exames Agendados';
+  const agendaSubtitle = clinica.tipoClinica === 'ULTRASSONOGRAFIA'
+    ? 'ultrassons e exames'
+    : 'consultas e retornos';
+
   return (
     <div className="flex-1 overflow-auto bg-slate-50 p-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-slate-500 text-sm mt-1">Sexta-Feira, 16 De Abril De 2026</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            Dashboard {clinica.nome}
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">{formatDisplayDate(data)}</p>
         </div>
-        
+
         <div className="flex items-center gap-3">
-          <div className="flex bg-white rounded-lg border border-slate-200 p-1 shadow-sm">
-            <button className="px-4 py-1.5 text-sm font-medium bg-teal-600 text-white rounded-md shadow-sm transition-colors">
-              Dia
-            </button>
-            <button className="px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded-md transition-colors">
-              Semanal
-            </button>
-            <button className="px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded-md transition-colors">
-              Mensal
-            </button>
+          <div className="flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+            {PERIODOS.map((item) => (
+              <Link
+                key={item.value}
+                href={`/dashboard?periodo=${item.value}&data=${data}`}
+                className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                  periodo === item.value
+                    ? 'bg-teal-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
           </div>
-          
-          <button className="flex items-center gap-2 bg-white border border-slate-200 shadow-sm px-4 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-            16/04/2026
-            <CalendarIcon className="w-4 h-4 text-slate-400" />
-          </button>
+
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm">
+            {formatShortDate(data)}
+            <CalendarIcon className="h-4 w-4 text-slate-400" />
+          </div>
         </div>
       </div>
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard
           title="Equipe Online"
-          value="3"
-          subtitle="de 5 recepcionistas"
-          trend="+1 hoje"
-          trendUp={true}
+          value={String(dashboard.equipeOnline)}
+          subtitle={`de ${dashboard.equipeTotal} usuários ativos`}
+          trend={dashboard.equipeOnline > 0 ? 'em operação' : 'sem presença'}
           icon={User}
           iconColor="text-teal-500"
           iconBg="bg-teal-50"
         />
         <KpiCard
           title="Novos Pacientes"
-          value="12"
-          subtitle="hoje"
-          trend="+33% vs ontem"
-          trendUp={true}
+          value={String(dashboard.novosPacientes)}
+          subtitle={periodoLabel(periodo)}
+          trend="dados internos"
           icon={Users}
           iconColor="text-blue-500"
           iconBg="bg-blue-50"
         />
         <KpiCard
           title="Mensagens"
-          value="547"
-          subtitle="hoje"
-          trend="+18% vs ontem"
-          trendUp={true}
+          value={String(dashboard.totalMensagens)}
+          subtitle={periodoLabel(periodo)}
+          trend="WhatsApp oficial"
           icon={MessageSquare}
           iconColor="text-purple-500"
           iconBg="bg-purple-50"
         />
         <KpiCard
-          title="Consultas Agendadas"
-          value="47"
-          subtitle="para hoje e amanhã"
-          trend="8 cirurgias na semana"
-          trendUp={true}
-          icon={Activity}
+          title={agendaLabel}
+          value={String(dashboard.consultasAgendadas)}
+          subtitle={agendaSubtitle}
+          trend={clinica.usaCirurgiasNaAgenda ? 'inclui cirurgias' : 'sem cirurgias'}
+          icon={clinica.tipoClinica === 'ULTRASSONOGRAFIA' ? Stethoscope : Activity}
           iconColor="text-emerald-500"
           iconBg="bg-emerald-50"
         />
         <KpiCard
           title="Confirmações Pendentes"
-          value="4"
+          value={String(dashboard.confirmacoesPendentes)}
           subtitle="aguardando resposta"
-          trend="-2 vs ontem"
-          trendUp={false}
+          trend="agenda interna"
           icon={AlertCircle}
           iconColor="text-orange-500"
           iconBg="bg-orange-50"
         />
         <KpiCard
           title="Tempo Médio"
-          value="4,2min"
+          value={dashboard.tempoMedioResposta}
           subtitle="de resposta"
-          trend="-0,8min vs ontem"
-          trendUp={true}
+          trend="mensagens internas"
           icon={Clock}
           iconColor="text-teal-500"
           iconBg="bg-teal-50"
         />
       </div>
 
-      {/* Charts Section 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-          <div className="flex justify-between items-start mb-6">
+      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+          <div className="mb-6 flex items-start justify-between">
             <div>
-              <h3 className="text-lg font-bold text-slate-800">Pico de Mensagens</h3>
-              <p className="text-sm text-slate-500">Mensagens por hora hoje</p>
+              <h2 className="text-lg font-bold text-slate-800">Pico de Mensagens</h2>
+              <p className="text-sm text-slate-500">Mensagens por hora no período</p>
             </div>
-            <LineChart className="w-5 h-5 text-teal-600" />
+            <LineChart className="h-5 w-5 text-teal-600" />
           </div>
-          {/* Placeholder Gráfico */}
-          <div className="h-[250px] w-full flex items-end justify-center pb-4 relative">
-            <div className="absolute inset-0 border-b border-l border-slate-100 grid grid-cols-5 grid-rows-4">
-              {Array.from({ length: 20 }).map((_, i) => (
-                <div key={i} className="border-t border-r border-slate-50/50" />
-              ))}
-            </div>
-            {/* Curva simulada */}
-            <div className="w-full h-full relative overflow-hidden flex items-end opacity-80">
-              <div className="w-1/3 h-[60%] bg-gradient-to-t from-teal-50 to-blue-200 rounded-tl-full rounded-tr-full shadow-[0_0_15px_rgba(59,130,246,0.3)]"></div>
-              <div className="w-1/3 h-[40%] bg-gradient-to-t from-blue-50 to-blue-100 rounded-tl-full rounded-tr-full -ml-8"></div>
-              <div className="w-1/3 h-[70%] bg-gradient-to-t from-teal-50 to-teal-200 rounded-tl-full rounded-tr-full -ml-8 shadow-[0_0_15px_rgba(13,148,136,0.3)]"></div>
-              <div className="w-1/3 h-[30%] bg-gradient-to-t from-blue-50 to-blue-100 rounded-tl-full -ml-8"></div>
-            </div>
-            <div className="absolute bottom-0 w-full flex justify-between text-xs text-slate-400 translate-y-6">
-              <span>00h</span>
-              <span>04h</span>
-              <span>08h</span>
-              <span>12h</span>
-              <span>16h</span>
-              <span>20h</span>
-            </div>
-          </div>
-        </div>
+          <HourlyBars dashboard={dashboard} />
+        </section>
 
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-          <div className="flex justify-between items-start mb-6">
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-start justify-between">
             <div>
-              <h3 className="text-lg font-bold text-slate-800">Pacientes da Semana</h3>
-              <p className="text-sm text-slate-500">Movimentação de pacientes</p>
+              <h2 className="text-lg font-bold text-slate-800">Pacientes</h2>
+              <p className="text-sm text-slate-500">Movimentação no período</p>
             </div>
-            <div className="flex gap-1">
-              <button className="p-1.5 border border-slate-200 rounded text-slate-400 hover:bg-slate-50">
-                <BarChart3 className="w-4 h-4" />
-              </button>
-              <button className="p-1.5 border border-slate-200 rounded text-teal-600 bg-teal-50">
-                <TrendingUp className="w-4 h-4" />
-              </button>
-            </div>
+            <BarChart3 className="h-5 w-5 text-teal-600" />
           </div>
-          
+
           <div className="grid grid-cols-2 gap-4">
-            <SummaryCard title="Novos" value="12" subtitle="primeiro contato" color="bg-teal-500" />
-            <SummaryCard title="Recorrentes" value="8" subtitle="retornaram à clínica" color="bg-purple-500" />
-            <SummaryCard title="Agendados" value="24" subtitle="consultas marcadas" color="bg-blue-500" />
-            <SummaryCard title="Follow UP" value="7" subtitle="em acompanhamento" color="bg-orange-500" />
+            <MetricTile title="Novos" value={dashboard.novosPacientes} subtitle="primeiro contato" />
+            <MetricTile title="Fidelização" value={`${dashboard.taxaFidelizacao.toFixed(1)}%`} subtitle="recorrência" />
+            <MetricTile title="Agendados" value={dashboard.consultasAgendadas} subtitle={agendaSubtitle} />
+            <MetricTile title="Follow-up" value={clinica.followUpAutomatico ? 'Ativo' : 'Manual'} subtitle="configuração" />
           </div>
-        </div>
+        </section>
       </div>
 
-      {/* Charts Section 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-          <div className="flex justify-between items-start mb-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+          <div className="mb-6 flex items-start justify-between">
             <div>
-              <h3 className="text-lg font-bold text-slate-800">Agendamentos da Semana</h3>
-              <p className="text-sm text-slate-500">Consultas, cirurgias e exames por dia</p>
+              <h2 className="text-lg font-bold text-slate-800">Agendamentos</h2>
+              <p className="text-sm text-slate-500">
+                {clinica.usaCirurgiasNaAgenda ? 'Consultas, cirurgias e exames por dia' : 'Exames e ultrassons por dia'}
+              </p>
             </div>
           </div>
-          <div className="h-[200px] flex items-end justify-between px-4 pb-2 relative">
-             <div className="absolute inset-0 border-b border-slate-100"></div>
-             {/* Barras simuladas */}
-             {['Seg 13', 'Ter 19', 'Qua 14', 'Qui 24', 'Sex 11'].map((day, i) => (
-               <div key={day} className="flex gap-2 items-end z-10 w-full justify-center group cursor-pointer">
-                 <div className="w-6 sm:w-10 bg-teal-600 rounded-t-sm transition-all duration-300 group-hover:bg-teal-500" style={{ height: `${40 + Math.random() * 60}%` }}></div>
-                 <div className="w-6 sm:w-10 bg-indigo-500 rounded-t-sm transition-all duration-300 group-hover:bg-indigo-400" style={{ height: `${10 + Math.random() * 30}%` }}></div>
-                 <div className="w-6 sm:w-10 bg-sky-400 rounded-t-sm transition-all duration-300 group-hover:bg-sky-300" style={{ height: `${20 + Math.random() * 40}%` }}></div>
-                 <div className="absolute bottom-[-24px] text-xs font-medium text-slate-500">{day}</div>
-               </div>
-             ))}
-          </div>
-        </div>
+          <DailyBars dashboard={dashboard} />
+        </section>
 
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-          <div className="flex justify-between items-start mb-6">
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-start justify-between">
             <div>
-              <h3 className="text-lg font-bold text-slate-800">Distribuição de Serviços</h3>
-              <p className="text-sm text-slate-500">Interesse dos pacientes</p>
+              <h2 className="text-lg font-bold text-slate-800">Distribuição de Serviços</h2>
+              <p className="text-sm text-slate-500">Baseada na agenda interna</p>
             </div>
-            <PieChart className="w-5 h-5 text-teal-600" />
-          </div>
-          
-          <div className="flex justify-center items-center h-[140px] mb-6">
-            {/* Semi-círculo simulado com CSS */}
-            <div className="w-32 h-16 border-[16px] border-b-0 border-teal-600 rounded-t-full relative flex justify-center items-end">
-               <div className="absolute w-full h-full border-[16px] border-b-0 border-indigo-500 rounded-t-full top-[-16px] left-[-16px] origin-bottom -rotate-45" style={{ clipPath: 'polygon(50% 0%, 100% 0%, 100% 100%, 50% 100%)' }}></div>
-            </div>
+            <PieChart className="h-5 w-5 text-teal-600" />
           </div>
 
           <div className="space-y-3">
-            <LegendItem color="bg-teal-600" label="Pré-natal" value="35%" />
-            <LegendItem color="bg-indigo-500" label="Ginecologia" value="28%" />
-            <LegendItem color="bg-sky-400" label="Ultrassonografia" value="18%" />
-            <LegendItem color="bg-purple-400" label="Cirurgias" value="11%" />
+            {dashboard.distribuicaoServicos.length > 0 ? (
+              dashboard.distribuicaoServicos.map((item) => (
+                <LegendItem
+                  key={item.servico}
+                  color="bg-teal-600"
+                  label={item.servico}
+                  value={`${item.percentual.toFixed(1)}%`}
+                />
+              ))
+            ) : (
+              <p className="text-sm text-slate-500">Sem serviços no período.</p>
+            )}
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
 }
 
-// Sub-components
+function HourlyBars({ dashboard }: { dashboard: DashboardResponse }) {
+  const max = Math.max(...dashboard.picoMensagensPorHora.map((item) => item.total), 1);
+  const items = dashboard.picoMensagensPorHora.length > 0
+    ? dashboard.picoMensagensPorHora
+    : Array.from({ length: 6 }, (_, index) => ({ hora: index * 4, total: 0 }));
 
-function KpiCard({ title, value, subtitle, trend, trendUp, icon: Icon, iconColor, iconBg }: any) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow">
-      <div className="flex justify-between items-start mb-4">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${iconBg}`}>
-          <Icon className={`w-5 h-5 ${iconColor}`} />
+    <div className="flex h-[250px] items-end gap-3 border-b border-slate-100 pb-2">
+      {items.map((item) => (
+        <div key={item.hora} className="flex h-full flex-1 flex-col justify-end gap-2">
+          <div
+            className="min-h-2 rounded-t-sm bg-teal-600 transition-colors"
+            style={{ height: `${Math.max((item.total / max) * 100, item.total > 0 ? 8 : 2)}%` }}
+          />
+          <span className="text-center text-xs text-slate-400">{String(item.hora).padStart(2, '0')}h</span>
         </div>
-        <div className={`flex items-center gap-1 text-xs font-semibold ${trendUp ? 'text-teal-600' : 'text-orange-500'}`}>
-          {trendUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-          {trend}
-        </div>
-      </div>
-      <div>
-        <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">{value}</h2>
-        <p className="text-sm font-semibold text-slate-700 mt-1">{title}</p>
-        <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>
-      </div>
+      ))}
     </div>
   );
 }
 
-function SummaryCard({ title, value, subtitle, color }: any) {
-  return (
-    <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
-      <div className="flex items-center gap-2 mb-2">
-        <div className={`w-2 h-2 rounded-full ${color}`}></div>
-        <h4 className="text-2xl font-bold text-slate-800 leading-none">{value}</h4>
+function DailyBars({ dashboard }: { dashboard: DashboardResponse }) {
+  const max = Math.max(...dashboard.agendamentosSemana.map((item) => item.total), 1);
+  const items = dashboard.agendamentosSemana.length > 0
+    ? dashboard.agendamentosSemana
+    : [];
+
+  if (items.length === 0) {
+    return (
+      <div className="flex h-[200px] items-center justify-center rounded-lg border border-dashed border-slate-200 text-sm text-slate-500">
+        Sem agendamentos no período.
       </div>
-      <p className="text-sm font-semibold text-slate-700">{title}</p>
-      <p className="text-[10px] text-slate-400 uppercase tracking-wider mt-1">{subtitle}</p>
+    );
+  }
+
+  return (
+    <div className="flex h-[200px] items-end gap-3 border-b border-slate-100 px-4 pb-2">
+      {items.map((item) => (
+        <div key={item.data} className="flex h-full flex-1 flex-col justify-end gap-2">
+          <div
+            className="min-h-2 rounded-t-sm bg-indigo-500 transition-colors"
+            style={{ height: `${Math.max((item.total / max) * 100, 8)}%` }}
+          />
+          <span className="text-center text-xs font-medium text-slate-500">
+            {formatWeekday(item.data)}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
 
-function LegendItem({ color, label, value }: any) {
+type KpiCardProps = {
+  title: string;
+  value: string;
+  subtitle: string;
+  trend: string;
+  icon: LucideIcon;
+  iconColor: string;
+  iconBg: string;
+};
+
+function KpiCard({ title, value, subtitle, trend, icon: Icon, iconColor, iconBg }: KpiCardProps) {
   return (
-    <div className="flex justify-between items-center text-sm">
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-full ${iconBg}`}>
+          <Icon className={`h-5 w-5 ${iconColor}`} />
+        </div>
+        <div className="flex items-center gap-1 text-xs font-semibold text-teal-600">
+          <TrendingUp className="h-3 w-3" />
+          <span className="truncate">{trend}</span>
+        </div>
+      </div>
+      <h2 className="text-3xl font-extrabold tracking-tight text-slate-800">{value}</h2>
+      <p className="mt-1 text-sm font-semibold text-slate-700">{title}</p>
+      <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>
+    </section>
+  );
+}
+
+type MetricTileProps = {
+  title: string;
+  value: number | string;
+  subtitle: string;
+};
+
+function MetricTile({ title, value, subtitle }: MetricTileProps) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+      <h3 className="text-2xl font-bold leading-none text-slate-800">{value}</h3>
+      <p className="mt-2 text-sm font-semibold text-slate-700">{title}</p>
+      <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-400">{subtitle}</p>
+    </div>
+  );
+}
+
+type LegendItemProps = {
+  color: string;
+  label: string;
+  value: string;
+};
+
+function LegendItem({ color, label, value }: LegendItemProps) {
+  return (
+    <div className="flex items-center justify-between text-sm">
       <div className="flex items-center gap-2">
-        <div className={`w-2 h-2 rounded-full ${color}`}></div>
-        <span className="text-slate-600 font-medium">{label}</span>
+        <div className={`h-2 w-2 rounded-full ${color}`} />
+        <span className="font-medium text-slate-600">{label}</span>
       </div>
       <span className="font-bold text-slate-800">{value}</span>
     </div>
   );
+}
+
+function normalizePeriodo(value: string | undefined): DashboardPeriodo {
+  if (value === 'SEMANA' || value === 'MES') {
+    return value;
+  }
+  return 'DIA';
+}
+
+function normalizeDate(value: string | undefined): string {
+  if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatDisplayDate(value: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(`${value}T12:00:00-03:00`));
+}
+
+function formatShortDate(value: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(`${value}T12:00:00-03:00`));
+}
+
+function formatWeekday(value: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    weekday: 'short',
+    day: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(`${value}T12:00:00-03:00`));
+}
+
+function periodoLabel(periodo: DashboardPeriodo): string {
+  if (periodo === 'SEMANA') {
+    return 'na semana';
+  }
+  if (periodo === 'MES') {
+    return 'no mês';
+  }
+  return 'no dia';
 }

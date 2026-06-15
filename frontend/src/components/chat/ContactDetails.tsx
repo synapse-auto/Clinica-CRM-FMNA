@@ -1,4 +1,4 @@
-import { Phone, Mail, User, Clock, Calendar, MessageSquare, StickyNote, Bell, ChevronDown } from 'lucide-react';
+import { Phone, Mail, User, Clock, Calendar, StickyNote, Bell, ChevronDown } from 'lucide-react';
 
 export function ContactDetails() {
   return (

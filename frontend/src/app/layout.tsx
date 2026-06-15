@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { Sidebar } from "@/components/layout/Sidebar";
+import { getClinicaAtual } from "@/services/backend";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,20 +20,22 @@ export const metadata: Metadata = {
   description: "Sistema de Gestão Clínica e CRM WhatsApp",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const clinica = await getClinicaAtual();
+
   return (
     <html lang="pt-BR">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-50 flex h-screen overflow-hidden`}
+        className={`${geistSans.variable} ${geistMono.variable} bg-background text-foreground antialiased`}
       >
-        <Sidebar />
-        <main className="flex-1 flex flex-col h-full overflow-hidden">
-          {children}
-        </main>
+        <div className="flex h-dvh min-h-screen w-full overflow-hidden">
+          <Sidebar clinicName={clinica.nome} />
+          <main className="min-w-0 flex-1 overflow-hidden bg-background">{children}</main>
+        </div>
       </body>
     </html>
   );
