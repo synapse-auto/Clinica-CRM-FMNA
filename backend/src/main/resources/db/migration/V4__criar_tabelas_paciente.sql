@@ -4,10 +4,10 @@ CREATE TABLE paciente (
     nome                        BYTEA NOT NULL,
     nome_busca                  VARCHAR(200) NOT NULL,
     cpf                         BYTEA UNIQUE,
-    cpf_hash                    CHAR(64) UNIQUE,
+    cpf_hash                    VARCHAR(64) UNIQUE,
     data_nascimento             BYTEA,
     email                       BYTEA,
-    email_hash                  CHAR(64),
+    email_hash                  VARCHAR(64),
     telefone                    BYTEA NOT NULL,
     telefone_normalizado        VARCHAR(20) NOT NULL,
     endereco                    BYTEA,
@@ -20,9 +20,10 @@ CREATE TABLE paciente (
     atendimento_atual_id        BIGINT,
     valor_total                 NUMERIC(12,2) DEFAULT 0,
     chave_criptografia_id       VARCHAR(20) NOT NULL DEFAULT 'v1',
-    darwin_id_externo           VARCHAR(100) UNIQUE,
-    darwin_dados_importados     JSONB,
-    google_drive_folder_id      VARCHAR(255) DEFAULT NULL,
+    external_source             VARCHAR(20),
+    external_id                 VARCHAR(100),
+    external_payload            JSONB,
+    google_drive_folder_id      VARCHAR(255),
     requer_revisao              BOOLEAN NOT NULL DEFAULT FALSE,
     ultima_interacao_em         TIMESTAMPTZ,
     deletado_em                 TIMESTAMPTZ,
@@ -30,7 +31,8 @@ CREATE TABLE paciente (
     atualizado_em               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     criado_por                  BIGINT REFERENCES usuario(id),
     atualizado_por              BIGINT REFERENCES usuario(id),
-    CONSTRAINT chk_paciente_status CHECK (status IN ('EM_ATENDIMENTO','AGENDADO','FINALIZADO'))
+    CONSTRAINT chk_paciente_status CHECK (status IN ('EM_ATENDIMENTO','AGENDADO','FINALIZADO')),
+    CONSTRAINT chk_paciente_external_source CHECK (external_source IS NULL OR external_source IN ('DARWIN','MEDWARE','WHATSAPP','MANUAL'))
 );
 
 CREATE INDEX idx_paciente_clinica_status     ON paciente(clinica_id, status) WHERE deletado_em IS NULL;
@@ -39,6 +41,9 @@ CREATE INDEX idx_paciente_medico             ON paciente(medico_principal_id) WH
 CREATE INDEX idx_paciente_telefone_norm      ON paciente(telefone_normalizado) WHERE deletado_em IS NULL;
 CREATE INDEX idx_paciente_nome_trgm          ON paciente USING GIN (nome_busca gin_trgm_ops) WHERE deletado_em IS NULL;
 CREATE INDEX idx_paciente_ultima_interacao   ON paciente(ultima_interacao_em) WHERE deletado_em IS NULL;
+CREATE UNIQUE INDEX uk_paciente_clinica_external
+    ON paciente(clinica_id, external_source, external_id)
+    WHERE external_source IS NOT NULL AND external_id IS NOT NULL;
 
 CREATE TABLE consentimento (
     id                      BIGSERIAL PRIMARY KEY,

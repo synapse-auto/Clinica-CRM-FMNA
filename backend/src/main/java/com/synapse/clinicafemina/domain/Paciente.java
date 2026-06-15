@@ -1,5 +1,6 @@
 package com.synapse.clinicafemina.domain;
 
+import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.security.crypto.AesGcmConverter;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -32,7 +33,7 @@ public class Paciente {
     @Convert(converter = AesGcmConverter.class)
     private String cpf;
 
-    @Column(name = "cpf_hash", columnDefinition = "char(64)", unique = true)
+    @Column(name = "cpf_hash", length = 64, unique = true)
     private String cpfHash;
 
     @Column(name = "data_nascimento")
@@ -42,7 +43,7 @@ public class Paciente {
     @Convert(converter = AesGcmConverter.class)
     private String email;
 
-    @Column(name = "email_hash", columnDefinition = "char(64)")
+    @Column(name = "email_hash", length = 64)
     private String emailHash;
 
     @Column(nullable = false)
@@ -86,11 +87,18 @@ public class Paciente {
     @Column(name = "chave_criptografia_id", nullable = false, length = 20)
     private String chaveCriptografiaId = "v1";
 
-    @Column(name = "darwin_id_externo", length = 100, unique = true)
-    private String darwinIdExterno;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "external_source", length = 20)
+    private ExternalProviderType externalSource;
 
-    @Column(name = "darwin_dados_importados", columnDefinition = "jsonb")
-    private String darwinDadosImportados;
+    @Column(name = "external_id", length = 100)
+    private String externalId;
+
+    @Column(name = "external_payload", columnDefinition = "jsonb")
+    private String externalPayload;
+
+    @Column(name = "google_drive_folder_id", length = 255)
+    private String googleDriveFolderId;
 
     @Column(name = "requer_revisao", nullable = false)
     private Boolean requerRevisao = false;
