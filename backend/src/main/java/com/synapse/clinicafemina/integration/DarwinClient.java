@@ -72,7 +72,7 @@ public class DarwinClient {
                 .queryParam("limit", limit)
                 .buildAndExpand(patientId).toUriString();
 
-        log.debug("GET Darwin notes for patient {}: {}", patientId, uri);
+        log.debug("GET Darwin notes");
         return restClient.get()
                 .uri(uri)
                 .retrieve()
