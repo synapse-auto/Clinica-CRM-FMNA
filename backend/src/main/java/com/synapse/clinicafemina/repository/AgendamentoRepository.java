@@ -12,6 +12,8 @@ import java.util.Optional;
 
 public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> {
 
+    Optional<Agendamento> findByIdAndClinicaId(Long id, Long clinicaId);
+
     Optional<Agendamento> findByClinicaIdAndExternalSourceAndExternalId(
             Long clinicaId,
             ExternalProviderType externalSource,

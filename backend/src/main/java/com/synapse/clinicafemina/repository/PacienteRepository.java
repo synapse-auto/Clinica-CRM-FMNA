@@ -12,6 +12,8 @@ import java.util.Optional;
 
 public interface PacienteRepository extends JpaRepository<Paciente, Long> {
 
+    Optional<Paciente> findByIdAndClinicaId(Long id, Long clinicaId);
+
     /** Localiza paciente pelo número E.164 normalizado (usado na integração WhatsApp). */
     Optional<Paciente> findByClinicaIdAndTelefoneNormalizado(Long clinicaId, String telefoneNormalizado);
 

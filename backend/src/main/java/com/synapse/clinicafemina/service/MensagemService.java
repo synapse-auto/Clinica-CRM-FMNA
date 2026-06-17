@@ -54,7 +54,7 @@ public class MensagemService {
         Mensagem mensagem = new Mensagem();
         mensagem.setAtendimento(atendimento);
         mensagem.setDirecao("SAIDA");
-        mensagem.setRemetente("USUARIO");
+        mensagem.setRemetente("ATENDENTE");
         mensagem.setTipoMedia(req.tipoMedia());
         mensagem.setConteudo(req.conteudo());
         mensagem.setConteudoPrevia(req.conteudo().length() > 60
@@ -113,7 +113,7 @@ public class MensagemService {
         Mensagem mensagem = new Mensagem();
         mensagem.setAtendimento(atendimento);
         mensagem.setDirecao("SAIDA");
-        mensagem.setRemetente("USUARIO");
+        mensagem.setRemetente("ATENDENTE");
         mensagem.setTipoMedia(tipoMedia);
         mensagem.setConteudo("[" + tipoMedia + "] " + nomeArquivo); // criptografado pelo converter
         mensagem.setConteudoPrevia("[" + tipoMedia + "] " + nomeArquivo);
