@@ -57,7 +57,7 @@ CREATE TABLE mensagem_festiva_config (
     clinica_id BIGINT NOT NULL REFERENCES clinica(id) ON DELETE CASCADE,
     chave VARCHAR(80) NOT NULL,
     nome VARCHAR(120) NOT NULL,
-    mes_dia CHAR(5) NOT NULL,
+    mes_dia VARCHAR(5) NOT NULL,
     ativo BOOLEAN NOT NULL DEFAULT TRUE,
     canal VARCHAR(40) NOT NULL DEFAULT 'WHATSAPP',
     mensagem_template TEXT NOT NULL,
