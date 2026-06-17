@@ -52,8 +52,10 @@ Variaveis essenciais:
 APP_CLINIC_SLUG=ultramedical
 APP_CLINIC_NAME=UltraMedical
 APP_CLINIC_EXTERNAL_PROVIDER=MEDWARE
-APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-ultra>
-WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-ultra>
+APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-ultra-quando-cadastrado>
+SPRING_DATASOURCE_URL=<jdbc-postgresql-ultramedical>
+SPRING_DATASOURCE_USERNAME=<usuario-banco>
+SPRING_DATASOURCE_PASSWORD=<senha-banco-fora-do-git>
 MEDWARE_API_URL=<url-publica-medware-ultramedical>/api
 MEDWARE_USERNAME=<usuario-api-medware>
 MEDWARE_PASSWORD=<senha-ou-hash-fora-do-git>
@@ -62,15 +64,58 @@ MEDWARE_TOKEN_REFRESH_MARGIN_SECONDS=300
 MEDWARE_TIMEOUT_SECONDS=30
 MEDWARE_DEFAULT_START_DAYS_BACK=30
 MEDWARE_DEFAULT_END_DAYS_FORWARD=60
+WHATSAPP_ACCESS_TOKEN=<token-meta-fora-do-git>
+WHATSAPP_BUSINESS_ACCOUNT_ID=<business-account-id-meta>
+WHATSAPP_VERIFY_TOKEN=<verify-token-fora-do-git>
+WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-ultra-quando-cadastrado>
 ```
 
 Validacoes:
 
 - `/api/configuracoes/clinica-atual` retorna `slug=ultramedical`;
 - `externalProvider` da clinica no banco e `MEDWARE`;
-- `MedwareProvider` esta como skeleton ate existir documentacao oficial da API;
+- `MedwareProvider` permanece read-only: autentica, le pacientes, agendamentos e catalogos auxiliares, sem escrita no Medware;
 - dashboard nao chama Medware diretamente;
 - `usa_cirurgias_na_agenda=false` para nao exibir cirurgias na experiencia de ultrassonografia.
+
+### Status do banco UltraMedical
+
+O banco UltraMedical deve subir a partir das migrations consolidadas V1 a V8. A demo `https://demo-clinicas-blond.vercel.app/atendimentos` foi analisada apenas como referencia visual/funcional; ela e uma SPA com dados mockados e nao deve gerar migrations grandes sem confirmacao do cliente.
+
+Comando de validacao em PostgreSQL limpo:
+
+```powershell
+.\scripts\validate-postgres-ultra.ps1
+.\scripts\cleanup-postgres-test.ps1
+```
+
+Resultado esperado:
+
+- Flyway V1 a V8 com `success=true`;
+- seed cria `clinica.slug=ultramedical`, `external_provider=MEDWARE` e `tipo_clinica=ULTRASSONOGRAFIA`;
+- `paciente` nao contem `darwin_id_externo` nem `darwin_dados_importados`;
+- `agendamento` existe como entidade oficial do CRM;
+- `integration_sync_log` existe para sync externo generico;
+- `follow_up_config`, `consulta_lembrete_config`, `mensagem_festiva_config` e `follow_ups_temporary` existem com `clinica_id`;
+- `follow_ups_temporary.paciente_id` referencia `paciente(id)` e `scheduled_at` guarda o horario do follow-up;
+- `mensagem.remetente` aceita `PACIENTE`, `ATENDENTE`, `IA` e `SISTEMA`;
+- Hibernate `ddl-auto=validate` passa.
+
+`APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID` pode ficar pendente ate o numero oficial da Meta ser cadastrado. Para producao real com WhatsApp ativo, o deploy precisa de `APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID`/`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_BUSINESS_ACCOUNT_ID` e `WHATSAPP_VERIFY_TOKEN`.
+
+### Backlog da demo
+
+Nao implementar antes da subida/homologacao sem confirmacao explicita do cliente:
+
+- tags persistidas;
+- `paciente_tag`;
+- `atendimento_tag`;
+- `mensagem_rapida`;
+- lembrete ou `tarefa_atendimento`;
+- stage/funil de atendimento;
+- origem do lead normalizada;
+- plano/unidade normalizados fora do `external_payload` Medware;
+- frontend Atendimentos 100% conectado a API real.
 
 ## Reset de banco em ambiente sem producao
 
@@ -91,7 +136,7 @@ FROM flyway_schema_history
 ORDER BY installed_rank;
 ```
 
-Esperado: V1 a V7 com `success=true`.
+Esperado: V1 a V8 com `success=true`.
 
 ## Testar Dashboard
 
@@ -142,7 +187,11 @@ Eventos previstos:
 - `mudanca_status`;
 - `agendamento_criado`;
 - `agendamento_cancelado`;
-- `follow_up`;
+- `follow_up_criado`;
+- `follow_up_executado`;
+- `follow_up_cancelado`;
 - `pesquisa_satisfacao`.
 
 O payload publico nao deve conter tokens nem URL interna do webhook.
+
+N8N deve criar ou alterar follow-ups pela API do backend. Nao inserir diretamente no banco: a API valida `clinica_id`, `paciente_id`, horarios e eventos.

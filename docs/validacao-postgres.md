@@ -74,7 +74,7 @@ $env:APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID="phone-fmna"
 Resultado esperado:
 
 - build com `BUILD SUCCESSFUL`;
-- Flyway executa V1 a V7;
+- Flyway executa V1 a V8;
 - Hibernate valida o schema sem erro;
 - `clinica` contem `slug=fmna`, `external_provider=DARWIN` e `whatsapp_phone_number_id=phone-fmna`.
 
@@ -116,6 +116,7 @@ Resultado esperado:
 - `external_provider=MEDWARE`;
 - `usa_cirurgias_na_agenda=false`;
 - `whatsapp_phone_number_id=phone-ultra`.
+- `follow_up_config`, `consulta_lembrete_config`, `mensagem_festiva_config` e `follow_ups_temporary` existem com `clinica_id`.
 
 ## Consultas SQL de validacao
 
@@ -133,6 +134,19 @@ FROM information_schema.tables
 WHERE table_schema = 'public'
   AND table_name IN ('paciente', 'agendamento', 'integration_sync_log')
 ORDER BY table_name;
+
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name IN ('follow_up_config', 'consulta_lembrete_config', 'mensagem_festiva_config', 'follow_ups_temporary')
+ORDER BY table_name;
+
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'follow_ups_temporary'
+  AND column_name IN ('clinica_id', 'paciente_id', 'scheduled_at', 'status', 'payload')
+ORDER BY column_name;
 
 SELECT table_name
 FROM information_schema.tables
@@ -164,7 +178,14 @@ WHERE schemaname = 'public'
     'idx_integration_sync_log_clinica_provider',
     'idx_clinica_valores_clinica',
     'idx_clinica_medicos_clinica',
-    'idx_clinica_dados_clinica'
+    'idx_clinica_dados_clinica',
+    'idx_follow_up_config_clinica',
+    'idx_consulta_lembrete_config_clinica',
+    'idx_mensagem_festiva_config_clinica',
+    'idx_follow_ups_temporary_clinica_paciente',
+    'idx_follow_ups_temporary_clinica_status',
+    'idx_follow_ups_temporary_clinica_scheduled_at',
+    'idx_follow_ups_temporary_clinica_status_scheduled_at'
   )
 ORDER BY indexname;
 
@@ -172,8 +193,13 @@ SELECT tc.table_name, tc.constraint_name
 FROM information_schema.table_constraints tc
 WHERE tc.table_schema = 'public'
   AND tc.constraint_type = 'FOREIGN KEY'
-  AND tc.table_name IN ('clinica_valores', 'clinica_medicos', 'clinica_dados')
+  AND tc.table_name IN ('clinica_valores', 'clinica_medicos', 'clinica_dados', 'follow_up_config', 'consulta_lembrete_config', 'mensagem_festiva_config', 'follow_ups_temporary')
 ORDER BY tc.table_name, tc.constraint_name;
+
+SELECT conname, pg_get_constraintdef(oid) AS definition
+FROM pg_constraint
+WHERE conrelid = 'mensagem'::regclass
+  AND conname = 'chk_mensagem_remetente';
 
 SELECT column_name, data_type, is_nullable, column_default
 FROM information_schema.columns
@@ -184,12 +210,14 @@ WHERE table_schema = 'public'
 
 Resultados esperados:
 
-- `flyway_schema_history` mostra V1 a V7 com `success=true`.
+- `flyway_schema_history` mostra V1 a V8 com `success=true`.
 - `paciente.cpf_hash` e `paciente.email_hash` sao `character varying(64)`.
 - `paciente.external_source`, `external_id`, `external_payload` e `google_drive_folder_id` existem.
 - A consulta de campos Darwin legados nao retorna linhas.
-- `paciente`, `agendamento`, `integration_sync_log`, `clinica_valores`, `clinica_medicos` e `clinica_dados` existem.
+- `paciente`, `agendamento`, `integration_sync_log`, `clinica_valores`, `clinica_medicos`, `clinica_dados`, `follow_up_config`, `consulta_lembrete_config`, `mensagem_festiva_config` e `follow_ups_temporary` existem.
 - As tabelas de IA tem `clinica_id` e FK para `clinica`.
+- `follow_ups_temporary` tem `clinica_id`, `paciente_id`, `scheduled_at`, FK para `paciente(id)` e indices por clinica/status/horario.
+- `chk_mensagem_remetente` aceita `PACIENTE`, `ATENDENTE`, `IA` e `SISTEMA`.
 - No schema atual, `agendamento.requer_revisao` nao existe. Se a coluna for adicionada antes do commit, ela deve aparecer como `boolean`, `is_nullable=NO` e default `false`.
 
 ## Troubleshooting
