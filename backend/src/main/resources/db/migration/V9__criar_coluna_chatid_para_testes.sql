@@ -1,0 +1,2 @@
+ALTER TABLE paciente
+ADD COLUMN chatid BIGINT NULL;
