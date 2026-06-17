@@ -1,6 +1,17 @@
 import 'server-only';
 
 import { headers } from 'next/headers';
+import {
+  demoConsultaLembretes,
+  demoFollowUpConfigs,
+  demoFollowUpsTemporary,
+  demoMensagensFestivas,
+  type DemoConsultaLembreteConfig,
+  type DemoFollowUpConfig,
+  type DemoFollowUpTemporary,
+  type DemoMensagemFestivaConfig,
+} from '@/mocks/demoAutomacao';
+import { demoDashboardFallback } from '@/mocks/demoDashboard';
 import type {
   ClinicaAtualResponse,
   DashboardPeriodo,
@@ -11,21 +22,6 @@ const API_BASE_URL =
   process.env.BACKEND_API_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   'http://localhost:8080';
-
-const EMPTY_DASHBOARD: DashboardResponse = {
-  equipeOnline: 0,
-  equipeTotal: 0,
-  novosPacientes: 0,
-  totalMensagens: 0,
-  consultasAgendadas: 0,
-  confirmacoesPendentes: 0,
-  tempoMedioResposta: '0,0 min',
-  picoMensagensPorHora: [],
-  pacientesSemana: [],
-  agendamentosSemana: [],
-  distribuicaoServicos: [],
-  taxaFidelizacao: 0,
-};
 
 const DEFAULT_CLINICA: ClinicaAtualResponse = {
   nome: 'Clínica',
@@ -42,11 +38,35 @@ export async function getDashboardData(
   data: string,
 ): Promise<DashboardResponse> {
   const params = new URLSearchParams({ periodo, data });
-  return getJsonOrFallback(`/api/dashboard?${params.toString()}`, EMPTY_DASHBOARD);
+  return getJsonOrFallback(`/api/dashboard?${params.toString()}`, demoDashboardFallback);
 }
 
 export async function getClinicaAtual(): Promise<ClinicaAtualResponse> {
   return getJsonOrFallback('/api/configuracoes/clinica-atual', DEFAULT_CLINICA);
+}
+
+export async function getFollowUpConfigs(): Promise<DemoFollowUpConfig[]> {
+  return getJsonOrFallback('/api/follow-up/config', demoFollowUpConfigs);
+}
+
+export async function getConsultaLembreteConfigs(): Promise<DemoConsultaLembreteConfig[]> {
+  return getJsonOrFallback('/api/consulta-lembrete/config', demoConsultaLembretes);
+}
+
+export async function getMensagemFestivaConfigs(): Promise<DemoMensagemFestivaConfig[]> {
+  return getJsonOrFallback('/api/mensagens-festivas/config', demoMensagensFestivas);
+}
+
+export async function getFollowUpsTemporary(): Promise<DemoFollowUpTemporary[]> {
+  const response = await getJsonOrFallback<{ content?: DemoFollowUpTemporary[] } | DemoFollowUpTemporary[]>(
+    '/api/follow-ups-temporary',
+    demoFollowUpsTemporary,
+  );
+
+  if (Array.isArray(response)) {
+    return response;
+  }
+  return response.content ?? demoFollowUpsTemporary;
 }
 
 async function getJsonOrFallback<T>(path: string, fallback: T): Promise<T> {

@@ -4,14 +4,9 @@ import { ContactDetails } from '@/components/chat/ContactDetails';
 
 export default function AtendimentosPage() {
   return (
-    <div className="flex-1 flex h-full overflow-hidden bg-white">
-      {/* Coluna 1: Lista de Chats */}
+    <div className="flex h-full overflow-hidden bg-clinic-canvas">
       <ChatList />
-
-      {/* Coluna 2: Janela de Chat */}
       <ChatWindow />
-
-      {/* Coluna 3: Detalhes do Contato */}
       <ContactDetails />
     </div>
   );

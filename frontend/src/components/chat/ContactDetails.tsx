@@ -1,118 +1,114 @@
-import { Phone, Mail, User, Clock, Calendar, StickyNote, Bell, ChevronDown } from 'lucide-react';
+import { Bell, Calendar, ChevronDown, Clock, Mail, Phone, StickyNote, Tag, User } from 'lucide-react';
+import { StatusBadge } from '@/components/demo/StatusBadge';
+import { demoConversations } from '@/mocks/demoAtendimentos';
+
+const activeConversation = demoConversations[0];
 
 export function ContactDetails() {
   return (
-    <div className="w-[320px] bg-white border-l border-slate-200 h-full flex flex-col shrink-0 overflow-y-auto custom-scrollbar">
-      {/* Profile Header */}
-      <div className="p-6 flex flex-col items-center border-b border-slate-100">
-        <div className="w-20 h-20 rounded-full bg-teal-500 flex items-center justify-center text-white font-bold text-2xl mb-4 shadow-sm ring-4 ring-teal-50">
-          MF
+    <aside className="flex h-full w-[320px] shrink-0 flex-col overflow-y-auto border-l border-clinic-border bg-white custom-scrollbar">
+      <div className="border-b border-clinic-border p-6 text-center">
+        <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-teal-200 text-2xl font-extrabold text-teal-800 ring-4 ring-teal-50">
+          {activeConversation.initials}
         </div>
-        <h2 className="font-bold text-slate-800 text-lg text-center leading-tight mb-2">Maria Fernanda Santos</h2>
-        <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
-          Agendado
-        </span>
+        <h2 className="text-lg font-extrabold leading-tight text-clinic-text">{activeConversation.name}</h2>
+        <div className="mt-3">
+          <StatusBadge tone="blue">{activeConversation.status}</StatusBadge>
+        </div>
       </div>
 
-      <div className="p-6 space-y-8">
-        {/* Contato Section */}
-        <section>
-          <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Contato</h3>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 text-sm text-slate-700">
-              <Phone className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>44 9 9801-2345</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-slate-700">
-              <Mail className="w-4 h-4 text-slate-400 shrink-0" />
-              <span className="truncate">mariafernanda@gmail.com</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-orange-500 font-medium">
-              <User className="w-4 h-4 shrink-0" />
-              <span>Ana Lima</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-slate-700">
-              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>A definir</span>
-            </div>
-          </div>
-        </section>
+      <div className="space-y-7 p-6">
+        <Section title="Contato">
+          <DetailRow icon={Phone} text={activeConversation.phone} />
+          <DetailRow icon={Mail} text="paciente@email.com" />
+          <DetailRow icon={User} text={activeConversation.owner} tone="text-orange-500" />
+          <DetailRow icon={Clock} text="A definir" />
+        </Section>
 
-        {/* Tags Section */}
-        <section>
-          <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Tags</h3>
+        <Section title="Tags">
           <div className="flex flex-wrap gap-2">
-            <span className="bg-blue-50 text-blue-600 text-xs font-medium px-2.5 py-1.5 rounded-md flex items-center gap-1.5 border border-blue-100">
-              <TagIcon /> Consulta Pré-natal
-            </span>
-            <span className="bg-purple-50 text-purple-600 text-xs font-medium px-2.5 py-1.5 rounded-md flex items-center gap-1.5 border border-purple-100">
-              <TagIcon /> Novo Paciente
+            {activeConversation.tags.map((tag) => (
+              <span key={tag} className="inline-flex items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-xs font-bold text-blue-700">
+                <Tag className="h-3 w-3" />
+                {tag}
+              </span>
+            ))}
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-100 bg-purple-50 px-2.5 py-1.5 text-xs font-bold text-purple-700">
+              <Tag className="h-3 w-3" />
+              Novo Paciente
             </span>
           </div>
-        </section>
+        </Section>
 
-        {/* Histórico Section */}
-        <section>
-          <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Histórico</h3>
+        <Section title="Histórico">
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center shadow-sm">
-              <Calendar className="w-4 h-4 text-slate-400 mb-1" />
-              <span className="text-xl font-bold text-slate-800">0</span>
-              <span className="text-[10px] text-slate-500">Consultas</span>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center shadow-sm">
-              <div className="w-4 h-4 text-orange-400 mb-1 flex items-center justify-center">★</div>
-              <span className="text-xl font-bold text-slate-800">R$0</span>
-              <span className="text-[10px] text-slate-500">Total pago</span>
-            </div>
+            <MiniMetric icon={Calendar} value="0" label="Consultas" />
+            <MiniMetric icon={StickyNote} value="R$0" label="Total pago" />
           </div>
-        </section>
+        </Section>
 
-        {/* Notas Section */}
-        <section>
-          <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            Notas
-          </h3>
-          <div className="flex gap-3 text-sm text-slate-700">
-            <StickyNote className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-            <p className="leading-relaxed text-sm">Nova paciente, chegou via Instagram.</p>
+        <Section title="Notas">
+          <div className="flex gap-3 text-sm leading-6 text-clinic-muted">
+            <StickyNote className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>Nova paciente, chegou via Instagram. Prefere atendimento pela manhã.</p>
           </div>
-        </section>
+        </Section>
 
-        {/* Lembretes Section */}
-        <section>
-          <h3 className="text-[11px] font-bold text-orange-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Bell className="w-3 h-3" /> Lembretes
-          </h3>
-          <div className="bg-orange-50/50 border border-orange-200/60 rounded-xl p-4 space-y-3">
-            <div className="flex gap-2">
-              <div className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 flex items-center justify-between text-sm text-slate-600 cursor-pointer shadow-sm">
-                Data <ChevronDown className="w-4 h-4 text-slate-400" />
-              </div>
-              <div className="w-24 bg-white border border-slate-200 rounded-lg px-3 py-2 flex items-center justify-between text-sm text-slate-600 cursor-pointer shadow-sm">
-                10:00 <Clock className="w-3 h-3 text-slate-400" />
-              </div>
+        <Section title="Lembretes" tone="text-orange-500">
+          <div className="rounded-xl border border-orange-200 bg-orange-50/50 p-4">
+            <div className="mb-3 flex gap-2">
+              <button className="flex h-9 flex-1 items-center justify-between rounded-lg border border-clinic-border bg-white px-3 text-sm text-clinic-muted">
+                Data <ChevronDown className="h-4 w-4" />
+              </button>
+              <button className="flex h-9 w-24 items-center justify-between rounded-lg border border-clinic-border bg-white px-3 text-sm text-clinic-muted">
+                10:00 <Clock className="h-3 w-3" />
+              </button>
             </div>
-            <textarea 
+            <textarea
               placeholder="Mensagem do lembrete..."
-              className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm resize-none h-20 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-sm transition-all"
-            ></textarea>
-            <button className="w-full bg-orange-300 hover:bg-orange-400 text-orange-900 font-bold text-sm py-2.5 rounded-lg transition-colors shadow-sm">
-              + Adicionar lembrete
+              className="h-20 w-full resize-none rounded-lg border border-clinic-border bg-white p-3 text-sm outline-none focus:border-orange-400"
+            />
+            <button className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-orange-300 text-sm font-extrabold text-orange-950 transition hover:bg-orange-400">
+              <Bell className="h-4 w-4" />
+              Adicionar lembrete
             </button>
           </div>
-        </section>
+        </Section>
       </div>
+    </aside>
+  );
+}
+
+type SectionProps = {
+  title: string;
+  tone?: string;
+  children: React.ReactNode;
+};
+
+function Section({ title, tone = 'text-clinic-muted', children }: SectionProps) {
+  return (
+    <section>
+      <h3 className={`mb-4 text-[11px] font-extrabold uppercase tracking-[0.18em] ${tone}`}>{title}</h3>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function DetailRow({ icon: Icon, text, tone = 'text-clinic-text' }: { icon: typeof Phone; text: string; tone?: string }) {
+  return (
+    <div className={`flex items-center gap-3 text-sm ${tone}`}>
+      <Icon className="h-4 w-4 shrink-0 text-clinic-muted" />
+      <span className="truncate">{text}</span>
     </div>
   );
 }
 
-function TagIcon() {
+function MiniMetric({ icon: Icon, value, label }: { icon: typeof Calendar; value: string; label: string }) {
   return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
-      <line x1="7" y1="7" x2="7.01" y2="7"></line>
-    </svg>
+    <div className="flex flex-col items-center rounded-xl border border-clinic-border bg-white p-3 shadow-sm">
+      <Icon className="mb-1 h-4 w-4 text-clinic-muted" />
+      <span className="text-xl font-extrabold text-clinic-text">{value}</span>
+      <span className="text-[10px] text-clinic-muted">{label}</span>
+    </div>
   );
 }

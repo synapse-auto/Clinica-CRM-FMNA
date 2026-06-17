@@ -1,23 +1,23 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Geist, Geist_Mono } from 'next/font/google';
+import './globals.css';
 
-import { Sidebar } from "@/components/layout/Sidebar";
-import { getClinicaAtual } from "@/services/backend";
+import { AppShell } from '@/components/demo/AppShell';
+import { getClinicaAtual } from '@/services/backend';
 
 const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
 });
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
 });
 
 export const metadata: Metadata = {
-  title: "Clínica Bem Estar - CRM",
-  description: "Sistema de Gestão Clínica e CRM WhatsApp",
+  title: 'CRM Clínico',
+  description: 'Sistema de gestão clínica e CRM WhatsApp',
 };
 
 export default async function RootLayout({
@@ -30,12 +30,9 @@ export default async function RootLayout({
   return (
     <html lang="pt-BR">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} bg-background text-foreground antialiased`}
+        className={`${geistSans.className} ${geistSans.variable} ${geistMono.variable} bg-background text-foreground antialiased`}
       >
-        <div className="flex h-dvh min-h-screen w-full overflow-hidden">
-          <Sidebar clinicName={clinica.nome} />
-          <main className="min-w-0 flex-1 overflow-hidden bg-background">{children}</main>
-        </div>
+        <AppShell clinic={clinica}>{children}</AppShell>
       </body>
     </html>
   );
