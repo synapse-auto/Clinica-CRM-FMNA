@@ -9,7 +9,7 @@ type AppShellProps = {
 
 export function AppShell({ clinic, children }: AppShellProps) {
   return (
-    <div className="flex h-dvh min-h-screen w-full overflow-hidden bg-clinic-canvas text-clinic-text">
+    <div className="flex h-dvh min-h-screen w-full overflow-hidden bg-clinic-canvas text-clinic-text transition-colors duration-200">
       <DemoSidebar clinic={clinic} />
       <main className="min-w-0 flex-1 overflow-hidden bg-clinic-canvas">{children}</main>
     </div>

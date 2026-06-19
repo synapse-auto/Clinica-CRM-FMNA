@@ -4,6 +4,8 @@ import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 
@@ -63,7 +65,11 @@ public class Agendamento {
     @Column(name = "motivo_cancelamento", length = 255)
     private String motivoCancelamento;
 
+    @Column(name = "confirmacao_enviada")
+    private Integer confirmacaoEnviada;
+
     @Column(name = "external_payload", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String externalPayload;
 
     @Column(name = "criado_em", nullable = false, updatable = false)

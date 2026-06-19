@@ -10,11 +10,17 @@ export const demoDashboardFallback: DashboardResponse = {
   tempoMedioResposta: '4,2min',
   picoMensagensPorHora: [
     { hora: 0, total: 2 },
+    { hora: 2, total: 1 },
     { hora: 4, total: 0 },
-    { hora: 8, total: 22 },
-    { hora: 12, total: 48 },
-    { hora: 16, total: 36 },
-    { hora: 20, total: 14 },
+    { hora: 6, total: 4 },
+    { hora: 8, total: 26 },
+    { hora: 10, total: 74 },
+    { hora: 12, total: 33 },
+    { hora: 14, total: 77 },
+    { hora: 16, total: 51 },
+    { hora: 18, total: 24 },
+    { hora: 20, total: 10 },
+    { hora: 22, total: 5 },
   ],
   pacientesSemana: [
     { data: '2026-06-11', total: 4 },
@@ -41,4 +47,26 @@ export const demoDashboardFallback: DashboardResponse = {
     { servico: 'Exames', total: 6, percentual: 12.8 },
   ],
   taxaFidelizacao: 66.7,
+};
+
+export const demoDashboardVisual = {
+  pacientesRecorrentes: 8,
+  followUpsEmAcompanhamento: 7,
+  followUp: {
+    programados: 67,
+    enviados: 38,
+    convertidos: 24,
+    perdidos: 5,
+    conversao: 63,
+  },
+  fidelizacao: {
+    clientes: 67,
+    retornos: 43,
+    indicacoes: 18,
+    semRetorno: 6,
+    nps: 8.4,
+  },
+  ticketMedio: 380,
+  pacientesMes: 284,
+  tempoMedioGeral: '4,8min',
 };

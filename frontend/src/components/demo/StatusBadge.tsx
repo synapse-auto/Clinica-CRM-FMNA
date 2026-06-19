@@ -4,17 +4,17 @@ type StatusBadgeProps = {
 };
 
 const tones = {
-  teal: 'bg-teal-50 text-teal-700 border-teal-100',
-  blue: 'bg-blue-50 text-blue-700 border-blue-100',
-  orange: 'bg-orange-50 text-orange-700 border-orange-100',
-  pink: 'bg-pink-50 text-pink-700 border-pink-100',
-  slate: 'bg-slate-50 text-slate-600 border-slate-200',
-  green: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  teal: 'border-clinic-primary/20 bg-clinic-primary/10 text-clinic-primary',
+  blue: 'border-clinic-blue/20 bg-clinic-blue/10 text-clinic-blue',
+  orange: 'border-clinic-orange/20 bg-clinic-orange/10 text-clinic-orange',
+  pink: 'border-clinic-pink/20 bg-clinic-pink/10 text-clinic-pink',
+  slate: 'border-clinic-muted/20 bg-clinic-muted/10 text-clinic-muted',
+  green: 'border-clinic-success/20 bg-clinic-success/10 text-clinic-success',
 };
 
 export function StatusBadge({ children, tone = 'teal' }: StatusBadgeProps) {
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${tones[tone]}`}>
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold ${tones[tone]}`}>
       {children}
     </span>
   );

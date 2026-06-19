@@ -17,6 +17,7 @@ import type {
   DashboardPeriodo,
   DashboardResponse,
 } from '@/types/dashboard';
+import type { Agendamento, AgendaOptions } from '@/types/agendamento';
 
 const API_BASE_URL =
   process.env.BACKEND_API_URL ??
@@ -69,6 +70,30 @@ export async function getFollowUpsTemporary(): Promise<DemoFollowUpTemporary[]> 
   return response.content ?? demoFollowUpsTemporary;
 }
 
+export async function getAgendamentos(
+  inicio: string,
+  fim: string,
+): Promise<Agendamento[]> {
+  const params = new URLSearchParams({ inicio, fim });
+  return getJson<Agendamento[]>(`/api/agendamentos?${params.toString()}`);
+}
+
+export async function getAgendaOptions(): Promise<AgendaOptions> {
+  return getJson<AgendaOptions>('/api/agendamentos/opcoes');
+}
+
+export async function forwardBackendRequest(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const response = await fetchBackend(path, init);
+  const contentType = response.headers.get('content-type') ?? 'application/json';
+  return new Response(await response.text(), {
+    status: response.status,
+    headers: { 'Content-Type': contentType },
+  });
+}
+
 async function getJsonOrFallback<T>(path: string, fallback: T): Promise<T> {
   try {
     return await getJson<T>(path);
@@ -78,32 +103,36 @@ async function getJsonOrFallback<T>(path: string, fallback: T): Promise<T> {
 }
 
 async function getJson<T>(path: string): Promise<T> {
-  const incomingHeaders = await headers();
-  const requestHeaders: HeadersInit = {
-    Accept: 'application/json',
-  };
-
-  const cookie = incomingHeaders.get('cookie');
-  const authorization = incomingHeaders.get('authorization');
-  const backendToken = process.env.BACKEND_API_TOKEN;
-
-  if (cookie) {
-    requestHeaders.Cookie = cookie;
-  }
-  if (authorization) {
-    requestHeaders.Authorization = authorization;
-  } else if (backendToken) {
-    requestHeaders.Authorization = `Bearer ${backendToken}`;
-  }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: requestHeaders,
-    cache: 'no-store',
-  });
+  const response = await fetchBackend(path);
 
   if (!response.ok) {
     throw new Error(`Backend respondeu ${response.status} para ${path}`);
   }
 
   return response.json() as Promise<T>;
+}
+
+async function fetchBackend(path: string, init: RequestInit = {}): Promise<Response> {
+  const incomingHeaders = await headers();
+  const requestHeaders = new Headers(init.headers);
+  requestHeaders.set('Accept', 'application/json');
+
+  const cookie = incomingHeaders.get('cookie');
+  const authorization = incomingHeaders.get('authorization');
+  const backendToken = process.env.BACKEND_API_TOKEN;
+
+  if (cookie) {
+    requestHeaders.set('Cookie', cookie);
+  }
+  if (authorization) {
+    requestHeaders.set('Authorization', authorization);
+  } else if (backendToken) {
+    requestHeaders.set('Authorization', `Bearer ${backendToken}`);
+  }
+
+  return fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: requestHeaders,
+    cache: 'no-store',
+  });
 }

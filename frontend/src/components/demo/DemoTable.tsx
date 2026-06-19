@@ -8,12 +8,12 @@ type DemoTableProps<T> = {
 
 export function DemoTable<T>({ columns, data, getKey }: DemoTableProps<T>) {
   return (
-    <div className="overflow-hidden rounded-xl border border-clinic-border bg-white">
-      <table className="w-full border-collapse text-left text-sm">
-        <thead className="bg-teal-50/60 text-xs font-bold uppercase tracking-wide text-clinic-muted">
+    <div className="overflow-x-auto rounded-lg border border-clinic-border bg-clinic-surface">
+      <table className="w-full min-w-[680px] border-collapse text-left text-[11px]">
+        <thead className="bg-clinic-table-head text-[9px] font-bold uppercase text-clinic-muted">
           <tr>
             {columns.map((column) => (
-              <th key={column.key} className={`px-4 py-3 ${column.className ?? ''}`}>
+              <th key={column.key} className={`px-3 py-2.5 ${column.className ?? ''}`}>
                 {column.label}
               </th>
             ))}
@@ -21,9 +21,9 @@ export function DemoTable<T>({ columns, data, getKey }: DemoTableProps<T>) {
         </thead>
         <tbody className="divide-y divide-clinic-border/70">
           {data.map((item) => (
-            <tr key={getKey(item)} className="bg-white transition hover:bg-teal-50/35">
+            <tr key={getKey(item)} className="bg-clinic-surface transition hover:bg-clinic-hover">
               {columns.map((column) => (
-                <td key={column.key} className={`px-4 py-3 align-middle ${column.className ?? ''}`}>
+                <td key={column.key} className={`px-3 py-3 align-middle text-clinic-muted ${column.className ?? ''}`}>
                   {column.render(item)}
                 </td>
               ))}

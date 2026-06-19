@@ -7,28 +7,37 @@ type DemoCardProps = {
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
+  bodyClassName?: string;
 };
 
-export function DemoCard({ title, description, icon, actions, children, className = '' }: DemoCardProps) {
+export function DemoCard({
+  title,
+  description,
+  icon,
+  actions,
+  children,
+  className = '',
+  bodyClassName = '',
+}: DemoCardProps) {
   return (
-    <section className={`rounded-xl border border-clinic-border bg-white shadow-sm ${className}`}>
+    <section className={`overflow-hidden rounded-xl border border-clinic-border bg-clinic-surface shadow-[0_1px_2px_rgba(4,32,36,0.04)] ${className}`}>
       {(title || description || icon || actions) && (
-        <div className="flex items-start justify-between gap-4 border-b border-clinic-border/60 px-5 py-4">
-          <div className="flex min-w-0 items-start gap-3">
+        <div className="flex min-h-[51px] items-start justify-between gap-3 px-4 pb-2 pt-3">
+          <div className="flex min-w-0 items-start gap-2.5">
             {icon ? (
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-clinic-primary">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-clinic-soft text-clinic-primary">
                 {icon}
               </div>
             ) : null}
             <div className="min-w-0">
-              {title ? <h2 className="font-bold text-clinic-text">{title}</h2> : null}
-              {description ? <p className="mt-0.5 text-sm text-clinic-muted">{description}</p> : null}
+              {title ? <h2 className="text-[13px] font-bold leading-5 text-clinic-text">{title}</h2> : null}
+              {description ? <p className="text-[10px] leading-4 text-clinic-muted">{description}</p> : null}
             </div>
           </div>
-          {actions ? <div className="shrink-0">{actions}</div> : null}
+          {actions ? <div className="shrink-0 text-clinic-primary">{actions}</div> : null}
         </div>
       )}
-      {children}
+      <div className={bodyClassName}>{children}</div>
     </section>
   );
 }

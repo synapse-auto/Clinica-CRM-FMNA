@@ -20,6 +20,18 @@
   --color-clinic-orange: var(--clinic-orange);
   --color-clinic-text: var(--clinic-text);
   --color-clinic-muted: var(--clinic-muted);
+  --color-clinic-surface: var(--clinic-surface);
+  --color-clinic-surface-muted: var(--clinic-surface-muted);
+  --color-clinic-surface-raised: var(--clinic-surface-raised);
+  --color-clinic-input: var(--clinic-input);
+  --color-clinic-table-head: var(--clinic-table-head);
+  --color-clinic-hover: var(--clinic-hover);
+  --color-clinic-soft: var(--clinic-soft);
+  --color-clinic-grid: var(--clinic-grid);
+  --color-clinic-success: var(--clinic-success);
+  --color-clinic-danger: var(--clinic-danger);
+  --color-clinic-warning: var(--clinic-warning);
+  --color-clinic-pink: var(--clinic-pink);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -67,17 +79,29 @@
   color-scheme: light;
   --clinic-shell: #001114;
   --clinic-shell-active: #003d42;
-  --clinic-canvas: #effafa;
+  --clinic-canvas: #eff9f9;
   --clinic-card: #ffffff;
-  --clinic-border: #c9dde1;
-  --clinic-primary: #008b8f;
-  --clinic-primary-strong: #00767a;
+  --clinic-border: #c7dcdf;
+  --clinic-primary: #008f95;
+  --clinic-primary-strong: #00767d;
   --clinic-cyan: #12b8d8;
   --clinic-blue: #2563eb;
   --clinic-indigo: #5b5cf6;
   --clinic-orange: #f59e0b;
-  --clinic-text: #06141b;
-  --clinic-muted: #47636b;
+  --clinic-text: #07171c;
+  --clinic-muted: #557078;
+  --clinic-surface: #ffffff;
+  --clinic-surface-muted: #f4fafa;
+  --clinic-surface-raised: #ffffff;
+  --clinic-input: #f4fafa;
+  --clinic-table-head: #eff8f8;
+  --clinic-hover: #e8f6f6;
+  --clinic-soft: #e5f5f4;
+  --clinic-grid: #dcebed;
+  --clinic-success: #00b983;
+  --clinic-danger: #ff5454;
+  --clinic-warning: #f59e0b;
+  --clinic-pink: #f43f8c;
 
   --background: var(--clinic-canvas);
   --foreground: var(--clinic-text);
@@ -87,26 +111,26 @@
   --popover-foreground: var(--clinic-text);
   --primary: var(--clinic-primary);
   --primary-foreground: #ffffff;
-  --secondary: #e6f3f5;
+  --secondary: var(--clinic-surface-muted);
   --secondary-foreground: var(--clinic-text);
-  --muted: #e8f4f5;
+  --muted: var(--clinic-surface-muted);
   --muted-foreground: var(--clinic-muted);
-  --accent: #dff2f3;
+  --accent: var(--clinic-hover);
   --accent-foreground: #005f64;
   --destructive: #dc2626;
   --border: var(--clinic-border);
-  --input: #cfe2e6;
+  --input: var(--clinic-input);
   --ring: color-mix(in oklab, var(--clinic-primary) 72%, white);
   --chart-1: var(--clinic-primary);
   --chart-2: var(--clinic-blue);
   --chart-3: var(--clinic-indigo);
   --chart-4: var(--clinic-cyan);
   --chart-5: var(--clinic-orange);
-  --radius: 0.875rem;
+  --radius: 0.75rem;
   --sidebar: var(--clinic-shell);
   --sidebar-foreground: #b7cdd3;
-  --sidebar-primary: var(--clinic-primary);
-  --sidebar-primary-foreground: #ffffff;
+  --sidebar-primary: #00d0b0;
+  --sidebar-primary-foreground: #001114;
   --sidebar-accent: var(--clinic-shell-active);
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #0b2b30;
@@ -115,37 +139,63 @@
 
 .dark {
   color-scheme: dark;
-  --background: #071316;
-  --foreground: #ecfeff;
-  --card: #0d1f23;
-  --card-foreground: #ecfeff;
-  --popover: #0d1f23;
-  --popover-foreground: #ecfeff;
-  --primary: #12b8b2;
+  --clinic-shell: #00080a;
+  --clinic-shell-active: #00343a;
+  --clinic-canvas: #001214;
+  --clinic-card: #001d21;
+  --clinic-border: #12353a;
+  --clinic-primary: #00aeb5;
+  --clinic-primary-strong: #06c7c4;
+  --clinic-cyan: #38bdf8;
+  --clinic-blue: #2f7cf6;
+  --clinic-indigo: #725cff;
+  --clinic-orange: #f5a000;
+  --clinic-text: #f0fbfc;
+  --clinic-muted: #75a0a8;
+  --clinic-surface: #001d21;
+  --clinic-surface-muted: #00181b;
+  --clinic-surface-raised: #002329;
+  --clinic-input: #00181b;
+  --clinic-table-head: #00252a;
+  --clinic-hover: #003038;
+  --clinic-soft: #032a2f;
+  --clinic-grid: #0c3035;
+  --clinic-success: #10c892;
+  --clinic-danger: #ff5b65;
+  --clinic-warning: #f5a000;
+  --clinic-pink: #ff3d91;
+
+  --background: var(--clinic-canvas);
+  --foreground: var(--clinic-text);
+  --card: var(--clinic-card);
+  --card-foreground: var(--clinic-text);
+  --popover: var(--clinic-card);
+  --popover-foreground: var(--clinic-text);
+  --primary: var(--clinic-primary);
   --primary-foreground: #001114;
-  --secondary: #123036;
-  --secondary-foreground: #ecfeff;
-  --muted: #123036;
-  --muted-foreground: #a8c8cf;
-  --accent: #163c42;
-  --accent-foreground: #ecfeff;
+  --secondary: var(--clinic-surface-raised);
+  --secondary-foreground: var(--clinic-text);
+  --muted: var(--clinic-surface-muted);
+  --muted-foreground: var(--clinic-muted);
+  --accent: var(--clinic-hover);
+  --accent-foreground: var(--clinic-text);
   --destructive: #f87171;
-  --border: #21464d;
-  --input: #21464d;
-  --ring: #12b8b2;
-  --chart-1: #12b8b2;
-  --chart-2: #38bdf8;
-  --chart-3: #818cf8;
-  --chart-4: #22d3ee;
-  --chart-5: #fbbf24;
-  --sidebar: #001114;
+  --border: var(--clinic-border);
+  --input: var(--clinic-input);
+  --ring: var(--clinic-primary);
+  --chart-1: var(--clinic-primary);
+  --chart-2: var(--clinic-blue);
+  --chart-3: var(--clinic-indigo);
+  --chart-4: var(--clinic-cyan);
+  --chart-5: var(--clinic-orange);
+  --sidebar: var(--clinic-shell);
   --sidebar-foreground: #b7cdd3;
-  --sidebar-primary: #12b8b2;
+  --sidebar-primary: #00d0b0;
   --sidebar-primary-foreground: #001114;
-  --sidebar-accent: #003d42;
+  --sidebar-accent: var(--clinic-shell-active);
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #0b2b30;
-  --sidebar-ring: #12b8b2;
+  --sidebar-border: #0a292e;
+  --sidebar-ring: var(--clinic-primary);
 }
 
 @layer base {
@@ -162,8 +212,9 @@
   body {
     @apply bg-background text-foreground;
     min-height: 100vh;
-    font-size: 14px;
+    font-size: 13px;
     text-rendering: optimizeLegibility;
+    transition: background-color 180ms ease, color 180ms ease;
   }
 
   button,
@@ -205,5 +256,124 @@
 
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+
+  .chart-line-enter {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+    animation: chart-line-draw 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .chart-area-enter {
+    animation: chart-area-fade 620ms ease-out 120ms both;
+    transform-box: fill-box;
+    transform-origin: center bottom;
+  }
+
+  .chart-bar-enter {
+    animation: chart-bar-rise 620ms cubic-bezier(0.22, 1, 0.36, 1) var(--chart-delay, 0ms) both;
+    transform-box: fill-box;
+    transform-origin: center bottom;
+    transition: opacity 160ms ease, filter 160ms ease, stroke-width 160ms ease;
+  }
+
+  .chart-bar-enter[data-active='true'] {
+    filter: brightness(1.08) drop-shadow(0 3px 5px color-mix(in srgb, var(--clinic-text) 18%, transparent));
+  }
+
+  .chart-donut-enter {
+    animation: chart-donut-reveal 620ms ease-out var(--chart-delay, 0ms) both;
+    transition: opacity 160ms ease, stroke-width 160ms ease, filter 160ms ease;
+  }
+
+  .chart-progress-enter {
+    animation: chart-progress-fill 680ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    transform: scaleX(var(--progress-value));
+    transform-origin: left center;
+  }
+}
+
+@keyframes chart-line-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes chart-area-fade {
+  from {
+    opacity: 0;
+    transform: scaleY(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes chart-bar-rise {
+  from {
+    opacity: 0.35;
+    transform: scaleY(0);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes chart-donut-reveal {
+  from {
+    opacity: 0;
+    stroke-width: 3;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes chart-progress-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(var(--progress-value));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .chart-line-enter,
+  .chart-area-enter,
+  .chart-bar-enter,
+  .chart-donut-enter,
+  .chart-progress-enter {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .chart-line-enter {
+    stroke-dashoffset: 0;
+  }
+
+  .chart-area-enter,
+  .chart-bar-enter {
+    opacity: 1;
+    transform: none;
+  }
+
+  .chart-donut-enter {
+    opacity: 1;
+  }
+
+  .chart-progress-enter {
+    transform: scaleX(var(--progress-value));
   }
 }

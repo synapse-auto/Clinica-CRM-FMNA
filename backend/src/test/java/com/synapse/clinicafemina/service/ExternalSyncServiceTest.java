@@ -27,11 +27,14 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -72,13 +75,13 @@ class ExternalSyncServiceTest {
         clinica.setExternalProvider(ExternalProviderType.DARWIN);
 
         when(providerFactory.getProvider(ExternalProviderType.DARWIN)).thenReturn(provider);
-        when(provider.getType()).thenReturn(ExternalProviderType.DARWIN);
         when(syncLogRepository.findUltimoSucesso(7L, ExternalProviderType.DARWIN)).thenReturn(Optional.empty());
         when(syncLogRepository.save(any(IntegrationSyncLog.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
     void should_upsert_patient_by_external_source_and_external_id_when_syncing_patients() {
+        when(provider.getType()).thenReturn(ExternalProviderType.DARWIN);
         ExternalPatientDTO externalPatient = new ExternalPatientDTO(
                 "pat-1",
                 "Maria da Silva",
@@ -118,6 +121,7 @@ class ExternalSyncServiceTest {
 
     @Test
     void should_sync_appointments_using_internal_patient_when_external_patient_exists() {
+        when(provider.getType()).thenReturn(ExternalProviderType.DARWIN);
         Paciente paciente = new Paciente();
         paciente.setId(20L);
         paciente.setClinica(clinica);
@@ -162,5 +166,23 @@ class ExternalSyncServiceTest {
         assertEquals("Pré-natal", saved.getServicoNome());
         assertEquals(1, result.agendamentosCriados());
         assertTrue(result.agendamentosIgnorados() == 0);
+    }
+
+    @Test
+    void should_report_total_failure_without_exposing_provider_error_details() {
+        when(provider.getPatients(null, null, 100))
+                .thenThrow(new IllegalStateException("detalhe interno simulado"));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        ArgumentCaptor<IntegrationSyncLog> logCaptor = ArgumentCaptor.forClass(IntegrationSyncLog.class);
+        verify(syncLogRepository, times(2)).save(logCaptor.capture());
+        IntegrationSyncLog finalLog = logCaptor.getAllValues().getLast();
+
+        assertEquals("FALHA_TOTAL", result.status());
+        assertEquals("FALHA_TOTAL", finalLog.getStatus());
+        assertEquals("Falha na sincronizacao externa: IllegalStateException", finalLog.getMensagemErro());
+        assertFalse(finalLog.getMensagemErro().contains("detalhe interno simulado"));
+        verifyNoInteractions(agendamentoRepository);
     }
 }

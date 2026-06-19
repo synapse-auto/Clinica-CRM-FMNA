@@ -27,6 +27,14 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
             String externalId);
 
     @Query("""
+            SELECT p FROM Paciente p
+            WHERE p.clinica.id = :clinicaId
+              AND p.deletadoEm IS NULL
+            ORDER BY p.nomeBusca ASC
+            """)
+    List<Paciente> findDisponiveisByClinicaId(@Param("clinicaId") Long clinicaId);
+
+    @Query("""
             SELECT COUNT(p) FROM Paciente p
             WHERE p.clinica.id = :clinicaId
               AND p.criadoEm >= :inicio

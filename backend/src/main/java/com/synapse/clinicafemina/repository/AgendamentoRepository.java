@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.repository;
 import com.synapse.clinicafemina.domain.Agendamento;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -13,6 +14,12 @@ import java.util.Optional;
 public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> {
 
     Optional<Agendamento> findByIdAndClinicaId(Long id, Long clinicaId);
+
+    @EntityGraph(attributePaths = {"paciente", "medico"})
+    List<Agendamento> findByClinicaIdAndDataHoraInicioGreaterThanEqualAndDataHoraInicioLessThanOrderByDataHoraInicioAsc(
+            Long clinicaId,
+            OffsetDateTime inicio,
+            OffsetDateTime fim);
 
     Optional<Agendamento> findByClinicaIdAndExternalSourceAndExternalId(
             Long clinicaId,

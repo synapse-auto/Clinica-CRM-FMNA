@@ -2,20 +2,28 @@ import Link from 'next/link';
 import {
   Activity,
   AlertCircle,
-  BarChart3,
   Calendar as CalendarIcon,
+  CalendarDays,
+  CheckCircle2,
   Clock,
+  Heart,
   LineChart,
   MessageSquare,
-  PieChart,
+  RefreshCw,
   Stethoscope,
+  TrendingUp,
   User,
   Users,
+  WalletCards,
 } from 'lucide-react';
 import { DemoCard } from '@/components/demo/DemoCard';
+import { DonutChart } from '@/components/demo/DonutChart';
+import { GroupedBarChart } from '@/components/demo/GroupedBarChart';
+import { LineAreaChart } from '@/components/demo/LineAreaChart';
 import { MetricCard } from '@/components/demo/MetricCard';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { SegmentedTabs } from '@/components/demo/SegmentedTabs';
+import { demoDashboardVisual } from '@/mocks/demoDashboard';
 import { getClinicaAtual, getDashboardData } from '@/services/backend';
 import type { DashboardPeriodo, DashboardResponse } from '@/types/dashboard';
 
@@ -45,9 +53,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const agendaSubtitle = clinica.tipoClinica === 'ULTRASSONOGRAFIA'
     ? 'ultrassons e exames'
     : 'para hoje e amanhã';
+  const confirmationRate = calculateConfirmationRate(dashboard);
+  const appointmentChart = buildAppointmentChart(dashboard, clinica.usaCirurgiasNaAgenda);
+  const serviceItems = buildServiceItems(dashboard);
 
   return (
-    <div className="h-full overflow-auto p-6 custom-scrollbar">
+    <div className="h-full overflow-auto bg-clinic-canvas p-4 custom-scrollbar">
       <PageHeader
         title="Dashboard"
         description={formatDisplayDate(data)}
@@ -62,16 +73,16 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             />
             <Link
               href={`/dashboard?periodo=${periodo}&data=${data}`}
-              className="flex h-10 items-center gap-3 rounded-xl border border-clinic-border bg-white px-4 text-sm font-semibold text-clinic-text shadow-sm"
+              className="flex h-8 items-center gap-2 rounded-lg border border-clinic-border bg-clinic-surface px-3 text-[10px] font-semibold text-clinic-text"
             >
-              <CalendarIcon className="h-4 w-4 text-clinic-muted" />
+              <CalendarIcon className="h-3.5 w-3.5 text-clinic-muted" />
               {formatShortDate(data)}
             </Link>
           </>
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6">
         <MetricCard
           title="Equipe Online"
           value={dashboard.equipeOnline}
@@ -100,7 +111,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           title={agendaTitle}
           value={dashboard.consultasAgendadas}
           subtitle={agendaSubtitle}
-          trend={clinica.usaCirurgiasNaAgenda ? 'cirurgias na semana' : 'exames na semana'}
+          trend={clinica.usaCirurgiasNaAgenda ? '+8 cirurgias na semana' : '+8 exames na semana'}
           icon={clinica.tipoClinica === 'ULTRASSONOGRAFIA' ? Stethoscope : Activity}
           tone="cyan"
         />
@@ -109,6 +120,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           value={dashboard.confirmacoesPendentes}
           subtitle="aguardando resposta"
           trend="-2 vs ontem"
+          trendDirection="down"
           icon={AlertCircle}
           tone="orange"
         />
@@ -122,138 +134,230 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
+      <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-12">
         <DemoCard
           className="xl:col-span-7"
           title="Pico de Mensagens"
           description="Mensagens por hora hoje"
-          actions={<LineChart className="h-5 w-5 text-clinic-primary" />}
+          actions={<LineChart className="h-4 w-4" />}
         >
-          <HourlyChart dashboard={dashboard} />
+          <LineAreaChart
+            data={dashboard.picoMensagensPorHora.map((item) => ({
+              label: `${String(item.hora).padStart(2, '0')}h`,
+              value: item.total,
+            }))}
+          />
         </DemoCard>
 
         <DemoCard
           className="xl:col-span-5"
           title="Pacientes da Semana"
           description="Movimentação de pacientes"
-          actions={<BarChart3 className="h-5 w-5 text-clinic-primary" />}
+          actions={<TrendingUp className="h-4 w-4" />}
         >
-          <div className="grid grid-cols-2 gap-3 p-5">
-            <SummaryTile color="bg-teal-600" value={dashboard.novosPacientes} label="Novos" caption="primeiro contato" />
-            <SummaryTile color="bg-indigo-500" value={Math.round(dashboard.taxaFidelizacao / 8) || 8} label="Recorrentes" caption="retornaram à clínica" />
-            <SummaryTile color="bg-blue-500" value={dashboard.consultasAgendadas} label="Agendados" caption="consultas marcadas" />
-            <SummaryTile color="bg-orange-500" value={clinica.followUpAutomatico ? 'Ativo' : 'Manual'} label="Follow UP" caption="em acompanhamento" />
+          <div className="grid grid-cols-2 gap-2 px-4 pb-4 pt-1">
+            <SummaryTile tone="teal" value={dashboard.novosPacientes} label="Novos" caption="primeiro contato" />
+            <SummaryTile tone="purple" value={demoDashboardVisual.pacientesRecorrentes} label="Recorrentes" caption="retornaram à clínica" />
+            <SummaryTile tone="blue" value={dashboard.consultasAgendadas} label="Agendados" caption="consultas marcadas" />
+            <SummaryTile tone="orange" value={demoDashboardVisual.followUpsEmAcompanhamento} label="Follow UP" caption="em acompanhamento" />
           </div>
         </DemoCard>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
+      <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-12">
         <DemoCard
           className="xl:col-span-8"
           title="Agendamentos da Semana"
           description={clinica.usaCirurgiasNaAgenda ? 'Consultas, cirurgias e exames por dia' : 'Consultas e exames por dia'}
-          actions={<CalendarIcon className="h-5 w-5 text-clinic-primary" />}
+          actions={<CalendarDays className="h-4 w-4" />}
         >
-          <DailyChart dashboard={dashboard} />
+          <GroupedBarChart labels={appointmentChart.labels} series={appointmentChart.series} />
         </DemoCard>
 
         <DemoCard
           className="xl:col-span-4"
           title="Distribuição de Serviços"
           description="Interesse dos pacientes"
-          actions={<PieChart className="h-5 w-5 text-clinic-primary" />}
+          actions={<Activity className="h-4 w-4" />}
         >
-          <div className="space-y-4 p-5">
-            {dashboard.distribuicaoServicos.length > 0 ? (
-              dashboard.distribuicaoServicos.map((item, index) => (
-                <div key={item.servico} className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-semibold text-clinic-text">{item.servico}</span>
-                    <span className="font-bold text-clinic-primary">{item.percentual.toFixed(1)}%</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-teal-50">
-                    <div
-                      className={`h-2 rounded-full ${index % 2 === 0 ? 'bg-clinic-primary' : 'bg-indigo-500'}`}
-                      style={{ width: `${Math.max(item.percentual, 8)}%` }}
-                    />
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-clinic-muted">Sem serviços no período.</p>
-            )}
+          <div className="flex min-h-[206px] items-center px-5 pb-4">
+            <DonutChart items={serviceItems} />
           </div>
         </DemoCard>
       </div>
-    </div>
-  );
-}
 
-function HourlyChart({ dashboard }: { dashboard: DashboardResponse }) {
-  const items = dashboard.picoMensagensPorHora.length > 0
-    ? dashboard.picoMensagensPorHora
-    : Array.from({ length: 6 }, (_, index) => ({ hora: index * 4, total: 0 }));
-  const max = Math.max(...items.map((item) => item.total), 1);
-
-  return (
-    <div className="p-5">
-      <div className="flex h-[250px] items-end gap-3 border-b border-l border-dashed border-clinic-border/80 px-2 pb-2">
-        {items.map((item) => (
-          <div key={item.hora} className="flex h-full flex-1 flex-col justify-end gap-2">
-            <div
-              className="min-h-1 rounded-t-md bg-clinic-primary/80"
-              style={{ height: `${Math.max((item.total / max) * 100, item.total > 0 ? 8 : 1)}%` }}
+      <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <DemoCard
+          title="Follow-Up"
+          description={`${demoDashboardVisual.followUp.programados} programados no período`}
+          icon={<RefreshCw className="h-4 w-4" />}
+          actions={<PerformancePill tone="green" label={`${demoDashboardVisual.followUp.conversao}% conversão`} />}
+        >
+          <div className="px-5 pb-4 pt-1">
+            <DonutChart
+              compact
+              centerLabel={`${demoDashboardVisual.followUp.conversao}%`}
+              items={[
+                { label: 'Enviados', value: demoDashboardVisual.followUp.enviados, color: 'var(--clinic-blue)' },
+                { label: 'Convertidos', value: demoDashboardVisual.followUp.convertidos, color: 'var(--clinic-success)' },
+                { label: 'Perdidos (5 dias)', value: demoDashboardVisual.followUp.perdidos, color: 'var(--clinic-danger)' },
+              ]}
             />
-            <span className="text-center text-[11px] text-clinic-muted">{String(item.hora).padStart(2, '0')}h</span>
           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+        </DemoCard>
 
-function DailyChart({ dashboard }: { dashboard: DashboardResponse }) {
-  const items = dashboard.agendamentosSemana;
-  const max = Math.max(...items.map((item) => item.total), 1);
-
-  return (
-    <div className="p-5">
-      {items.length > 0 ? (
-        <div className="flex h-[220px] items-end gap-4 border-b border-clinic-border/70 px-4 pb-2">
-          {items.map((item) => (
-            <div key={item.data} className="flex h-full flex-1 flex-col justify-end gap-2">
-              <div
-                className="min-h-2 rounded-t-lg bg-indigo-500"
-                style={{ height: `${Math.max((item.total / max) * 100, 8)}%` }}
-              />
-              <span className="text-center text-xs font-semibold text-clinic-muted">{formatWeekday(item.data)}</span>
+        <DemoCard
+          title="Fidelização"
+          description={`${demoDashboardVisual.fidelizacao.clientes} clientes fidelizados`}
+          icon={<Heart className="h-4 w-4 text-clinic-pink" />}
+          actions={<PerformancePill tone="pink" label={`${Math.round(dashboard.taxaFidelizacao)}% retorno`} />}
+        >
+          <div className="px-5 pb-4 pt-1">
+            <DonutChart
+              compact
+              centerLabel={`${Math.round(dashboard.taxaFidelizacao)}%`}
+              items={[
+                { label: 'Retornos', value: demoDashboardVisual.fidelizacao.retornos, color: 'var(--clinic-blue)' },
+                { label: 'Indicações', value: demoDashboardVisual.fidelizacao.indicacoes, color: 'var(--clinic-indigo)' },
+                { label: 'Sem retorno', value: demoDashboardVisual.fidelizacao.semRetorno, color: 'var(--clinic-muted)' },
+              ]}
+            />
+            <div className="mt-1 flex items-center justify-between border-t border-clinic-border pt-2 text-[10px] text-clinic-muted">
+              <span>NPS médio</span>
+              <strong className="text-clinic-blue">{demoDashboardVisual.fidelizacao.nps.toFixed(1).replace('.', ',')}</strong>
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="flex h-[220px] items-center justify-center rounded-xl border border-dashed border-clinic-border text-sm text-clinic-muted">
-          Sem agendamentos no período.
-        </div>
-      )}
+          </div>
+        </DemoCard>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2 pb-1 md:grid-cols-2 xl:grid-cols-4">
+        <CompactMetric icon={CheckCircle2} tone="green" value={`${confirmationRate}%`} label="Taxa de Confirmação" />
+        <CompactMetric icon={Users} tone="blue" value={demoDashboardVisual.pacientesMes} label="Pacientes do Mês" />
+        <CompactMetric icon={WalletCards} tone="teal" value={`R$ ${demoDashboardVisual.ticketMedio}`} label="Ticket Médio" />
+        <CompactMetric icon={Clock} tone="orange" value={demoDashboardVisual.tempoMedioGeral} label="Tempo Médio Geral" />
+      </div>
     </div>
   );
 }
 
 type SummaryTileProps = {
-  color: string;
+  tone: 'teal' | 'purple' | 'blue' | 'orange';
   value: number | string;
   label: string;
   caption: string;
 };
 
-function SummaryTile({ color, value, label, caption }: SummaryTileProps) {
+const summaryTones = {
+  teal: 'bg-clinic-primary text-clinic-primary',
+  purple: 'bg-clinic-indigo text-clinic-indigo',
+  blue: 'bg-clinic-blue text-clinic-blue',
+  orange: 'bg-clinic-orange text-clinic-orange',
+};
+
+function SummaryTile({ tone, value, label, caption }: SummaryTileProps) {
   return (
-    <div className="rounded-xl border border-clinic-border bg-teal-50/30 p-4">
-      <div className={`mb-5 h-2 w-2 rounded-full ${color}`} />
-      <p className="text-2xl font-extrabold text-clinic-primary">{value}</p>
-      <p className="mt-1 text-sm font-bold text-clinic-text">{label}</p>
-      <p className="mt-1 text-xs text-clinic-muted">{caption}</p>
+    <div className="rounded-lg border border-clinic-border bg-clinic-surface-muted p-3">
+      <div className={`mb-2 h-1.5 w-1.5 rounded-full ${summaryTones[tone].split(' ')[0]}`} />
+      <p className={`text-[18px] font-extrabold leading-none ${summaryTones[tone].split(' ')[1]}`}>{value}</p>
+      <p className="mt-1.5 text-[10px] font-bold text-clinic-text">{label}</p>
+      <p className="text-[8px] text-clinic-muted">{caption}</p>
     </div>
+  );
+}
+
+function PerformancePill({ label, tone }: { label: string; tone: 'green' | 'pink' }) {
+  return (
+    <span className={`rounded-md px-2 py-1 text-[9px] font-bold ${
+      tone === 'green'
+        ? 'bg-clinic-success/10 text-clinic-success'
+        : 'bg-clinic-pink/10 text-clinic-pink'
+    }`}>
+      {label}
+    </span>
+  );
+}
+
+const compactMetricTones = {
+  green: 'text-clinic-success',
+  blue: 'text-clinic-blue',
+  teal: 'text-clinic-primary',
+  orange: 'text-clinic-orange',
+};
+
+function CompactMetric({
+  icon: Icon,
+  tone,
+  value,
+  label,
+}: {
+  icon: typeof Clock;
+  tone: keyof typeof compactMetricTones;
+  value: string | number;
+  label: string;
+}) {
+  return (
+    <div className="flex min-h-[48px] items-center gap-3 rounded-xl border border-clinic-border bg-clinic-surface px-3 py-2">
+      <Icon className={`h-5 w-5 shrink-0 ${compactMetricTones[tone]}`} />
+      <div>
+        <p className="text-[14px] font-extrabold leading-4 text-clinic-text">{value}</p>
+        <p className="text-[8px] text-clinic-muted">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+function buildAppointmentChart(dashboard: DashboardResponse, includeSurgeries: boolean) {
+  const labels = dashboard.agendamentosSemana.map((item) => formatWeekday(item.data));
+  const totals = dashboard.agendamentosSemana.map((item) => item.total);
+
+  return {
+    labels,
+    series: [
+      {
+        label: 'Consultas',
+        color: 'var(--clinic-primary)',
+        values: totals.map((total) => Math.max(1, Math.round(total * 0.62))),
+      },
+      ...(includeSurgeries
+        ? [{
+            label: 'Cirurgias',
+            color: 'var(--clinic-indigo)',
+            values: totals.map((total) => Math.round(total * 0.12)),
+          }]
+        : []),
+      {
+        label: 'Exames',
+        color: 'var(--clinic-cyan)',
+        values: totals.map((total) => Math.max(1, Math.round(total * 0.36))),
+      },
+    ],
+  };
+}
+
+function buildServiceItems(dashboard: DashboardResponse) {
+  const colors = [
+    'var(--clinic-primary)',
+    'var(--clinic-blue)',
+    'var(--clinic-indigo)',
+    'var(--clinic-cyan)',
+    'var(--clinic-orange)',
+  ];
+
+  return dashboard.distribuicaoServicos.slice(0, 5).map((item, index) => ({
+    label: item.servico,
+    value: item.total || item.percentual,
+    color: colors[index % colors.length],
+  }));
+}
+
+function calculateConfirmationRate(dashboard: DashboardResponse) {
+  if (dashboard.consultasAgendadas <= 0) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.min(100, Math.round(((dashboard.consultasAgendadas - dashboard.confirmacoesPendentes) / dashboard.consultasAgendadas) * 100)),
   );
 }
 
@@ -291,11 +395,12 @@ function formatShortDate(value: string): string {
 }
 
 function formatWeekday(value: string): string {
-  return new Intl.DateTimeFormat('pt-BR', {
+  const formatted = new Intl.DateTimeFormat('pt-BR', {
     weekday: 'short',
     day: '2-digit',
     timeZone: 'America/Sao_Paulo',
   }).format(new Date(`${value}T12:00:00-03:00`));
+  return formatted.replace('.', '');
 }
 
 function periodoLabel(periodo: DashboardPeriodo): string {

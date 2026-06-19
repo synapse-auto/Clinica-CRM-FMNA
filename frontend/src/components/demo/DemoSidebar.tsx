@@ -8,16 +8,17 @@ import {
   ChevronRight,
   Clock,
   LayoutDashboard,
-  MessageCircle,
   MessageSquare,
   Moon,
   Settings,
   Stethoscope,
+  Sun,
   Tag,
   UserPlus,
   Users,
   Zap,
 } from 'lucide-react';
+import { useTheme } from '@/components/theme/ThemeProvider';
 import type { ClinicaAtualResponse } from '@/types/dashboard';
 
 const menuItems = [
@@ -39,6 +40,7 @@ type DemoSidebarProps = {
 
 export function DemoSidebar({ clinic }: DemoSidebarProps) {
   const pathname = usePathname();
+  const { theme, toggleTheme } = useTheme();
   const initials = clinic.nome
     .split(/\s+/)
     .filter(Boolean)
@@ -47,19 +49,19 @@ export function DemoSidebar({ clinic }: DemoSidebarProps) {
     .join('') || 'CL';
 
   return (
-    <aside className="flex h-screen w-[220px] shrink-0 flex-col bg-[#001114] text-[#b7cdd3]">
-      <div className="flex h-[73px] items-center gap-3 border-b border-[#0b2b30] px-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-teal-700/40 bg-teal-900/40 text-teal-300">
+    <aside className="flex h-screen w-[218px] shrink-0 flex-col bg-sidebar text-sidebar-foreground">
+      <div className="flex h-[72px] items-center gap-3 border-b border-sidebar-border px-5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-sidebar-primary/25 bg-sidebar-accent text-sidebar-primary">
           <Stethoscope className="h-5 w-5" />
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-bold leading-tight text-white">{clinic.nome}</p>
-          <p className="text-[11px] text-[#7fa0a8]">CRM</p>
+          <p className="text-[11px] text-sidebar-foreground/65">CRM</p>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-5 custom-scrollbar">
-        <p className="mb-4 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5e7d85]">
+      <div className="flex-1 overflow-y-auto px-3 py-4 custom-scrollbar">
+        <p className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/45">
           Menu
         </p>
         <nav className="space-y-1">
@@ -71,64 +73,57 @@ export function DemoSidebar({ clinic }: DemoSidebarProps) {
                 href={item.href}
                 className={`group flex h-[42px] items-center justify-between rounded-lg px-3 text-sm font-semibold transition ${
                   active
-                    ? 'bg-[#003d42] text-white'
-                    : 'text-[#a8c0c8] hover:bg-[#08262b] hover:text-white'
+                    ? 'bg-sidebar-accent text-white'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent/55 hover:text-white'
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-3">
-                  <item.icon className={`h-4.5 w-4.5 shrink-0 ${active ? 'text-[#00d0b0]' : 'text-[#7fa0a8]'}`} />
+                  <item.icon className={`h-4.5 w-4.5 shrink-0 ${active ? 'text-sidebar-primary' : 'text-sidebar-foreground/60'}`} />
                   <span className="truncate">{item.name}</span>
                 </span>
                 {item.badge ? (
-                  <span className="min-w-5 rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
+                  <span className="min-w-5 rounded-full bg-clinic-danger px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
                     {item.badge}
                   </span>
                 ) : active ? (
-                  <ChevronRight className="h-4 w-4 text-teal-400" />
+                  <ChevronRight className="h-4 w-4 text-sidebar-primary" />
                 ) : null}
               </Link>
             );
           })}
         </nav>
 
-        <div className="mt-5 space-y-1 border-t border-[#0b2b30] pt-4">
-          <SidebarUtility label="WhatsApp IA" />
-          <SidebarUtility label="WhatsApp Integrado" />
-        </div>
       </div>
 
-      <div className="border-t border-[#0b2b30] p-4">
-        <button className="mb-3 flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-[#a8c0c8] transition hover:bg-[#08262b] hover:text-white">
-          <Moon className="h-4 w-4 text-[#7fa0a8]" />
-          Tema Escuro
+      <div className="border-t border-sidebar-border p-3">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={`Ativar tema ${theme === 'dark' ? 'claro' : 'escuro'}`}
+          className="mb-2 flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-sidebar-foreground transition hover:bg-sidebar-accent/55 hover:text-white"
+        >
+          {theme === 'dark' ? (
+            <Sun className="h-4 w-4 text-sidebar-foreground/65" />
+          ) : (
+            <Moon className="h-4 w-4 text-sidebar-foreground/65" />
+          )}
+          Tema {theme === 'dark' ? 'Claro' : 'Escuro'}
         </button>
-        <div className="flex items-center justify-between rounded-lg p-2 transition hover:bg-[#08262b]">
+        <div className="flex items-center justify-between rounded-lg p-2 transition hover:bg-sidebar-accent/55">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-600 text-xs font-bold text-white ring-2 ring-teal-300/30">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground ring-2 ring-sidebar-primary/20">
               {initials}
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-white">{clinic.nome}</p>
-              <p className="truncate text-[11px] text-[#7fa0a8]">
+              <p className="truncate text-[11px] text-sidebar-foreground/65">
                 {clinic.tipoClinica === 'ULTRASSONOGRAFIA' ? 'Ultrassonografia' : 'Gestor'}
               </p>
             </div>
           </div>
-          <ChevronRight className="h-4 w-4 shrink-0 text-[#5e7d85]" />
+          <ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground/45" />
         </div>
       </div>
     </aside>
-  );
-}
-
-function SidebarUtility({ label }: { label: string }) {
-  return (
-    <button className="flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-[#00d0b0] transition hover:bg-[#08262b]">
-      <MessageCircle className="h-4 w-4" />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="rounded-full bg-teal-900/70 px-2 py-0.5 text-[9px] font-bold uppercase text-teal-300">
-        Demo
-      </span>
-    </button>
   );
 }
