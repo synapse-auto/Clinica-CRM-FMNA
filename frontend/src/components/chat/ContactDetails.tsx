@@ -1,33 +1,44 @@
-import { Bell, Calendar, ChevronDown, Clock, Mail, Phone, StickyNote, Tag, User } from 'lucide-react';
+import { Bell, Calendar, CalendarCheck, ChevronDown, Clock, Mail, Phone, StickyNote, Tag, User } from 'lucide-react';
 import { StatusBadge } from '@/components/demo/StatusBadge';
-import { demoConversations } from '@/mocks/demoAtendimentos';
+import { demoConversations, type DemoConversation } from '@/mocks/demoAtendimentos';
 
-const activeConversation = demoConversations[0];
-
-export function ContactDetails() {
+export function ContactDetails({
+  conversation = demoConversations[0],
+}: {
+  conversation?: DemoConversation;
+}) {
   return (
     <aside className="flex h-full w-[300px] shrink-0 flex-col overflow-y-auto border-l border-clinic-border bg-clinic-surface custom-scrollbar">
       <div className="border-b border-clinic-border p-4 text-center">
         <div className="mx-auto mb-2.5 flex h-14 w-14 items-center justify-center rounded-full bg-clinic-primary/15 text-lg font-extrabold text-clinic-primary ring-4 ring-clinic-soft">
-          {activeConversation.initials}
+          {conversation.initials}
         </div>
-        <h2 className="text-[14px] font-extrabold leading-tight text-clinic-text">{activeConversation.name}</h2>
+        <h2 className="text-[14px] font-extrabold leading-tight text-clinic-text">{conversation.name}</h2>
         <div className="mt-2">
-          <StatusBadge tone="blue">{activeConversation.status}</StatusBadge>
+          <StatusBadge tone="blue">{conversation.status}</StatusBadge>
         </div>
+        {conversation.requerRevisao === true ? (
+          <button
+            type="button"
+            className="mt-3 inline-flex h-8 items-center justify-center gap-2 rounded-lg bg-clinic-primary px-3 text-[10px] font-extrabold text-white transition hover:bg-clinic-primary-strong"
+          >
+            <CalendarCheck className="h-3.5 w-3.5" />
+            Confirmar consulta
+          </button>
+        ) : null}
       </div>
 
       <div className="space-y-5 p-4">
         <Section title="Contato">
-          <DetailRow icon={Phone} text={activeConversation.phone} />
+          <DetailRow icon={Phone} text={conversation.phone} />
           <DetailRow icon={Mail} text="paciente@email.com" />
-          <DetailRow icon={User} text={activeConversation.owner} tone="text-clinic-orange" />
+          <DetailRow icon={User} text={conversation.owner} tone="text-clinic-orange" />
           <DetailRow icon={Clock} text="A definir" />
         </Section>
 
         <Section title="Tags">
           <div className="flex flex-wrap gap-1.5">
-            {activeConversation.tags.map((tag) => (
+            {conversation.tags.map((tag) => (
               <span key={tag} className="inline-flex items-center gap-1 rounded-md border border-clinic-blue/20 bg-clinic-blue/10 px-2 py-1 text-[9px] font-bold text-clinic-blue">
                 <Tag className="h-2.5 w-2.5" />
                 {tag}
@@ -41,10 +52,7 @@ export function ContactDetails() {
         </Section>
 
         <Section title="Histórico">
-          <div className="grid grid-cols-2 gap-2">
-            <MiniMetric icon={Calendar} value="0" label="Consultas" />
-            <MiniMetric icon={StickyNote} value="R$0" label="Total pago" />
-          </div>
+          <MiniMetric icon={Calendar} value="0" label="Consultas" />
         </Section>
 
         <Section title="Notas">

@@ -137,7 +137,7 @@ export const demoFollowUpsTemporary: DemoFollowUpTemporary[] = [
     id: 2,
     pacienteId: 51,
     titulo: 'Reativacao trimestral',
-    origem: 'N8N',
+    origem: 'CRM',
     status: 'PROCESSANDO',
     scheduledAt: '2026-06-17T15:30:00-03:00',
   },

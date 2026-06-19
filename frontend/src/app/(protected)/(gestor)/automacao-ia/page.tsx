@@ -53,7 +53,7 @@ export default async function AutomacaoIaPage() {
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
         <AutomationMetric icon={Settings2} label="Automações ativas" value={automacoesAtivas} />
-        <AutomationMetric icon={MessageCircle} label="Itens na fila N8N" value={fila.length} />
+        <AutomationMetric icon={MessageCircle} label="Itens na fila" value={fila.length} />
         <AutomationMetric icon={Heart} label="Campanhas festivas" value={festivas.length} />
         <AutomationMetric icon={Sparkles} label="Taxa de sucesso" value="91%" />
       </div>
@@ -125,7 +125,7 @@ export default async function AutomacaoIaPage() {
 
         <DemoCard
           title="Fila temporária de follow-ups"
-          description="Itens preparados para consulta e processamento pelo N8N"
+          description="Itens preparados para processamento interno"
           icon={<MessageCircle className="h-4 w-4" />}
         >
           <div className="px-4 pb-4">
@@ -134,7 +134,6 @@ export default async function AutomacaoIaPage() {
               getKey={(item) => item.id}
               columns={[
                 { key: 'titulo', label: 'Follow-up', render: (item) => <span className="font-bold text-clinic-text">{item.titulo}</span> },
-                { key: 'origem', label: 'Origem', render: (item) => item.origem },
                 { key: 'status', label: 'Status', render: (item) => <StatusBadge tone={item.status === 'PENDENTE' ? 'orange' : 'teal'}>{item.status}</StatusBadge> },
               ]}
             />

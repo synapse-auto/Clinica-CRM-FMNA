@@ -10,6 +10,7 @@ export type DemoConversation = {
   unread?: number;
   mode: 'IA' | 'Humano' | 'Follow UP';
   status: string;
+  requerRevisao: boolean;
 };
 
 export type DemoMessage = {
@@ -33,6 +34,7 @@ export const demoConversations: DemoConversation[] = [
     unread: 4,
     mode: 'IA',
     status: 'Agendado',
+    requerRevisao: true,
   },
   {
     id: 2,
@@ -45,6 +47,7 @@ export const demoConversations: DemoConversation[] = [
     owner: 'IA Mari',
     mode: 'IA',
     status: 'Confirmado',
+    requerRevisao: false,
   },
   {
     id: 3,
@@ -57,6 +60,7 @@ export const demoConversations: DemoConversation[] = [
     owner: 'Fernanda',
     mode: 'Humano',
     status: 'Em atendimento',
+    requerRevisao: false,
   },
   {
     id: 4,
@@ -69,6 +73,7 @@ export const demoConversations: DemoConversation[] = [
     owner: 'Paula',
     mode: 'Follow UP',
     status: 'Follow UP',
+    requerRevisao: false,
   },
   {
     id: 5,
@@ -82,6 +87,7 @@ export const demoConversations: DemoConversation[] = [
     unread: 2,
     mode: 'Humano',
     status: 'Prioridade',
+    requerRevisao: false,
   },
 ];
 

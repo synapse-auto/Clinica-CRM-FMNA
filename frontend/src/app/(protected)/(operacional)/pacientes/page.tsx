@@ -5,7 +5,6 @@ import {
   Mail,
   Phone,
   Search,
-  Star,
   UserPlus,
   Users,
 } from 'lucide-react';
@@ -80,7 +79,7 @@ export default function PacientesPage() {
         </div>
       </header>
 
-      <div className="mb-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_165px_180px]">
+      <div className="mb-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_180px]">
         <section className="flex min-h-[64px] flex-wrap items-center gap-3 rounded-xl border border-clinic-border bg-clinic-surface px-4 py-3 shadow-[0_1px_2px_rgba(4,32,36,0.04)]">
           <div className="flex items-center gap-2 border-r border-clinic-border pr-3 text-[10px] font-bold text-clinic-text">
             <Activity className="h-4 w-4 text-clinic-primary" />
@@ -96,13 +95,6 @@ export default function PacientesPage() {
           icon={Users}
           value={demoPacientesResumo.total.toString()}
           label="Total de Pacientes"
-          tone="teal"
-        />
-        <SummaryCard
-          icon={Star}
-          value={demoPacientesResumo.receitaTotal}
-          label="Receita Total"
-          tone="orange"
         />
       </div>
 
@@ -140,17 +132,6 @@ export default function PacientesPage() {
             label: 'Tags',
             className: 'min-w-[245px] w-[25%]',
             render: (item) => <PatientTags tags={item.tags} />,
-          },
-          {
-            key: 'total',
-            label: 'Total',
-            className: 'min-w-[120px] w-[10%]',
-            render: (item) => (
-              <span className="flex items-center gap-1.5 whitespace-nowrap font-extrabold text-clinic-text">
-                {item.total !== '—' ? <Star className="h-3 w-3 text-clinic-orange" /> : null}
-                {item.total}
-              </span>
-            ),
           },
           {
             key: 'atendente',
@@ -209,21 +190,14 @@ function SummaryCard({
   icon: Icon,
   value,
   label,
-  tone,
 }: {
   icon: LucideIcon;
   value: string;
   label: string;
-  tone: 'teal' | 'orange';
 }) {
-  const toneClass =
-    tone === 'orange'
-      ? 'bg-clinic-orange/10 text-clinic-orange'
-      : 'bg-clinic-primary/10 text-clinic-primary';
-
   return (
     <section className="flex min-h-[64px] items-center gap-3 rounded-xl border border-clinic-border bg-clinic-surface px-3 shadow-[0_1px_2px_rgba(4,32,36,0.04)]">
-      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${toneClass}`}>
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-clinic-primary/10 text-clinic-primary">
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0">

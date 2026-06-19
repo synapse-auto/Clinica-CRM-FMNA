@@ -1,4 +1,4 @@
-import { Bot, Building2, Link2, MessageCircle, Settings, Shield } from 'lucide-react';
+import { Building2, Settings, Shield } from 'lucide-react';
 import { DemoCard } from '@/components/demo/DemoCard';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { StatusBadge } from '@/components/demo/StatusBadge';
@@ -12,11 +12,11 @@ export default async function ConfiguracoesPage() {
       <PageHeader
         icon={<Settings className="h-4 w-4" />}
         title="Configurações"
-        description="Clínica, WhatsApp, integrações, IA e permissões"
+        description="Identidade da clínica e políticas de acesso"
       />
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <DemoCard title="Clínica atual" description="Identidade vinda da configuração multi-clínica" icon={<Building2 className="h-5 w-5" />}>
+        <DemoCard title="Clínica atual" description="Identidade do ambiente operacional" icon={<Building2 className="h-5 w-5" />}>
           <div className="space-y-2 px-4 pb-4">
             <ConfigRow label="Nome" value={clinica.nome} />
             <ConfigRow label="Slug" value={clinica.slug} />
@@ -25,27 +25,11 @@ export default async function ConfiguracoesPage() {
           </div>
         </DemoCard>
 
-        <DemoCard title="WhatsApp Oficial" description="Tokens não são exibidos no frontend" icon={<MessageCircle className="h-5 w-5" />}>
+        <DemoCard title="Acesso e segurança" description="Políticas aplicadas aos usuários internos" icon={<Shield className="h-5 w-5" />}>
           <div className="space-y-2 px-4 pb-4">
-            <ConfigRow label="Canal" value="Meta Cloud API" />
-            <ConfigRow label="Webhook" value="Configurado no backend" />
-            <ConfigRow label="Credenciais" value="Protegidas por variável de ambiente" />
-          </div>
-        </DemoCard>
-
-        <DemoCard title="Integrações" description="Providers externos read-only" icon={<Link2 className="h-5 w-5" />}>
-          <div className="space-y-2 px-4 pb-4">
-            <IntegrationRow label="Darwin" active={clinica.slug === 'fmna'} />
-            <IntegrationRow label="Medware" active={clinica.slug === 'ultramedical'} />
-            <IntegrationRow label="N8N" active={clinica.followUpAutomatico} />
-          </div>
-        </DemoCard>
-
-        <DemoCard title="IA e permissões" description="Controles visuais para homologação" icon={<Bot className="h-5 w-5" />}>
-          <div className="space-y-2 px-4 pb-4">
-            <IntegrationRow label="Follow-up automático" active={clinica.followUpAutomatico} />
-            <IntegrationRow label="Perfis Gestor/Recepcionista/Médico" active />
-            <IntegrationRow label="LGPD e logs sem PII" active />
+            <SecurityRow label="Perfis Gestor, Recepcionista e Médico" />
+            <SecurityRow label="Sessão protegida e expiração automática" />
+            <SecurityRow label="Logs operacionais sem dados sensíveis" />
           </div>
         </DemoCard>
       </div>
@@ -62,14 +46,14 @@ function ConfigRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function IntegrationRow({ label, active }: { label: string; active: boolean }) {
+function SecurityRow({ label }: { label: string }) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-clinic-border bg-clinic-surface-muted px-3 py-2.5">
       <div className="flex items-center gap-3">
         <Shield className="h-4 w-4 text-clinic-primary" />
         <span className="text-[10px] font-bold text-clinic-text">{label}</span>
       </div>
-      <StatusBadge tone={active ? 'green' : 'slate'}>{active ? 'Ativo' : 'Pendente'}</StatusBadge>
+      <StatusBadge tone="green">Ativo</StatusBadge>
     </div>
   );
 }

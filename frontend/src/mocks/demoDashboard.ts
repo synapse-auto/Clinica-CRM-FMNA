@@ -66,7 +66,5 @@ export const demoDashboardVisual = {
     semRetorno: 6,
     nps: 8.4,
   },
-  ticketMedio: 380,
   pacientesMes: 284,
-  tempoMedioGeral: '4,8min',
 };

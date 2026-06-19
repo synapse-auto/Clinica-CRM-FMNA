@@ -64,13 +64,6 @@ export function ChatWindow() {
       </div>
 
       <div className="shrink-0 border-t border-clinic-border bg-clinic-surface p-3">
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {['Confirmar consulta', 'Pedir documento', 'Enviar localização'].map((label) => (
-            <button key={label} className="rounded-full border border-clinic-border bg-clinic-surface-muted px-2.5 py-1 text-[9px] font-bold text-clinic-muted transition hover:border-clinic-primary hover:text-clinic-primary">
-              {label}
-            </button>
-          ))}
-        </div>
         <div className="flex items-center gap-2">
           <button aria-label="Anexar" className="rounded-full p-2 text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary">
             <Paperclip className="h-4 w-4 -rotate-45" />

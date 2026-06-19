@@ -1,0 +1,110 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from '@/lib/auth/constants';
+
+const cookieStore = vi.hoisted(() => ({
+  get: vi.fn(),
+  set: vi.fn(),
+  delete: vi.fn(),
+}));
+
+vi.mock('next/headers', () => ({
+  cookies: async () => cookieStore,
+}));
+
+import { POST as login } from './login/route';
+import { POST as logout } from './logout/route';
+import { GET as me } from './me/route';
+
+describe('auth BFF routes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('BACKEND_API_URL', 'http://backend.test');
+    vi.stubEnv('NODE_ENV', 'production');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('should_store_jwt_only_in_secure_http_only_cookie_when_login_succeeds', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      token: 'jwt-server-only',
+      id: 1,
+      nome: 'Gestora',
+      email: 'gestora@clinica.local',
+      perfil: 'GESTOR',
+      clinicaId: 7,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    const response = await login(new Request('http://localhost/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'gestora@clinica.local', senha: 'segredo-digitado' }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      user: {
+        id: 1,
+        nome: 'Gestora',
+        email: 'gestora@clinica.local',
+        perfil: 'GESTOR',
+        clinicaId: 7,
+      },
+      redirectTo: '/dashboard',
+    });
+    expect(body.token).toBeUndefined();
+    expect(cookieStore.set).toHaveBeenCalledWith(
+      SESSION_COOKIE_NAME,
+      'jwt-server-only',
+      expect.objectContaining({
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: SESSION_MAX_AGE_SECONDS,
+      }),
+    );
+  });
+
+  it('should_validate_cookie_against_backend_without_exposing_token', async () => {
+    cookieStore.get.mockReturnValue({ value: 'jwt-server-only' });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 2,
+      nome: 'Recepção',
+      email: 'recepcao@clinica.local',
+      perfil: 'RECEPCIONISTA',
+      clinicaId: 7,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await me();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.token).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://backend.test/api/auth/me',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer jwt-server-only',
+        }),
+      }),
+    );
+  });
+
+  it('should_delete_session_cookie_on_logout', async () => {
+    const response = await logout();
+
+    expect(response.status).toBe(204);
+    expect(cookieStore.delete).toHaveBeenCalledWith(SESSION_COOKIE_NAME);
+  });
+});

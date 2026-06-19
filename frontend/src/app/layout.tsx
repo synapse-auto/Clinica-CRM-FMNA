@@ -2,9 +2,7 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 
-import { AppShell } from '@/components/demo/AppShell';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
-import { getClinicaAtual } from '@/services/backend';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -41,8 +39,6 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const clinica = await getClinicaAtual();
-
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
@@ -52,7 +48,7 @@ export default async function RootLayout({
         className={`${geistSans.className} ${geistSans.variable} ${geistMono.variable} bg-background text-foreground antialiased`}
       >
         <ThemeProvider>
-          <AppShell clinic={clinica}>{children}</AppShell>
+          {children}
         </ThemeProvider>
       </body>
     </html>

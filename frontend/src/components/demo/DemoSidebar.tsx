@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   BadgeHelp,
   Calendar,
   ChevronRight,
   Clock,
   LayoutDashboard,
+  LogOut,
   MessageSquare,
   Moon,
   Settings,
@@ -19,34 +20,45 @@ import {
   Zap,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { menuItemsForProfile } from '@/lib/auth/permissions';
+import type { AuthUser } from '@/lib/auth/types';
 import type { ClinicaAtualResponse } from '@/types/dashboard';
 
-const menuItems = [
-  { name: 'Atendimentos', icon: MessageSquare, href: '/atendimentos', badge: 4 },
-  { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
-  { name: 'Agenda', icon: Calendar, href: '/agenda' },
-  { name: 'Pacientes', icon: Users, href: '/pacientes' },
-  { name: 'Equipe', icon: UserPlus, href: '/equipe' },
-  { name: 'Automação', icon: Zap, href: '/automacao-ia' },
-  { name: 'Tags', icon: Tag, href: '/tags' },
-  { name: 'Msgs Rápidas', icon: BadgeHelp, href: '/msgs-rapidas' },
-  { name: 'Horários', icon: Clock, href: '/horarios' },
-  { name: 'Configurações', icon: Settings, href: '/configuracoes' },
-];
+const menuIcons = {
+  '/atendimentos': MessageSquare,
+  '/dashboard': LayoutDashboard,
+  '/agenda': Calendar,
+  '/pacientes': Users,
+  '/equipe': UserPlus,
+  '/automacao-ia': Zap,
+  '/tags': Tag,
+  '/msgs-rapidas': BadgeHelp,
+  '/horarios': Clock,
+  '/configuracoes': Settings,
+} as const;
 
 type DemoSidebarProps = {
   clinic: ClinicaAtualResponse;
+  user: AuthUser;
 };
 
-export function DemoSidebar({ clinic }: DemoSidebarProps) {
+export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { theme, toggleTheme } = useTheme();
-  const initials = clinic.nome
+  const initials = user.nome
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
-    .join('') || 'CL';
+    .join('') || 'US';
+  const menuItems = menuItemsForProfile(user.perfil);
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.replace('/login');
+    router.refresh();
+  }
 
   return (
     <aside className="flex h-screen w-[218px] shrink-0 flex-col bg-sidebar text-sidebar-foreground">
@@ -66,6 +78,7 @@ export function DemoSidebar({ clinic }: DemoSidebarProps) {
         </p>
         <nav className="space-y-1">
           {menuItems.map((item) => {
+            const Icon = menuIcons[item.href as keyof typeof menuIcons];
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link
@@ -78,7 +91,7 @@ export function DemoSidebar({ clinic }: DemoSidebarProps) {
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-3">
-                  <item.icon className={`h-4.5 w-4.5 shrink-0 ${active ? 'text-sidebar-primary' : 'text-sidebar-foreground/60'}`} />
+                  <Icon className={`h-4.5 w-4.5 shrink-0 ${active ? 'text-sidebar-primary' : 'text-sidebar-foreground/60'}`} />
                   <span className="truncate">{item.name}</span>
                 </span>
                 {item.badge ? (
@@ -92,7 +105,6 @@ export function DemoSidebar({ clinic }: DemoSidebarProps) {
             );
           })}
         </nav>
-
       </div>
 
       <div className="border-t border-sidebar-border p-3">
@@ -115,15 +127,26 @@ export function DemoSidebar({ clinic }: DemoSidebarProps) {
               {initials}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-white">{clinic.nome}</p>
-              <p className="truncate text-[11px] text-sidebar-foreground/65">
-                {clinic.tipoClinica === 'ULTRASSONOGRAFIA' ? 'Ultrassonografia' : 'Gestor'}
-              </p>
+              <p className="truncate text-sm font-bold text-white">{user.nome}</p>
+              <p className="truncate text-[11px] text-sidebar-foreground/65">{formatProfile(user.perfil)}</p>
             </div>
           </div>
-          <ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground/45" />
+          <button
+            type="button"
+            aria-label="Sair"
+            onClick={logout}
+            className="rounded-md p-1.5 text-sidebar-foreground/55 transition hover:bg-sidebar-accent hover:text-white"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </aside>
   );
+}
+
+function formatProfile(profile: AuthUser['perfil']) {
+  if (profile === 'RECEPCIONISTA') return 'Recepcionista';
+  if (profile === 'MEDICO') return 'Médico';
+  return 'Gestor';
 }

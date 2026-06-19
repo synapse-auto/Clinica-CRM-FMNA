@@ -61,7 +61,6 @@ export const demoAgendaPorMedico = {
 
 export const demoPacientesResumo = {
   total: 27,
-  receitaTotal: 'R$ 110.450',
   status: {
     emAtendimento: 7,
     agendado: 8,
@@ -77,7 +76,6 @@ export type DemoPaciente = {
   telefone: string;
   status: 'Em Atendimento' | 'Agendado' | 'Follow UP' | 'Finalizado';
   tags: string[];
-  total: string;
   atendente: string;
   atendenteIniciais: string;
   atendenteTone: 'green' | 'blue' | 'pink' | 'orange' | 'purple';
@@ -91,7 +89,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9778-4455',
     status: 'Finalizado',
     tags: ['Cirurgia', 'Particular'],
-    total: 'R$ 11.200',
     atendente: 'Dra.',
     atendenteIniciais: 'RF',
     atendenteTone: 'green',
@@ -103,7 +100,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9590-6677',
     status: 'Finalizado',
     tags: ['Consulta Pré-natal', 'Plano de Saúde'],
-    total: 'R$ 1.240',
     atendente: 'Marcos',
     atendenteIniciais: 'MC',
     atendenteTone: 'blue',
@@ -115,7 +111,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9267-5544',
     status: 'Em Atendimento',
     tags: ['Cirurgia', 'Plano de Saúde', 'Alta Prioridade'],
-    total: 'R$ 18.600',
     atendente: 'Dra.',
     atendenteIniciais: 'RF',
     atendenteTone: 'green',
@@ -127,7 +122,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9534-7788',
     status: 'Em Atendimento',
     tags: ['Consulta Pré-natal', 'Plano de Saúde', 'Novo Paciente'],
-    total: 'R$ 1.850',
     atendente: 'Marcos',
     atendenteIniciais: 'MC',
     atendenteTone: 'blue',
@@ -139,7 +133,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9612-5544',
     status: 'Em Atendimento',
     tags: ['Consulta Pré-natal', 'Plano de Saúde'],
-    total: 'R$ 250',
     atendente: 'Fernanda',
     atendenteIniciais: 'FS',
     atendenteTone: 'pink',
@@ -151,7 +144,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9801-4433',
     status: 'Finalizado',
     tags: ['Cirurgia', 'Particular', 'VIP'],
-    total: 'R$ 9.400',
     atendente: 'Dra.',
     atendenteIniciais: 'RF',
     atendenteTone: 'green',
@@ -163,7 +155,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9956-7744',
     status: 'Agendado',
     tags: ['Cirurgia', 'Plano de Saúde', 'Novo Paciente'],
-    total: 'R$ 560',
     atendente: 'Dra.',
     atendenteIniciais: 'RF',
     atendenteTone: 'green',
@@ -175,7 +166,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9356-6699',
     status: 'Em Atendimento',
     tags: ['Cirurgia', 'Alta Prioridade', 'Plano de Saúde'],
-    total: 'R$ 12.400',
     atendente: 'Dra.',
     atendenteIniciais: 'RF',
     atendenteTone: 'green',
@@ -187,7 +177,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9301-5544',
     status: 'Agendado',
     tags: ['Consulta Pré-natal', 'Novo Paciente'],
-    total: '—',
     atendente: 'Ana',
     atendenteIniciais: 'AL',
     atendenteTone: 'orange',
@@ -199,7 +188,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9881-6633',
     status: 'Follow UP',
     tags: ['Alta Prioridade', 'Plano de Saúde', 'Follow-up'],
-    total: '—',
     atendente: 'Fernanda',
     atendenteIniciais: 'FS',
     atendenteTone: 'pink',
@@ -211,7 +199,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9723-8876',
     status: 'Em Atendimento',
     tags: ['Consulta Pré-natal', 'Plano de Saúde', 'Retorno'],
-    total: 'R$ 280',
     atendente: 'Ana',
     atendenteIniciais: 'AL',
     atendenteTone: 'orange',
@@ -223,7 +210,6 @@ export const demoPacientes: DemoPaciente[] = [
     telefone: '44 9 9845-2233',
     status: 'Finalizado',
     tags: ['Consulta Pré-natal', 'Plano de Saúde', 'VIP'],
-    total: 'R$ 5.800',
     atendente: 'Patrícia',
     atendenteIniciais: 'PM',
     atendenteTone: 'purple',

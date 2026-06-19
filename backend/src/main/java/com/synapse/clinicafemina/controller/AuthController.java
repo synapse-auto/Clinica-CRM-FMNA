@@ -1,6 +1,7 @@
 package com.synapse.clinicafemina.controller;
 
 import com.synapse.clinicafemina.domain.Usuario;
+import com.synapse.clinicafemina.dto.auth.AuthUserResponse;
 import com.synapse.clinicafemina.dto.auth.LoginRequest;
 import com.synapse.clinicafemina.dto.auth.LoginResponse;
 import com.synapse.clinicafemina.security.JwtService;
@@ -10,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -51,5 +53,10 @@ public class AuthController {
                 .perfil(usuario.getPerfil())
                 .clinicaId(usuario.getClinica().getId())
                 .build());
+    }
+
+    @GetMapping("/me")
+    public AuthUserResponse me(@AuthenticationPrincipal Usuario usuario) {
+        return AuthUserResponse.from(usuario);
     }
 }

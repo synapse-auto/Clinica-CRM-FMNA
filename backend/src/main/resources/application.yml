@@ -33,7 +33,7 @@ app:
   security:
     jwt:
       secret: ${JWT_SECRET:}
-      expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+      expiration-ms: ${JWT_EXPIRATION_MS:3600000}
   crypto:
     master-key: ${CRYPTO_MASTER_KEY:}
 

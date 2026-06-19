@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import {
   demoConsultaLembretes,
   demoFollowUpConfigs,
@@ -18,6 +18,7 @@ import type {
   DashboardResponse,
 } from '@/types/dashboard';
 import type { Agendamento, AgendaOptions } from '@/types/agendamento';
+import { SESSION_COOKIE_NAME } from '@/lib/auth/constants';
 
 const API_BASE_URL =
   process.env.BACKEND_API_URL ??
@@ -97,7 +98,8 @@ export async function forwardBackendRequest(
 async function getJsonOrFallback<T>(path: string, fallback: T): Promise<T> {
   try {
     return await getJson<T>(path);
-  } catch {
+  } catch (error) {
+    if (error instanceof BackendAuthorizationError) throw error;
     return fallback;
   }
 }
@@ -106,6 +108,9 @@ async function getJson<T>(path: string): Promise<T> {
   const response = await fetchBackend(path);
 
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new BackendAuthorizationError(response.status);
+    }
     throw new Error(`Backend respondeu ${response.status} para ${path}`);
   }
 
@@ -113,21 +118,13 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 async function fetchBackend(path: string, init: RequestInit = {}): Promise<Response> {
-  const incomingHeaders = await headers();
+  const cookieStore = await cookies();
   const requestHeaders = new Headers(init.headers);
   requestHeaders.set('Accept', 'application/json');
 
-  const cookie = incomingHeaders.get('cookie');
-  const authorization = incomingHeaders.get('authorization');
-  const backendToken = process.env.BACKEND_API_TOKEN;
-
-  if (cookie) {
-    requestHeaders.set('Cookie', cookie);
-  }
-  if (authorization) {
-    requestHeaders.set('Authorization', authorization);
-  } else if (backendToken) {
-    requestHeaders.set('Authorization', `Bearer ${backendToken}`);
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (token) {
+    requestHeaders.set('Authorization', `Bearer ${token}`);
   }
 
   return fetch(`${API_BASE_URL}${path}`, {
@@ -135,4 +132,10 @@ async function fetchBackend(path: string, init: RequestInit = {}): Promise<Respo
     headers: requestHeaders,
     cache: 'no-store',
   });
+}
+
+class BackendAuthorizationError extends Error {
+  constructor(readonly status: number) {
+    super(`Backend recusou a sessão (${status})`);
+  }
 }

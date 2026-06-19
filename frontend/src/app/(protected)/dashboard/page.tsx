@@ -14,7 +14,6 @@ import {
   TrendingUp,
   User,
   Users,
-  WalletCards,
 } from 'lucide-react';
 import { DemoCard } from '@/components/demo/DemoCard';
 import { DonutChart } from '@/components/demo/DonutChart';
@@ -230,11 +229,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </DemoCard>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 pb-1 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3 grid grid-cols-1 gap-2 pb-1 md:grid-cols-2">
         <CompactMetric icon={CheckCircle2} tone="green" value={`${confirmationRate}%`} label="Taxa de Confirmação" />
         <CompactMetric icon={Users} tone="blue" value={demoDashboardVisual.pacientesMes} label="Pacientes do Mês" />
-        <CompactMetric icon={WalletCards} tone="teal" value={`R$ ${demoDashboardVisual.ticketMedio}`} label="Ticket Médio" />
-        <CompactMetric icon={Clock} tone="orange" value={demoDashboardVisual.tempoMedioGeral} label="Tempo Médio Geral" />
       </div>
     </div>
   );
