@@ -1,10 +1,9 @@
 package com.synapse.clinicafemina.controller;
 
-import com.synapse.clinicafemina.config.RabbitMQConfig;
+import com.synapse.clinicafemina.service.WhatsappWebhookDispatchService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -41,13 +40,16 @@ import java.util.HexFormat;
 @RequiredArgsConstructor
 public class WhatsappWebhookController {
 
+    @Value("${app.whatsapp.enabled:false}")
+    private boolean enabled;
+
     @Value("${app.whatsapp.verify-token}")
     private String verifyToken;
 
     @Value("${app.whatsapp.app-secret}")
     private String appSecret;
 
-    private final RabbitTemplate rabbitTemplate;
+    private final WhatsappWebhookDispatchService dispatchService;
 
     // ─── GET: Verification handshake ─────────────────────────────────────
 
@@ -61,6 +63,9 @@ public class WhatsappWebhookController {
             @RequestParam("hub.verify_token") String token,
             @RequestParam("hub.challenge")    String challenge) {
 
+        if (!enabled) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
         if ("subscribe".equals(mode) && verifyToken.equals(token)) {
             log.info("WhatsApp webhook verificado com sucesso");
             return ResponseEntity.ok(challenge);
@@ -82,6 +87,10 @@ public class WhatsappWebhookController {
             @RequestBody byte[] rawBody,
             @RequestHeader(value = "X-Hub-Signature-256", required = false) String signature) {
 
+        if (!enabled) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+
         // 1. Valida assinatura HMAC-SHA256
         if (!validarAssinatura(rawBody, signature)) {
             log.warn("Assinatura X-Hub-Signature-256 inválida — payload rejeitado");
@@ -89,11 +98,7 @@ public class WhatsappWebhookController {
         }
 
         // 2. Envia para o RabbitMQ para processamento assíncrono rápido
-        rabbitTemplate.convertAndSend(
-                RabbitMQConfig.WHATSAPP_EXCHANGE,
-                RabbitMQConfig.INBOUND_ROUTING_KEY,
-                rawBody
-        );
+        dispatchService.despachar(rawBody);
 
         // 3. Responde 200 < 5s (requisito Meta)
         return ResponseEntity.ok().build();

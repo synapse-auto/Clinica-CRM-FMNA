@@ -5,6 +5,8 @@ import com.synapse.clinicafemina.security.crypto.AesGcmConverter;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -95,6 +97,7 @@ public class Paciente {
     private String externalId;
 
     @Column(name = "external_payload", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String externalPayload;
 
     @Column(name = "google_drive_folder_id", length = 255)
@@ -102,6 +105,16 @@ public class Paciente {
 
     @Column(name = "requer_revisao", nullable = false)
     private Boolean requerRevisao = false;
+
+    @Column(name = "convenio_status", length = 20)
+    private String convenioStatus;
+
+    @Column(name = "convenio_revisado_em")
+    private OffsetDateTime convenioRevisadoEm;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "convenio_revisado_por")
+    private Usuario convenioRevisadoPor;
 
     @Column(name = "ultima_interacao_em")
     private OffsetDateTime ultimaInteracaoEm;

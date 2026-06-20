@@ -18,12 +18,26 @@ public interface AtendimentoRepository extends JpaRepository<Atendimento, Long> 
             WHERE a.clinica.id = :clinicaId
               AND (:status IS NULL OR a.status = :status)
               AND (:tratadoPorIa IS NULL OR a.tratadoPorIa = :tratadoPorIa)
+              AND (:atendenteId IS NULL OR a.atendentePrincipal.id = :atendenteId)
+              AND (:somenteNaoLidos = false OR a.naoLidas > 0)
+              AND (:somenteAguardando = false OR (a.status = 'ATIVO' AND a.atendentePrincipal IS NULL))
+              AND (:somenteRevisao = false OR a.paciente.requerRevisao = true)
+              AND (:busca = '' OR
+                   a.paciente.nomeBusca LIKE CONCAT('%', :busca, '%') OR
+                   a.paciente.telefoneNormalizado LIKE CONCAT('%', :busca, '%'))
             ORDER BY a.ultimaMensagemEm DESC NULLS LAST
             """)
-    Page<Atendimento> findByClinica(@Param("clinicaId") Long clinicaId,
-                                    @Param("status") String status,
-                                    @Param("tratadoPorIa") Boolean tratadoPorIa,
-                                    Pageable pageable);
+    Page<Atendimento> findByClinica(
+            @Param("clinicaId") Long clinicaId,
+            @Param("status") String status,
+            @Param("tratadoPorIa") Boolean tratadoPorIa,
+            @Param("atendenteId") Long atendenteId,
+            @Param("somenteNaoLidos") boolean somenteNaoLidos,
+            @Param("somenteAguardando") boolean somenteAguardando,
+            @Param("somenteRevisao") boolean somenteRevisao,
+            @Param("busca") String busca,
+            Pageable pageable
+    );
 
     Optional<Atendimento> findByIdAndClinicaId(Long id, Long clinicaId);
 

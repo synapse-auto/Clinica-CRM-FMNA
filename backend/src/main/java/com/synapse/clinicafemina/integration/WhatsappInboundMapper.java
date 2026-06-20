@@ -4,13 +4,16 @@ import com.synapse.clinicafemina.config.RabbitMQConfig;
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Mensagem;
+import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.messaging.MensagemEntradaEvent;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
+import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
+import com.synapse.clinicafemina.service.AtendimentoNotificationService;
 import com.synapse.clinicafemina.service.N8nEventService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,21 +27,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import com.synapse.clinicafemina.integration.WhatsappInboundPayloadParser.DadosMensagem;
 
-/**
- * Processa payloads inbound da Meta WhatsApp Cloud API.
- *
- * Implementa o fluxo descrito em {@code whatsapp.md}:
- * <ol>
- *   <li>Resolve ou cria {@link Paciente} por {@code wa_id} (E.164).</li>
- *   <li>Resolve {@link Atendimento} ativo ou cria nova sessão
- *       (se último encerrado há > 24h).</li>
- *   <li>Persiste {@link Mensagem} com conteúdo criptografado.</li>
- *   <li>Publica {@link MensagemEntradaEvent} no RabbitMQ.</li>
- * </ol>
- *
- * O payload bruto já foi validado (assinatura HMAC) pelo controller antes desta chamada.
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -49,242 +39,262 @@ public class WhatsappInboundMapper {
     private final PacienteRepository pacienteRepository;
     private final AtendimentoRepository atendimentoRepository;
     private final MensagemRepository mensagemRepository;
+    private final MidiaMensagemRepository midiaRepository;
     private final ClinicaRepository clinicaRepository;
     private final RabbitTemplate rabbitTemplate;
     private final N8nEventService n8nEventService;
-
-    // ─── Mensagem de texto inbound ────────────────────────────────────────
+    private final AtendimentoNotificationService notificationService;
+    private final WhatsappInboundPayloadParser payloadParser;
 
     @Transactional
     public void processarMensagemTexto(Map<String, Object> value) {
-        // Extrai contatos e mensagem do payload Meta
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> contacts =
-                (List<Map<String, Object>>) value.get("contacts");
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> messages =
-                (List<Map<String, Object>>) value.get("messages");
+        Optional<EntradaResolvida> entrada = resolverEntrada(value);
+        if (entrada.isEmpty()) return;
 
-        if (contacts == null || messages == null || messages.isEmpty()) {
-            log.warn("Payload sem contacts ou messages — ignorado");
+        EntradaResolvida resolvida = entrada.get();
+        Clinica clinica = resolvida.clinica();
+        Map<String, Object> contato = resolvida.contato();
+        Map<String, Object> payloadMensagem = resolvida.mensagem();
+        String whatsappMessageId = String.valueOf(payloadMensagem.get("id"));
+        if (mensagemRepository.findByClinicaIdAndWhatsappMessageId(
+                clinica.getId(), whatsappMessageId
+        ).isPresent()) {
             return;
         }
 
-        Optional<Clinica> clinicaOpt = resolverClinicaPorPayload(value);
-        if (clinicaOpt.isEmpty()) {
-            return;
-        }
-        Clinica clinica = clinicaOpt.get();
-
-        Map<String, Object> contact = contacts.getFirst();
-        Map<String, Object> msg    = messages.getFirst();
-
-        String waId      = (String) contact.get("wa_id");
-        String wamid     = (String) msg.get("id");
-        String timestamp = (String) msg.get("timestamp");
-        @SuppressWarnings("unchecked")
-        String body      = ((Map<String, String>) msg.get("text")).get("body");
-
-        // Normaliza E.164 (remove '+' caso presente)
-        String telefoneNormalizado = waId.startsWith("+") ? waId.substring(1) : waId;
-
-        // Idempotência — ignora mensagem já processada
-        if (mensagemRepository.findByClinicaIdAndWhatsappMessageId(clinica.getId(), wamid).isPresent()) {
-            log.debug("Mensagem WhatsApp ja processada para clinica={} — skip", clinica.getId());
-            return;
-        }
-
-        // 1. Resolve ou cria paciente
-        PacienteResolvido pacienteResolvido = resolverOuCriarPaciente(clinica, telefoneNormalizado, contact);
+        String telefone = payloadParser.normalizarTelefone(String.valueOf(contato.get("wa_id")));
+        PacienteResolvido pacienteResolvido = resolverOuCriarPaciente(clinica, telefone, contato);
         Paciente paciente = pacienteResolvido.paciente();
-
-        // 2. Resolve ou cria atendimento
         Atendimento atendimento = resolverOuCriarAtendimento(clinica, paciente);
+        DadosMensagem dados = payloadParser.extrairDados(payloadMensagem);
 
-        // 3. Persiste mensagem
+        Mensagem mensagem = mensagemRepository.save(criarMensagem(
+                atendimento, payloadMensagem, whatsappMessageId, dados
+        ));
+        if (dados.mediaId() != null) {
+            midiaRepository.save(criarMidia(mensagem, dados));
+        }
+
+        atualizarConversa(atendimento, paciente, mensagem);
+        emitirEventos(clinica, pacienteResolvido, atendimento, paciente, mensagem);
+        notificationService.notificarNovaMensagem(atendimento, mensagem);
+        log.info("Mensagem inbound processada: atendimento={}", atendimento.getId());
+    }
+
+    @Transactional
+    public Optional<Mensagem> processarStatusUpdate(
+            Map<String, Object> value,
+            Map<String, Object> status
+    ) {
+        Optional<Clinica> clinica = resolverClinicaPorPayload(value);
+        if (clinica.isEmpty()) return Optional.empty();
+
+        String whatsappMessageId = String.valueOf(status.get("id"));
+        String novoStatus = String.valueOf(status.get("status")).toUpperCase();
+        OffsetDateTime dataHora = parseTimestamp(String.valueOf(status.get("timestamp")));
+        return mensagemRepository.findByClinicaIdAndWhatsappMessageId(
+                clinica.get().getId(), whatsappMessageId
+        ).map(mensagem -> {
+            mensagem.setWhatsappStatus(novoStatus);
+            if ("DELIVERED".equals(novoStatus) || "ENTREGUE".equals(novoStatus)) {
+                mensagem.setEntregueEm(dataHora);
+            }
+            if ("READ".equals(novoStatus) || "LIDA".equals(novoStatus)) {
+                mensagem.setLidaEm(dataHora);
+            }
+            return mensagemRepository.save(mensagem);
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    private Optional<EntradaResolvida> resolverEntrada(Map<String, Object> value) {
+        List<Map<String, Object>> contatos = (List<Map<String, Object>>) value.get("contacts");
+        List<Map<String, Object>> mensagens = (List<Map<String, Object>>) value.get("messages");
+        if (contatos == null || contatos.isEmpty() || mensagens == null || mensagens.isEmpty()) {
+            log.warn("Payload WhatsApp sem contato ou mensagem");
+            return Optional.empty();
+        }
+        return resolverClinicaPorPayload(value)
+                .map(clinica -> new EntradaResolvida(clinica, contatos.getFirst(), mensagens.getFirst()));
+    }
+
+    private Mensagem criarMensagem(
+            Atendimento atendimento,
+            Map<String, Object> payload,
+            String whatsappMessageId,
+            DadosMensagem dados
+    ) {
         Mensagem mensagem = new Mensagem();
         mensagem.setAtendimento(atendimento);
         mensagem.setDirecao("ENTRADA");
         mensagem.setRemetente("PACIENTE");
-        mensagem.setTipoMedia("TEXTO");
-        mensagem.setConteudo(body);                               // criptografado pelo converter JPA
-        mensagem.setConteudoPrevia(body.length() > 60 ? body.substring(0, 60) + "…" : body);
-        mensagem.setWhatsappMessageId(wamid);
+        mensagem.setTipoMedia(dados.tipoMedia());
+        mensagem.setConteudo(dados.conteudo());
+        mensagem.setConteudoPrevia(payloadParser.limitarPrevia(dados.conteudo()));
+        mensagem.setWhatsappMessageId(whatsappMessageId);
         mensagem.setWhatsappStatus("RECEBIDA");
-        mensagem.setDataHora(parseTimestamp(timestamp));
-        mensagem = mensagemRepository.save(mensagem);
+        mensagem.setDataHora(parseTimestamp(String.valueOf(payload.get("timestamp"))));
+        return mensagem;
+    }
 
-        // 4. Atualiza contadores do atendimento
+    private MidiaMensagem criarMidia(Mensagem mensagem, DadosMensagem dados) {
+        MidiaMensagem midia = new MidiaMensagem();
+        midia.setMensagem(mensagem);
+        midia.setTipoMedia(dados.tipoMedia());
+        midia.setMimeType(dados.mimeType());
+        midia.setNomeArquivo(dados.nomeArquivo());
+        midia.setTamanhoBytes(0L);
+        midia.setWhatsappMediaId(dados.mediaId());
+        return midia;
+    }
+
+    private void atualizarConversa(Atendimento atendimento, Paciente paciente, Mensagem mensagem) {
         atendimento.setNaoLidas(atendimento.getNaoLidas() + 1);
         atendimento.setUltimaMensagemEm(mensagem.getDataHora());
         paciente.setUltimaInteracaoEm(mensagem.getDataHora());
         atendimentoRepository.save(atendimento);
         pacienteRepository.save(paciente);
+    }
 
+    private void emitirEventos(
+            Clinica clinica,
+            PacienteResolvido pacienteResolvido,
+            Atendimento atendimento,
+            Paciente paciente,
+            Mensagem mensagem
+    ) {
         if (pacienteResolvido.criado()) {
-            n8nEventService.emitir(n8nEventService.criarPayload(
-                    clinica,
-                    "novo_lead",
-                    paciente.getId(),
-                    atendimento.getId(),
-                    null,
-                    paciente.getTelefoneNormalizado()
-            ));
+            emitirN8n(clinica, "novo_lead", paciente, atendimento);
         }
-
-        // 5. Publica evento RabbitMQ
-        Long atendenteId = atendimento.getAtendentePrincipal() != null
-                ? atendimento.getAtendentePrincipal().getId() : null;
-
-        MensagemEntradaEvent event = new MensagemEntradaEvent(
+        Long atendenteId = atendimento.getAtendentePrincipal() == null
+                ? null
+                : atendimento.getAtendentePrincipal().getId();
+        MensagemEntradaEvent evento = new MensagemEntradaEvent(
                 atendimento.getId(),
                 clinica.getId(),
                 paciente.getId(),
                 paciente.getNomeBusca(),
                 mensagem.getId(),
-                "TEXTO",
+                mensagem.getTipoMedia(),
                 mensagem.getConteudoPrevia(),
                 mensagem.getDataHora(),
                 atendimento.getNaoLidas(),
                 atendenteId
         );
+        try {
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.EXCHANGE_MENSAGEM_ENTRADA,
+                    RabbitMQConfig.ROUTING_KEY_MENSAGEM_ENTRADA,
+                    evento
+            );
+        } catch (Exception exception) {
+            log.warn("RabbitMQ indisponível para evento de mensagem. atendimento={}, tipoErro={}",
+                    atendimento.getId(), exception.getClass().getSimpleName());
+        }
+        emitirN8n(clinica, "nova_mensagem", paciente, atendimento);
+    }
 
-        rabbitTemplate.convertAndSend(
-                RabbitMQConfig.EXCHANGE_MENSAGEM_ENTRADA,
-                RabbitMQConfig.ROUTING_KEY_MENSAGEM_ENTRADA,
-                event);
-
+    private void emitirN8n(Clinica clinica, String evento, Paciente paciente, Atendimento atendimento) {
         n8nEventService.emitir(n8nEventService.criarPayload(
                 clinica,
-                "nova_mensagem",
+                evento,
                 paciente.getId(),
                 atendimento.getId(),
                 null,
                 paciente.getTelefoneNormalizado()
         ));
-
-        log.info("Mensagem inbound processada: atendimento={}", atendimento.getId());
-    }
-
-    // ─── Status update (entregue/lida) ────────────────────────────────────
-
-    @Transactional
-    public Optional<Mensagem> processarStatusUpdate(Map<String, Object> value, Map<String, Object> status) {
-        Optional<Clinica> clinicaOpt = resolverClinicaPorPayload(value);
-        if (clinicaOpt.isEmpty()) {
-            return Optional.empty();
-        }
-        Clinica clinica = clinicaOpt.get();
-
-        String wamid     = (String) status.get("id");
-        String newStatus = ((String) status.get("status")).toUpperCase();
-        String timestamp = (String) status.get("timestamp");
-
-        return mensagemRepository.findByClinicaIdAndWhatsappMessageId(clinica.getId(), wamid).map(m -> {
-            m.setWhatsappStatus(newStatus);
-            OffsetDateTime dt = parseTimestamp(timestamp);
-            if ("DELIVERED".equals(newStatus) || "ENTREGUE".equals(newStatus)) m.setEntregueEm(dt);
-            if ("READ".equals(newStatus)      || "LIDA".equals(newStatus))      m.setLidaEm(dt);
-            return mensagemRepository.save(m);
-        });
-    }
-
-    // ─── Helpers privados ─────────────────────────────────────────────────
-
-    private Optional<String> extrairPhoneNumberId(Map<String, Object> value) {
-        Object metadata = value.get("metadata");
-        if (!(metadata instanceof Map<?, ?> metadataMap)) {
-            return Optional.empty();
-        }
-        Object phoneNumberId = metadataMap.get("phone_number_id");
-        if (!(phoneNumberId instanceof String id) || id.isBlank()) {
-            return Optional.empty();
-        }
-        return Optional.of(id);
     }
 
     private Optional<Clinica> resolverClinicaPorPayload(Map<String, Object> value) {
-        Optional<String> phoneNumberId = extrairPhoneNumberId(value);
-        if (phoneNumberId.isEmpty()) {
-            log.warn("Payload WhatsApp sem phone_number_id — ignorado");
+        Object metadata = value.get("metadata");
+        if (!(metadata instanceof Map<?, ?> mapa)
+                || !(mapa.get("phone_number_id") instanceof String phoneNumberId)
+                || phoneNumberId.isBlank()) {
+            log.warn("Payload WhatsApp sem phone_number_id");
             return Optional.empty();
         }
-
-        Optional<Clinica> clinica = clinicaRepository.findByWhatsappPhoneNumberId(phoneNumberId.get());
+        Optional<Clinica> clinica = clinicaRepository.findByWhatsappPhoneNumberId(phoneNumberId);
         if (clinica.isEmpty()) {
-            log.warn("Payload WhatsApp com phone_number_id nao configurado — ignorado");
+            log.warn("Payload WhatsApp para phone_number_id não configurado");
         }
         return clinica;
     }
 
-    private PacienteResolvido resolverOuCriarPaciente(Clinica clinica, String telefoneNormalizado,
-                                                      Map<String, Object> contact) {
-        Optional<Paciente> existente = pacienteRepository
-                .findByClinicaIdAndTelefoneNormalizado(clinica.getId(), telefoneNormalizado);
-        if (existente.isPresent()) {
-            return new PacienteResolvido(existente.get(), false);
-        }
-
-        Paciente novoPaciente = pacienteRepository.save(criarPaciente(clinica, telefoneNormalizado, contact));
-        return new PacienteResolvido(novoPaciente, true);
+    private PacienteResolvido resolverOuCriarPaciente(
+            Clinica clinica,
+            String telefone,
+            Map<String, Object> contato
+    ) {
+        Optional<Paciente> existente = pacienteRepository.findByClinicaIdAndTelefoneNormalizado(
+                clinica.getId(), telefone
+        );
+        if (existente.isPresent()) return new PacienteResolvido(existente.get(), false);
+        return new PacienteResolvido(
+                pacienteRepository.save(criarPaciente(clinica, telefone, contato)),
+                true
+        );
     }
 
-    private Paciente criarPaciente(Clinica clinica, String telefoneNormalizado, Map<String, Object> contact) {
-        @SuppressWarnings("unchecked")
-        String nome = ((Map<String, String>) contact.get("profile")).get("name");
-        Paciente p = new Paciente();
-        p.setClinica(clinica);
-        p.setNome(nome);                          // criptografado pelo converter
-        p.setNomeBusca(nome.toUpperCase());       // campo de busca em clear text
-        p.setTelefone("+" + telefoneNormalizado); // criptografado pelo converter
-        p.setTelefoneNormalizado(telefoneNormalizado);
-        p.setExternalSource(ExternalProviderType.WHATSAPP);
-        p.setExternalId(telefoneNormalizado);
-        p.setStatus("EM_ATENDIMENTO");
-        log.info("Novo paciente criado via WhatsApp para clinica={}", clinica.getId());
-        return p;
+    @SuppressWarnings("unchecked")
+    private Paciente criarPaciente(Clinica clinica, String telefone, Map<String, Object> contato) {
+        Map<String, Object> perfil = (Map<String, Object>) contato.get("profile");
+        String nome = perfil == null ? "Contato WhatsApp" : String.valueOf(perfil.get("name"));
+        Paciente paciente = new Paciente();
+        paciente.setClinica(clinica);
+        paciente.setNome(nome);
+        paciente.setNomeBusca(nome.toUpperCase());
+        paciente.setTelefone("+" + telefone);
+        paciente.setTelefoneNormalizado(telefone);
+        paciente.setExternalSource(ExternalProviderType.WHATSAPP);
+        paciente.setExternalId(telefone);
+        paciente.setStatus("EM_ATENDIMENTO");
+        return paciente;
     }
 
     private Atendimento resolverOuCriarAtendimento(Clinica clinica, Paciente paciente) {
-        // Verifica se há atendimento ativo
-        Optional<Atendimento> ativo =
-                atendimentoRepository.findAtivo(clinica.getId(), paciente.getId());
+        Optional<Atendimento> ativo = atendimentoRepository.findAtivo(clinica.getId(), paciente.getId());
         if (ativo.isPresent()) return ativo.get();
 
-        // Verifica se o último foi encerrado há menos de 24h (reutiliza sessão)
         OffsetDateTime limite = OffsetDateTime.now().minusHours(SESSAO_TIMEOUT_HORAS);
-        boolean recenteEncerrado = atendimentoRepository
-                .existeEncerradoDesde(clinica.getId(), paciente.getId(), limite);
-
-        if (recenteEncerrado) {
-            // Reabre o atendimento mais recente
+        if (atendimentoRepository.existeEncerradoDesde(clinica.getId(), paciente.getId(), limite)) {
             return atendimentoRepository.findUltimo(clinica.getId(), paciente.getId())
-                    .map(a -> {
-                        a.setStatus("ATIVO");
-                        a.setDataEncerramento(null);
-                        return atendimentoRepository.save(a);
-                    }).orElseGet(() -> criarAtendimento(clinica, paciente));
+                    .map(this::reabrir)
+                    .orElseGet(() -> criarAtendimento(clinica, paciente));
         }
-
         return criarAtendimento(clinica, paciente);
     }
 
-    private Atendimento criarAtendimento(Clinica clinica, Paciente paciente) {
-        Atendimento a = new Atendimento();
-        a.setClinica(clinica);
-        a.setPaciente(paciente);
-        a.setStatus("ATIVO");
-        a.setTratadoPorIa(true);  // começa com IA até um humano assumir
-        a.setNaoLidas(0);
-        log.info("Novo atendimento criado para paciente {}", paciente.getId());
-        return atendimentoRepository.save(a);
+    private Atendimento reabrir(Atendimento atendimento) {
+        atendimento.setStatus("ATIVO");
+        atendimento.setDataEncerramento(null);
+        return atendimentoRepository.save(atendimento);
     }
 
-    private OffsetDateTime parseTimestamp(String unixTimestamp) {
+    private Atendimento criarAtendimento(Clinica clinica, Paciente paciente) {
+        Atendimento atendimento = new Atendimento();
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setStatus("ATIVO");
+        atendimento.setTratadoPorIa(true);
+        atendimento.setNaoLidas(0);
+        return atendimentoRepository.save(atendimento);
+    }
+
+    private OffsetDateTime parseTimestamp(String timestamp) {
         return OffsetDateTime.ofInstant(
-                Instant.ofEpochSecond(Long.parseLong(unixTimestamp)), ZoneOffset.UTC);
+                Instant.ofEpochSecond(Long.parseLong(timestamp)),
+                ZoneOffset.UTC
+        );
+    }
+
+    private record EntradaResolvida(
+            Clinica clinica,
+            Map<String, Object> contato,
+            Map<String, Object> mensagem
+    ) {
     }
 
     private record PacienteResolvido(Paciente paciente, boolean criado) {
     }
+
 }

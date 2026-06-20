@@ -25,6 +25,8 @@ public interface MensagemRepository extends JpaRepository<Mensagem, Long> {
                                                    @Param("clinicaId") Long clinicaId,
                                                    Pageable pageable);
 
+    Optional<Mensagem> findFirstByAtendimentoIdOrderByDataHoraDesc(Long atendimentoId);
+
     /** Localiza mensagem por ID externo do WhatsApp dentro da clínica resolvida no webhook. */
     @Query("""
             SELECT m FROM Mensagem m
@@ -64,8 +66,8 @@ public interface MensagemRepository extends JpaRepository<Mensagem, Long> {
             UPDATE Mensagem m SET m.whatsappStatus = 'LIDA', m.lidaEm = :lidaEm
             WHERE m.atendimento.id = :atendimentoId
               AND m.atendimento.clinica.id = :clinicaId
-              AND m.direcao = 'SAIDA'
-              AND (m.whatsappStatus IS NULL OR m.whatsappStatus != 'LIDA')
+              AND m.direcao = 'ENTRADA'
+              AND m.lidaEm IS NULL
             """)
     int marcarComoLidas(@Param("atendimentoId") Long atendimentoId,
                         @Param("clinicaId") Long clinicaId,

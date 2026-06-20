@@ -33,6 +33,10 @@
       "type": "java.lang.String"
     },
     {
+      "name": "app.whatsapp.enabled",
+      "type": "java.lang.Boolean"
+    },
+    {
       "name": "app.whatsapp.verify-token",
       "type": "java.lang.String"
     },

@@ -14,6 +14,8 @@ import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "follow_ups_temporary")
@@ -62,6 +64,7 @@ public class FollowUpTemporary {
     private String cancelReason;
 
     @Column(columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String payload;
 
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -53,4 +53,15 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
             ORDER BY u.nome ASC
             """)
     List<Usuario> findAtivosVisiveisByClinicaId(@Param("clinicaId") Long clinicaId);
+
+    @Query("""
+            SELECT u FROM Usuario u
+            WHERE u.clinica.id = :clinicaId
+              AND u.perfil IN ('GESTOR', 'RECEPCIONISTA')
+              AND u.ativo = true
+              AND u.adminInterno = false
+              AND u.deletadoEm IS NULL
+            ORDER BY u.nome ASC
+            """)
+    List<Usuario> findAtendentesVisiveisByClinicaId(@Param("clinicaId") Long clinicaId);
 }

@@ -18,6 +18,10 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+  servlet:
+    multipart:
+      max-file-size: 16MB
+      max-request-size: 16MB
   quartz:
     job-store-type: memory
     properties:
@@ -49,6 +53,7 @@ app:
     virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
 
   whatsapp:
+    enabled: ${WHATSAPP_ENABLED:false}
     verify-token: ${WHATSAPP_VERIFY_TOKEN:}
     app-secret: ${WHATSAPP_APP_SECRET:}
     access-token: ${WHATSAPP_ACCESS_TOKEN:}

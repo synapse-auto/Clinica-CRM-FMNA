@@ -2,6 +2,7 @@ package com.synapse.clinicafemina.integration;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.synapse.clinicafemina.service.RealtimeBroadcastService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -17,68 +18,66 @@ import java.util.Map;
 public class WhatsappInboundListener {
 
     private final WhatsappInboundMapper inboundMapper;
-    // TODO: if broadcastService is needed for STOMP, it should be injected here.
-    // The previous implementation had a comment about it.
     private final ObjectMapper objectMapper;
+    private final RealtimeBroadcastService broadcastService;
 
     @RabbitListener(queues = "whatsapp.inbound.queue")
     public void processarMensagem(byte[] rawBody) {
-        Map<String, Object> payload;
         try {
-            payload = objectMapper.readValue(rawBody, new TypeReference<Map<String, Object>>() {});
-        } catch (IOException e) {
-            log.error("Erro ao parsear payload WhatsApp no RabbitMQ. tipoErro={}", e.getClass().getSimpleName());
-            return;
+            Map<String, Object> payload = objectMapper.readValue(
+                    rawBody, new TypeReference<Map<String, Object>>() {}
+            );
+            despachar(payload);
+        } catch (IOException exception) {
+            log.error("Erro ao interpretar payload WhatsApp. tipoErro={}",
+                    exception.getClass().getSimpleName());
         }
-
-        despachar(payload);
     }
 
     @SuppressWarnings("unchecked")
     private void despachar(Map<String, Object> payload) {
-        List<Map<String, Object>> entries =
-                (List<Map<String, Object>>) payload.get("entry");
+        List<Map<String, Object>> entries = (List<Map<String, Object>>) payload.get("entry");
         if (entries == null) return;
 
         for (Map<String, Object> entry : entries) {
-            List<Map<String, Object>> changes =
-                    (List<Map<String, Object>>) entry.get("changes");
+            List<Map<String, Object>> changes = (List<Map<String, Object>>) entry.get("changes");
             if (changes == null) continue;
+            changes.stream()
+                    .filter(change -> "messages".equals(change.get("field")))
+                    .map(change -> (Map<String, Object>) change.get("value"))
+                    .filter(java.util.Objects::nonNull)
+                    .forEach(this::processarValue);
+        }
+    }
 
-            for (Map<String, Object> change : changes) {
-                if (!"messages".equals(change.get("field"))) continue;
+    @SuppressWarnings("unchecked")
+    private void processarValue(Map<String, Object> value) {
+        List<?> mensagens = (List<?>) value.get("messages");
+        if (mensagens != null && !mensagens.isEmpty()) {
+            executarSeguro(() -> inboundMapper.processarMensagemTexto(value), "mensagem inbound");
+        }
 
-                Map<String, Object> value = (Map<String, Object>) change.get("value");
-                if (value == null) continue;
+        List<Map<String, Object>> statuses = (List<Map<String, Object>>) value.get("statuses");
+        if (statuses == null) return;
+        statuses.forEach(status -> executarSeguro(
+                () -> inboundMapper.processarStatusUpdate(value, status)
+                        .filter(mensagem -> mensagem.getAtendimento().getAtendentePrincipal() != null)
+                        .ifPresent(mensagem -> broadcastService.broadcastStatusMensagem(
+                                mensagem.getAtendimento().getAtendentePrincipal().getId(),
+                                mensagem.getId(),
+                                mensagem.getAtendimento().getId(),
+                                mensagem.getWhatsappStatus()
+                        )),
+                "status WhatsApp"
+        ));
+    }
 
-                // Mensagens inbound
-                List<?> messages = (List<?>) value.get("messages");
-                if (messages != null && !messages.isEmpty()) {
-                    try {
-                        inboundMapper.processarMensagemTexto(value);
-                    } catch (Exception e) {
-                        log.error("Erro ao processar mensagem inbound. tipoErro={}", e.getClass().getSimpleName());
-                    }
-                }
-
-                // Status updates (entregue, lida)
-                List<Map<String, Object>> statuses =
-                        (List<Map<String, Object>>) value.get("statuses");
-                if (statuses != null) {
-                    for (Map<String, Object> status : statuses) {
-                        try {
-                            inboundMapper.processarStatusUpdate(value, status).ifPresent(mensagem -> {
-                                // TODO: buscar o atendente responsável pelo atendimento
-                                // e publicar STOMP via broadcastService.broadcastStatusMensagem(...)
-                                log.debug("Status de mensagem {} atualizado para {}",
-                                        mensagem.getId(), mensagem.getWhatsappStatus());
-                            });
-                        } catch (Exception e) {
-                            log.error("Erro ao processar status update. tipoErro={}", e.getClass().getSimpleName());
-                        }
-                    }
-                }
-            }
+    private void executarSeguro(Runnable operacao, String contexto) {
+        try {
+            operacao.run();
+        } catch (Exception exception) {
+            log.error("Erro ao processar {}. tipoErro={}",
+                    contexto, exception.getClass().getSimpleName());
         }
     }
 }

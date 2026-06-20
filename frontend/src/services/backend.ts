@@ -18,6 +18,11 @@ import type {
   DashboardResponse,
 } from '@/types/dashboard';
 import type { Agendamento, AgendaOptions } from '@/types/agendamento';
+import type {
+  AtendenteOption,
+  AtendimentoPage,
+  AtendimentoResumo,
+} from '@/types/atendimento';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/constants';
 
 const API_BASE_URL =
@@ -83,15 +88,34 @@ export async function getAgendaOptions(): Promise<AgendaOptions> {
   return getJson<AgendaOptions>('/api/agendamentos/opcoes');
 }
 
+export async function getAtendimentosIniciais(): Promise<AtendimentoPage<AtendimentoResumo>> {
+  return getJson<AtendimentoPage<AtendimentoResumo>>(
+    '/api/atendimentos?filtro=TODOS&tipo=TODOS&size=50',
+  );
+}
+
+export async function getAtendentesAtivos(): Promise<AtendenteOption[]> {
+  return getJson<AtendenteOption[]>('/api/atendimentos/atendentes');
+}
+
 export async function forwardBackendRequest(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
   const response = await fetchBackend(path, init);
+  const headers = new Headers();
   const contentType = response.headers.get('content-type') ?? 'application/json';
-  return new Response(await response.text(), {
+  headers.set('Content-Type', contentType);
+  const contentDisposition = response.headers.get('content-disposition');
+  if (contentDisposition) headers.set('Content-Disposition', contentDisposition);
+  const contentLength = response.headers.get('content-length');
+  if (contentLength) headers.set('Content-Length', contentLength);
+  const body = response.status === 204 || response.status === 304
+    ? null
+    : await response.arrayBuffer();
+  return new Response(body, {
     status: response.status,
-    headers: { 'Content-Type': contentType },
+    headers,
   });
 }
 

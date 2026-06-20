@@ -15,6 +15,8 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "consulta_lembrete_config")
@@ -64,6 +66,7 @@ public class ConsultaLembreteConfig {
     private String mensagemTemplate;
 
     @Column(name = "config_json", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String configJson;
 
     @Column(name = "created_at", nullable = false, updatable = false)

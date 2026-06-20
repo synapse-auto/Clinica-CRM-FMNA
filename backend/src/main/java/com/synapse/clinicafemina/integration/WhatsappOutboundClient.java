@@ -25,6 +25,9 @@ import java.util.Map;
 @Component
 public class WhatsappOutboundClient {
 
+    @Value("${app.whatsapp.enabled:false}")
+    private boolean enabled;
+
     @Value("${app.whatsapp.access-token}")
     private String accessToken;
 
@@ -38,6 +41,15 @@ public class WhatsappOutboundClient {
 
     public WhatsappOutboundClient() {
         this.restClient = RestClient.builder().build();
+    }
+
+    public void validarConfiguracao() {
+        if (!enabled || accessToken == null || accessToken.isBlank()
+                || phoneNumberId == null || phoneNumberId.isBlank()) {
+            throw new IllegalStateException(
+                    "WhatsApp/Meta não configurado. Ative WHATSAPP_ENABLED e configure as credenciais"
+            );
+        }
     }
 
     /**

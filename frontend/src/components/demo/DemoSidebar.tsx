@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import {
   BadgeHelp,
   Calendar,
@@ -23,6 +24,7 @@ import { useTheme } from '@/components/theme/ThemeProvider';
 import { menuItemsForProfile } from '@/lib/auth/permissions';
 import type { AuthUser } from '@/lib/auth/types';
 import type { ClinicaAtualResponse } from '@/types/dashboard';
+import { getNotificacoesResumo } from '@/services/atendimentos';
 
 const menuIcons = {
   '/atendimentos': MessageSquare,
@@ -46,6 +48,7 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
+  const [atendimentosBadge, setAtendimentosBadge] = useState(0);
   const initials = user.nome
     .split(/\s+/)
     .filter(Boolean)
@@ -53,6 +56,26 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
     .map((part) => part[0]?.toUpperCase())
     .join('') || 'US';
   const menuItems = menuItemsForProfile(user.perfil);
+
+  useEffect(() => {
+    function updateBadge(event: Event) {
+      setAtendimentosBadge(Number((event as CustomEvent<number>).detail) || 0);
+    }
+    async function refreshBadge() {
+      try {
+        setAtendimentosBadge(await getNotificacoesResumo());
+      } catch {
+        setAtendimentosBadge(0);
+      }
+    }
+    window.addEventListener('atendimentos:badge', updateBadge);
+    void refreshBadge();
+    const interval = window.setInterval(() => void refreshBadge(), 15000);
+    return () => {
+      window.removeEventListener('atendimentos:badge', updateBadge);
+      window.clearInterval(interval);
+    };
+  }, []);
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -80,6 +103,7 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
           {menuItems.map((item) => {
             const Icon = menuIcons[item.href as keyof typeof menuIcons];
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const badge = item.href === '/atendimentos' ? atendimentosBadge : item.badge;
             return (
               <Link
                 key={item.href}
@@ -94,9 +118,9 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
                   <Icon className={`h-4.5 w-4.5 shrink-0 ${active ? 'text-sidebar-primary' : 'text-sidebar-foreground/60'}`} />
                   <span className="truncate">{item.name}</span>
                 </span>
-                {item.badge ? (
+                {badge ? (
                   <span className="min-w-5 rounded-full bg-clinic-danger px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
-                    {item.badge}
+                    {badge}
                   </span>
                 ) : active ? (
                   <ChevronRight className="h-4 w-4 text-sidebar-primary" />

@@ -4,10 +4,14 @@ import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Mensagem;
 import com.synapse.clinicafemina.domain.Paciente;
+import com.synapse.clinicafemina.domain.Recepcionista;
+import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
+import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
+import com.synapse.clinicafemina.repository.UsuarioRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,7 +37,13 @@ class MensagemServiceTest {
     private MensagemRepository mensagemRepository;
 
     @Mock
+    private MidiaMensagemRepository midiaMensagemRepository;
+
+    @Mock
     private AtendimentoRepository atendimentoRepository;
+
+    @Mock
+    private UsuarioRepository usuarioRepository;
 
     @Mock
     private WhatsappOutboundClient whatsappOutboundClient;
@@ -48,7 +58,9 @@ class MensagemServiceTest {
     void setUp() {
         service = new MensagemService(
                 mensagemRepository,
+                midiaMensagemRepository,
                 atendimentoRepository,
+                usuarioRepository,
                 whatsappOutboundClient,
                 rabbitTemplate
         );
@@ -66,6 +78,12 @@ class MensagemServiceTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setStatus("ATIVO");
+
+        Usuario remetente = new Recepcionista();
+        remetente.setId(99L);
+        remetente.setClinica(clinica);
+        when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L))
+                .thenReturn(Optional.of(remetente));
     }
 
     @Test
@@ -86,6 +104,8 @@ class MensagemServiceTest {
         verify(mensagemRepository, atLeastOnce()).save(mensagemCaptor.capture());
         mensagemCaptor.getAllValues().forEach(mensagem ->
                 assertEquals("ATENDENTE", mensagem.getRemetente()));
+        mensagemCaptor.getAllValues().forEach(mensagem ->
+                assertEquals(99L, mensagem.getRemetenteUsuario().getId()));
     }
 
     @Test
@@ -109,5 +129,6 @@ class MensagemServiceTest {
         verify(mensagemRepository, atLeastOnce()).save(mensagemCaptor.capture());
         mensagemCaptor.getAllValues().forEach(mensagem ->
                 assertEquals("ATENDENTE", mensagem.getRemetente()));
+        verify(midiaMensagemRepository).save(any());
     }
 }

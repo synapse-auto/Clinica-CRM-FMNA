@@ -1,153 +1,255 @@
 package com.synapse.clinicafemina.service;
 
-import com.synapse.clinicafemina.config.RabbitMQConfig;
 import com.synapse.clinicafemina.domain.Atendimento;
+import com.synapse.clinicafemina.domain.Mensagem;
 import com.synapse.clinicafemina.domain.Paciente;
+import com.synapse.clinicafemina.domain.TransferenciaAtendimento;
 import com.synapse.clinicafemina.domain.Usuario;
+import com.synapse.clinicafemina.dto.AtendenteOptionDTO;
 import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
 import com.synapse.clinicafemina.dto.AtendimentoResumoDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.exception.NotFoundException;
-import com.synapse.clinicafemina.messaging.MensagemEntradaEvent;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
+import com.synapse.clinicafemina.repository.MensagemRepository;
+import com.synapse.clinicafemina.repository.TransferenciaAtendimentoRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AtendimentoService {
 
+    private static final Set<String> PERFIS_ATENDENTES = Set.of("GESTOR", "RECEPCIONISTA");
+
     private final AtendimentoRepository atendimentoRepository;
+    private final MensagemRepository mensagemRepository;
     private final UsuarioRepository usuarioRepository;
-    private final RabbitTemplate rabbitTemplate;
+    private final TransferenciaAtendimentoRepository transferenciaRepository;
+    private final AtendimentoNotificationService notificationService;
     private final RealtimeBroadcastService broadcastService;
 
-    // ─── Listagem ─────────────────────────────────────────────────────────
-
     @Transactional(readOnly = true)
-    public Page<AtendimentoResumoDTO> listar(Long clinicaId, String status,
-                                              String tipo, Pageable pageable) {
-        Boolean tratadoPorIa = switch (tipo != null ? tipo.toUpperCase() : "TODOS") {
-            case "IA"    -> true;
-            case "HUMANO"-> false;
-            default      -> null;
+    public Page<AtendimentoResumoDTO> listar(
+            Long clinicaId,
+            String status,
+            String tipo,
+            String filtro,
+            String busca,
+            Long usuarioAtualId,
+            Pageable pageable
+    ) {
+        Boolean tratadoPorIa = switch (tipo == null ? "TODOS" : tipo.toUpperCase()) {
+            case "IA" -> true;
+            case "HUMANO" -> false;
+            default -> null;
         };
+        String filtroNormalizado = filtro == null ? "TODOS" : filtro.toUpperCase();
+        String statusEfetivo = "FINALIZADOS".equals(filtroNormalizado) ? "ENCERRADO" : normalizar(status);
 
-        return atendimentoRepository
-                .findByClinica(clinicaId, status, tratadoPorIa, pageable)
-                .map(this::toResumoDTO);
+        return atendimentoRepository.findByClinica(
+                clinicaId,
+                statusEfetivo,
+                tratadoPorIa,
+                "MEUS".equals(filtroNormalizado) ? usuarioAtualId : null,
+                "NAO_LIDOS".equals(filtroNormalizado),
+                "AGUARDANDO".equals(filtroNormalizado),
+                "REVISAO".equals(filtroNormalizado),
+                normalizarBusca(busca),
+                pageable
+        ).map(this::toResumoDTO);
     }
-
-    // ─── Detalhe ──────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public AtendimentoDetalheDTO buscarPorId(Long id, Long clinicaId) {
-        Atendimento a = buscarOuFalhar(id, clinicaId);
-        return toDetalheDTO(a);
+        return toDetalheDTO(buscarOuFalhar(id, clinicaId));
     }
 
-    // ─── Transferência ────────────────────────────────────────────────────
-
     @Transactional
-    public AtendimentoDetalheDTO transferir(Long id, TransferirAtendimentoRequest req,
-                                             Long clinicaId) {
+    public AtendimentoDetalheDTO transferir(
+            Long id,
+            TransferirAtendimentoRequest request,
+            Long clinicaId,
+            Long usuarioResponsavelId
+    ) {
         Atendimento atendimento = buscarOuFalhar(id, clinicaId);
-
-        if (!"ATIVO".equals(atendimento.getStatus())) {
-            throw new IllegalStateException("Só é possível transferir atendimentos ATIVOS");
+        if ("ENCERRADO".equals(atendimento.getStatus())) {
+            throw new IllegalStateException("Não é possível transferir um atendimento encerrado");
         }
 
-        Usuario novoAtendente = usuarioRepository.findById(req.novoAtendenteId())
-                .orElseThrow(() -> new NotFoundException("Usuário não encontrado: " + req.novoAtendenteId()));
-
-        // Garante que o novo atendente pertence à mesma clínica
-        if (!novoAtendente.getClinica().getId().equals(clinicaId)) {
-            throw new IllegalStateException("O atendente não pertence à mesma clínica");
-        }
-
+        Usuario novoAtendente = buscarAtendente(request.novoAtendenteId(), clinicaId);
+        Usuario responsavel = buscarUsuario(usuarioResponsavelId, clinicaId);
         Usuario antigoAtendente = atendimento.getAtendentePrincipal();
+
         atendimento.setAtendentePrincipal(novoAtendente);
-        atendimento.setTratadoPorIa(false); // Ao transferir para humano, sai do modo IA
+        atendimento.setTratadoPorIa(false);
+        atendimento.setStatus("ATIVO");
         atendimentoRepository.save(atendimento);
+        transferenciaRepository.save(criarTransferencia(
+                atendimento, antigoAtendente, novoAtendente, responsavel, request.motivo()
+        ));
+        notificationService.notificarAtribuicao(atendimento, novoAtendente);
 
-        log.info("Atendimento {} transferido de {} para {}",
-                id,
-                antigoAtendente != null ? antigoAtendente.getId() : "IA",
-                novoAtendente.getId());
-
-        // Broadcast STOMP para o novo atendente
-        Paciente paciente = atendimento.getPaciente();
         broadcastService.broadcastTransferencia(
                 novoAtendente.getId(),
                 atendimento.getId(),
                 antigoAtendente != null ? antigoAtendente.getId() : 0L,
                 antigoAtendente != null ? antigoAtendente.getNome() : "IA",
-                paciente.getId(),
-                paciente.getNomeBusca(),
-                req.motivo()
+                atendimento.getPaciente().getId(),
+                atendimento.getPaciente().getNomeBusca(),
+                request.motivo()
         );
-
+        log.info("Atendimento {} atribuído ao usuário {}", id, novoAtendente.getId());
         return toDetalheDTO(atendimento);
     }
 
-    // ─── Encerramento ─────────────────────────────────────────────────────
+    @Transactional
+    public AtendimentoDetalheDTO assumir(Long id, Long clinicaId, Long usuarioId) {
+        return transferir(
+                id,
+                new TransferirAtendimentoRequest(usuarioId, "Atendimento assumido"),
+                clinicaId,
+                usuarioId
+        );
+    }
 
     @Transactional
     public AtendimentoDetalheDTO encerrar(Long id, Long clinicaId, String motivo) {
         Atendimento atendimento = buscarOuFalhar(id, clinicaId);
-
         if ("ENCERRADO".equals(atendimento.getStatus())) {
             throw new IllegalStateException("Atendimento já encerrado");
         }
-
         atendimento.setStatus("ENCERRADO");
         atendimento.setDataEncerramento(OffsetDateTime.now());
         atendimento.setMotivoEncerramento(motivo);
-        atendimentoRepository.save(atendimento);
-
-        log.info("Atendimento {} encerrado", id);
-        return toDetalheDTO(atendimento);
+        return toDetalheDTO(atendimentoRepository.save(atendimento));
     }
 
-    // ─── Helpers privados ─────────────────────────────────────────────────
+    @Transactional
+    public void marcarComoLido(Long id, Long clinicaId) {
+        Atendimento atendimento = buscarOuFalhar(id, clinicaId);
+        mensagemRepository.marcarComoLidas(id, clinicaId, OffsetDateTime.now());
+        atendimento.setNaoLidas(0);
+        atendimentoRepository.save(atendimento);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AtendenteOptionDTO> listarAtendentes(Long clinicaId) {
+        return usuarioRepository.findAtendentesVisiveisByClinicaId(clinicaId)
+                .stream()
+                .map(usuario -> new AtendenteOptionDTO(
+                        usuario.getId(), usuario.getNome(), usuario.getPerfil()
+                ))
+                .toList();
+    }
 
     private Atendimento buscarOuFalhar(Long id, Long clinicaId) {
         return atendimentoRepository.findByIdAndClinicaId(id, clinicaId)
-                .orElseThrow(() -> new NotFoundException("Atendimento não encontrado: " + id));
+                .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
     }
 
-    private AtendimentoResumoDTO toResumoDTO(Atendimento a) {
-        Paciente p = a.getPaciente();
-        Usuario u  = a.getAtendentePrincipal();
+    private Usuario buscarUsuario(Long usuarioId, Long clinicaId) {
+        return usuarioRepository.findAtivoByIdAndClinicaId(usuarioId, clinicaId)
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado"));
+    }
+
+    private Usuario buscarAtendente(Long usuarioId, Long clinicaId) {
+        Usuario usuario = buscarUsuario(usuarioId, clinicaId);
+        if (!PERFIS_ATENDENTES.contains(usuario.getPerfil())) {
+            throw new IllegalStateException("O usuário selecionado não pode receber atendimentos");
+        }
+        return usuario;
+    }
+
+    private TransferenciaAtendimento criarTransferencia(
+            Atendimento atendimento,
+            Usuario antigoAtendente,
+            Usuario novoAtendente,
+            Usuario responsavel,
+            String motivo
+    ) {
+        TransferenciaAtendimento transferencia = new TransferenciaAtendimento();
+        transferencia.setAtendimento(atendimento);
+        transferencia.setDeUsuario(antigoAtendente);
+        transferencia.setParaUsuario(novoAtendente);
+        transferencia.setTransferidoPor(responsavel);
+        transferencia.setMotivo(motivo);
+        return transferencia;
+    }
+
+    private AtendimentoResumoDTO toResumoDTO(Atendimento atendimento) {
+        Paciente paciente = atendimento.getPaciente();
+        Usuario atendente = atendimento.getAtendentePrincipal();
+        String previa = mensagemRepository.findFirstByAtendimentoIdOrderByDataHoraDesc(atendimento.getId())
+                .map(Mensagem::getConteudoPrevia)
+                .orElse("");
         return new AtendimentoResumoDTO(
-                a.getId(), a.getStatus(), a.getTratadoPorIa(),
-                a.getUltimaMensagemEm(), a.getNaoLidas(),
+                atendimento.getId(),
+                atendimento.getStatus(),
+                atendimento.getTratadoPorIa(),
+                atendimento.getUltimaMensagemEm(),
+                atendimento.getNaoLidas(),
+                previa,
+                paciente.getRequerRevisao(),
+                paciente.getConvenioStatus(),
                 new AtendimentoResumoDTO.PacienteResumoDTO(
-                        p.getId(), p.getNomeBusca(), p.getTelefoneNormalizado()),
-                u != null ? new AtendimentoResumoDTO.AtendenteDTO(u.getId(), u.getNome()) : null
+                        paciente.getId(), paciente.getNomeBusca(), paciente.getTelefoneNormalizado()
+                ),
+                atendente != null
+                        ? new AtendimentoResumoDTO.AtendenteDTO(atendente.getId(), atendente.getNome())
+                        : null
         );
     }
 
-    private AtendimentoDetalheDTO toDetalheDTO(Atendimento a) {
-        Paciente p = a.getPaciente();
-        Usuario u  = a.getAtendentePrincipal();
+    private AtendimentoDetalheDTO toDetalheDTO(Atendimento atendimento) {
+        Paciente paciente = atendimento.getPaciente();
+        Usuario atendente = atendimento.getAtendentePrincipal();
+        Usuario convenioResponsavel = paciente.getConvenioRevisadoPor();
         return new AtendimentoDetalheDTO(
-                a.getId(), a.getStatus(), a.getTratadoPorIa(),
-                a.getDataInicio(), a.getDataEncerramento(), a.getNaoLidas(),
+                atendimento.getId(),
+                atendimento.getStatus(),
+                atendimento.getTratadoPorIa(),
+                atendimento.getDataInicio(),
+                atendimento.getDataEncerramento(),
+                atendimento.getNaoLidas(),
                 new AtendimentoDetalheDTO.PacienteDetalheDTO(
-                        p.getId(), p.getNome(), p.getTelefone(),
-                        p.getEmail(), p.getStatus(), p.getUltimaInteracaoEm()),
-                u != null ? new AtendimentoDetalheDTO.AtendenteDTO(
-                        u.getId(), u.getNome(), u.getPerfil()) : null
+                        paciente.getId(),
+                        paciente.getNome(),
+                        paciente.getTelefone(),
+                        paciente.getEmail(),
+                        paciente.getStatus(),
+                        paciente.getUltimaInteracaoEm(),
+                        paciente.getRequerRevisao(),
+                        paciente.getConvenioStatus(),
+                        paciente.getConvenioRevisadoEm(),
+                        convenioResponsavel != null ? convenioResponsavel.getId() : null,
+                        convenioResponsavel != null ? convenioResponsavel.getNome() : null
+                ),
+                atendente != null
+                        ? new AtendimentoDetalheDTO.AtendenteDTO(
+                                atendente.getId(), atendente.getNome(), atendente.getPerfil()
+                        )
+                        : null
         );
+    }
+
+    private String normalizar(String valor) {
+        return valor == null || valor.isBlank() ? null : valor.trim();
+    }
+
+    private String normalizarBusca(String valor) {
+        String normalizado = normalizar(valor);
+        return normalizado == null ? "" : normalizado.toUpperCase(Locale.ROOT);
     }
 }

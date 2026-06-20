@@ -1,13 +1,17 @@
-import { ChatList } from '@/components/chat/ChatList';
-import { ChatWindow } from '@/components/chat/ChatWindow';
-import { ContactDetails } from '@/components/chat/ContactDetails';
+import { AtendimentosClient } from '@/components/chat/AtendimentosClient';
+import { requireSession } from '@/lib/auth/session';
+import { getAtendentesAtivos, getAtendimentosIniciais } from '@/services/backend';
 
-export default function AtendimentosPage() {
+export default async function AtendimentosPage() {
+  const user = await requireSession(['GESTOR', 'RECEPCIONISTA', 'MEDICO']);
+  const initialPage = await getAtendimentosIniciais();
+  const atendentes = user.perfil === 'MEDICO' ? [] : await getAtendentesAtivos();
+
   return (
-    <div className="flex h-full overflow-hidden bg-clinic-canvas">
-      <ChatList />
-      <ChatWindow />
-      <ContactDetails />
-    </div>
+    <AtendimentosClient
+      initialConversations={initialPage.content}
+      atendentes={atendentes}
+      user={user}
+    />
   );
 }

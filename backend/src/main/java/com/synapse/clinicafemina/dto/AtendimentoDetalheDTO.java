@@ -23,7 +23,12 @@ public record AtendimentoDetalheDTO(
             String telefone,
             String email,
             String status,
-            OffsetDateTime ultimaInteracaoEm
+            OffsetDateTime ultimaInteracaoEm,
+            Boolean requerRevisao,
+            String convenioStatus,
+            OffsetDateTime convenioRevisadoEm,
+            Long convenioRevisadoPorId,
+            String convenioRevisadoPorNome
     ) {}
 
     public record AtendenteDTO(Long id, String nome, String perfil) {}

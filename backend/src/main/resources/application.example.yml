@@ -27,6 +27,7 @@ app:
     password: guest
 
   whatsapp:
+    enabled: false
     verify-token: token-configurado-na-meta
     app-secret: app-secret-da-meta
     access-token: token-whatsapp-cloud-api

@@ -25,6 +25,7 @@ app:
     username: guest
     password: guest
   whatsapp:
+    enabled: true
     verify-token: test
     app-secret: test-secret
     access-token: test-token

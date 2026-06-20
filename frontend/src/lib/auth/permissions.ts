@@ -11,7 +11,7 @@ const ALL_PROFILES: readonly AuthProfile[] = ['GESTOR', 'RECEPCIONISTA', 'MEDICO
 const OPERATIONAL_PROFILES: readonly AuthProfile[] = ['GESTOR', 'RECEPCIONISTA'];
 
 export const AUTH_MENU_ITEMS: readonly AuthMenuItem[] = [
-  { name: 'Atendimentos', href: '/atendimentos', badge: 4, profiles: ALL_PROFILES },
+  { name: 'Atendimentos', href: '/atendimentos', profiles: ALL_PROFILES },
   { name: 'Dashboard', href: '/dashboard', profiles: ALL_PROFILES },
   { name: 'Agenda', href: '/agenda', profiles: ALL_PROFILES },
   { name: 'Pacientes', href: '/pacientes', profiles: OPERATIONAL_PROFILES },

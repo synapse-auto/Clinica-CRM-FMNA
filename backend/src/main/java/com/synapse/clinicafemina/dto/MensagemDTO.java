@@ -11,7 +11,17 @@ public record MensagemDTO(
         String conteudo,
         String conteudoPrevia,
         String whatsappStatus,
+        String motivoFalha,
         OffsetDateTime dataHora,
         OffsetDateTime entregueEm,
-        OffsetDateTime lidaEm
-) {}
+        OffsetDateTime lidaEm,
+        MidiaDTO midia
+) {
+    public record MidiaDTO(
+            String tipoMedia,
+            String mimeType,
+            String nomeArquivo,
+            Long tamanhoBytes,
+            String url
+    ) {}
+}

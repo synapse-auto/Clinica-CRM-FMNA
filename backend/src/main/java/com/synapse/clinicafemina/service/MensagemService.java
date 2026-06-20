@@ -3,12 +3,17 @@ package com.synapse.clinicafemina.service;
 import com.synapse.clinicafemina.config.RabbitMQConfig;
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Mensagem;
+import com.synapse.clinicafemina.domain.MidiaMensagem;
+import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.dto.MensagemDTO;
+import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
+import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
+import com.synapse.clinicafemina.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -19,18 +24,21 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.OffsetDateTime;
+import java.util.Locale;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class MensagemService {
 
+    private static final long TAMANHO_MAXIMO = 16L * 1024 * 1024;
+
     private final MensagemRepository mensagemRepository;
+    private final MidiaMensagemRepository midiaRepository;
     private final AtendimentoRepository atendimentoRepository;
+    private final UsuarioRepository usuarioRepository;
     private final WhatsappOutboundClient whatsappOutboundClient;
     private final RabbitTemplate rabbitTemplate;
-
-    // ─── Histórico paginado ───────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public Page<MensagemDTO> listarHistorico(Long atendimentoId, Long clinicaId, Pageable pageable) {
@@ -39,140 +47,226 @@ public class MensagemService {
                 .map(this::toDTO);
     }
 
-    // ─── Envio de mensagem outbound ───────────────────────────────────────
-
     @Transactional
-    public MensagemDTO enviar(Long atendimentoId, Long clinicaId, EnviarMensagemRequest req, Long remetenteUsuarioId) {
-        Atendimento atendimento = atendimentoRepository.findByIdAndClinicaId(atendimentoId, clinicaId)
-                .orElseThrow(() -> new NotFoundException("Atendimento não encontrado: " + atendimentoId));
-
-        if (!"ATIVO".equals(atendimento.getStatus())) {
-            throw new IllegalStateException("Só é possível enviar mensagens para atendimentos ATIVOS");
+    public MensagemDTO enviar(
+            Long atendimentoId,
+            Long clinicaId,
+            EnviarMensagemRequest request,
+            Long remetenteUsuarioId
+    ) {
+        Atendimento atendimento = buscarAtendimentoAtivo(atendimentoId, clinicaId);
+        Usuario remetente = buscarRemetente(remetenteUsuarioId, clinicaId);
+        if (!"TEXTO".equalsIgnoreCase(request.tipoMedia())) {
+            throw new BadRequestException("O endpoint de texto aceita apenas tipo TEXTO");
         }
 
-        // 1. Persiste a mensagem no banco (conteúdo criptografado pelo converter)
-        Mensagem mensagem = new Mensagem();
-        mensagem.setAtendimento(atendimento);
-        mensagem.setDirecao("SAIDA");
-        mensagem.setRemetente("ATENDENTE");
-        mensagem.setTipoMedia(req.tipoMedia());
-        mensagem.setConteudo(req.conteudo());
-        mensagem.setConteudoPrevia(req.conteudo().length() > 60
-                ? req.conteudo().substring(0, 60) + "…"
-                : req.conteudo());
-        mensagem.setWhatsappStatus("PENDENTE");
-        mensagem.setDataHora(OffsetDateTime.now());
+        Mensagem mensagem = criarMensagemSaida(
+                atendimento, remetente, "TEXTO", request.conteudo(), limitarPrevia(request.conteudo())
+        );
         mensagem = mensagemRepository.save(mensagem);
-
-        // 2. Atualiza o atendimento
-        atendimento.setUltimaMensagemEm(mensagem.getDataHora());
-        atendimentoRepository.save(atendimento);
-
-        // 3. Dispara envio assíncrono para a Meta Cloud API (com Resilience4j)
-        final Long mensagemId = mensagem.getId();
-        final String conteudo = req.conteudo();
-        final String telefone = atendimento.getPaciente().getTelefoneNormalizado();
+        atualizarUltimaMensagem(atendimento, mensagem);
 
         try {
-            String wamid = whatsappOutboundClient.enviarTexto(telefone, conteudo);
+            whatsappOutboundClient.validarConfiguracao();
+            String wamid = whatsappOutboundClient.enviarTexto(
+                    atendimento.getPaciente().getTelefoneNormalizado(), request.conteudo()
+            );
             mensagem.setWhatsappMessageId(wamid);
             mensagem.setWhatsappStatus("ENVIADA");
-            mensagemRepository.save(mensagem);
-            log.info("Mensagem {} enviada ao WhatsApp", mensagemId);
-        } catch (Exception e) {
-            mensagem.setMotivoFalha(motivoFalhaSeguro(e));
-            mensagem.setWhatsappStatus("FALHA");
-            mensagemRepository.save(mensagem);
-            log.error("Falha ao enviar mensagem {} para WhatsApp. tipoErro={}", mensagemId, e.getClass().getSimpleName());
-            // Publica na DLX para reprocessamento futuro
-            rabbitTemplate.convertAndSend(
-                    RabbitMQConfig.EXCHANGE_WHATSAPP_SAIDA,
-                    RabbitMQConfig.ROUTING_KEY_WHATSAPP_SAIDA,
-                    mensagemId);
+        } catch (Exception exception) {
+            registrarFalha(mensagem, exception, false);
         }
-
-        return toDTO(mensagem);
+        return toDTO(mensagemRepository.save(mensagem));
     }
 
-    // ─── Upload e envio de mídia outbound ─────────────────────────────────
-
     @Transactional
-    public MensagemDTO enviarMidia(Long atendimentoId, Long clinicaId, MultipartFile arquivo, Long remetenteUsuarioId) {
-        Atendimento atendimento = atendimentoRepository.findByIdAndClinicaId(atendimentoId, clinicaId)
-                .orElseThrow(() -> new NotFoundException("Atendimento não encontrado: " + atendimentoId));
+    public MensagemDTO enviarMidia(
+            Long atendimentoId,
+            Long clinicaId,
+            MultipartFile arquivo,
+            Long remetenteUsuarioId
+    ) {
+        validarArquivo(arquivo);
+        Atendimento atendimento = buscarAtendimentoAtivo(atendimentoId, clinicaId);
+        Usuario remetente = buscarRemetente(remetenteUsuarioId, clinicaId);
+        String mimeType = arquivo.getContentType();
+        String tipoMedia = resolverTipoMedia(mimeType);
+        String nomeArquivo = sanitizarNomeArquivo(arquivo.getOriginalFilename());
 
-        if (!"ATIVO".equals(atendimento.getStatus())) {
-            throw new IllegalStateException("Só é possível enviar mensagens para atendimentos ATIVOS");
+        Mensagem mensagem = mensagemRepository.save(criarMensagemSaida(
+                atendimento,
+                remetente,
+                tipoMedia,
+                "[" + tipoMedia + "] " + nomeArquivo,
+                "[" + tipoMedia + "] " + nomeArquivo
+        ));
+        atualizarUltimaMensagem(atendimento, mensagem);
+
+        try {
+            whatsappOutboundClient.validarConfiguracao();
+            String mediaId = whatsappOutboundClient.uploadMidia(
+                    arquivo.getResource(), mimeType, nomeArquivo
+            );
+            String wamid = whatsappOutboundClient.enviarMidia(
+                    atendimento.getPaciente().getTelefoneNormalizado(),
+                    tipoMedia.toLowerCase(Locale.ROOT),
+                    mediaId
+            );
+            mensagem.setWhatsappMessageId(wamid);
+            mensagem.setWhatsappStatus("ENVIADA");
+            midiaRepository.save(criarMidia(
+                    mensagem, tipoMedia, mimeType, nomeArquivo, arquivo.getSize(), mediaId
+            ));
+        } catch (Exception exception) {
+            registrarFalha(mensagem, exception, true);
         }
+        return toDTO(mensagemRepository.save(mensagem));
+    }
 
-        String contentType = arquivo.getContentType() != null ? arquivo.getContentType() : "application/octet-stream";
-        String tipoMedia = resolverTipoMedia(contentType);
-        String nomeArquivo = arquivo.getOriginalFilename() != null ? arquivo.getOriginalFilename() : "arquivo";
+    @Transactional(readOnly = true)
+    public MidiaMensagem buscarMidia(
+            Long atendimentoId,
+            Long mensagemId,
+            Long clinicaId
+    ) {
+        return midiaRepository.findAutorizada(mensagemId, atendimentoId, clinicaId)
+                .orElseThrow(() -> new NotFoundException("Mídia não encontrada"));
+    }
 
-        // 1. Persiste a mensagem no banco antes de enviar (garante rastreabilidade)
+    private Atendimento buscarAtendimentoAtivo(Long atendimentoId, Long clinicaId) {
+        Atendimento atendimento = atendimentoRepository.findByIdAndClinicaId(atendimentoId, clinicaId)
+                .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
+        if (!"ATIVO".equals(atendimento.getStatus())) {
+            throw new IllegalStateException("Só é possível enviar mensagens para atendimentos ativos");
+        }
+        return atendimento;
+    }
+
+    private Usuario buscarRemetente(Long usuarioId, Long clinicaId) {
+        return usuarioRepository.findAtivoByIdAndClinicaId(usuarioId, clinicaId)
+                .orElseThrow(() -> new NotFoundException("Usuário remetente não encontrado"));
+    }
+
+    private Mensagem criarMensagemSaida(
+            Atendimento atendimento,
+            Usuario remetente,
+            String tipoMedia,
+            String conteudo,
+            String previa
+    ) {
         Mensagem mensagem = new Mensagem();
         mensagem.setAtendimento(atendimento);
         mensagem.setDirecao("SAIDA");
         mensagem.setRemetente("ATENDENTE");
+        mensagem.setRemetenteUsuario(remetente);
         mensagem.setTipoMedia(tipoMedia);
-        mensagem.setConteudo("[" + tipoMedia + "] " + nomeArquivo); // criptografado pelo converter
-        mensagem.setConteudoPrevia("[" + tipoMedia + "] " + nomeArquivo);
+        mensagem.setConteudo(conteudo);
+        mensagem.setConteudoPrevia(previa);
         mensagem.setWhatsappStatus("PENDENTE");
         mensagem.setDataHora(OffsetDateTime.now());
-        mensagem = mensagemRepository.save(mensagem);
+        return mensagem;
+    }
 
+    private MidiaMensagem criarMidia(
+            Mensagem mensagem,
+            String tipoMedia,
+            String mimeType,
+            String nomeArquivo,
+            long tamanho,
+            String mediaId
+    ) {
+        MidiaMensagem midia = new MidiaMensagem();
+        midia.setMensagem(mensagem);
+        midia.setTipoMedia(tipoMedia);
+        midia.setMimeType(mimeType);
+        midia.setNomeArquivo(nomeArquivo);
+        midia.setTamanhoBytes(tamanho);
+        midia.setWhatsappMediaId(mediaId);
+        return midia;
+    }
+
+    private void atualizarUltimaMensagem(Atendimento atendimento, Mensagem mensagem) {
         atendimento.setUltimaMensagemEm(mensagem.getDataHora());
         atendimentoRepository.save(atendimento);
+    }
 
-        final Long mensagemId = mensagem.getId();
-        final String telefone = atendimento.getPaciente().getTelefoneNormalizado();
-
+    private void registrarFalha(Mensagem mensagem, Exception exception, boolean midia) {
+        mensagem.setMotivoFalha("WhatsApp/Meta indisponível ou não configurado");
+        mensagem.setWhatsappStatus("FALHA");
+        log.error(
+                "Falha ao enviar {} {} para WhatsApp. tipoErro={}",
+                midia ? "mídia" : "mensagem",
+                mensagem.getId(),
+                exception.getClass().getSimpleName()
+        );
         try {
-            // 2. Faz upload do arquivo para a Meta e obtém o media_id
-            String mediaId = whatsappOutboundClient.uploadMidia(arquivo.getResource(), contentType, nomeArquivo);
-
-            // 3. Envia a mensagem de mídia referenciando o media_id
-            String wamid = whatsappOutboundClient.enviarMidia(telefone, tipoMedia.toLowerCase(), mediaId);
-
-            mensagem.setWhatsappMessageId(wamid);
-            mensagem.setWhatsappStatus("ENVIADA");
-            mensagemRepository.save(mensagem);
-            log.info("Midia {} enviada ao WhatsApp", mensagemId);
-
-        } catch (Exception e) {
-            mensagem.setMotivoFalha(motivoFalhaSeguro(e));
-            mensagem.setWhatsappStatus("FALHA");
-            mensagemRepository.save(mensagem);
-            log.error("Falha ao enviar midia {} para WhatsApp. tipoErro={}", mensagemId, e.getClass().getSimpleName());
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.EXCHANGE_WHATSAPP_SAIDA,
                     RabbitMQConfig.ROUTING_KEY_WHATSAPP_SAIDA,
-                    mensagemId);
+                    mensagem.getId()
+            );
+        } catch (Exception publishException) {
+            log.error("Falha ao registrar retry da mensagem {}. tipoErro={}",
+                    mensagem.getId(), publishException.getClass().getSimpleName());
         }
+    }
 
-        return toDTO(mensagem);
+    private void validarArquivo(MultipartFile arquivo) {
+        if (arquivo == null || arquivo.isEmpty()) {
+            throw new BadRequestException("Selecione um arquivo para enviar");
+        }
+        if (arquivo.getSize() > TAMANHO_MAXIMO) {
+            throw new BadRequestException("O arquivo excede o limite de 16 MB");
+        }
+        String contentType = arquivo.getContentType();
+        if (contentType == null || !java.util.Set.of(
+                "image/jpeg", "image/png", "image/webp",
+                "audio/ogg", "audio/mpeg", "audio/mp4",
+                "application/pdf"
+        ).contains(contentType)) {
+            throw new BadRequestException("Tipo de arquivo não suportado");
+        }
     }
 
     private String resolverTipoMedia(String contentType) {
-        return switch (contentType) {
-            case "image/jpeg", "image/png", "image/webp" -> "IMAGEM";
-            case "audio/ogg", "audio/mpeg", "audio/mp4"  -> "AUDIO";
-            case "video/mp4", "video/3gpp"               -> "VIDEO";
-            default                                      -> "DOCUMENTO";
-        };
+        if (contentType.startsWith("image/")) return "IMAGEM";
+        if (contentType.startsWith("audio/")) return "AUDIO";
+        return "DOCUMENTO";
     }
 
-    private String motivoFalhaSeguro(Exception e) {
-        return "Falha no envio WhatsApp: " + e.getClass().getSimpleName();
+    private String sanitizarNomeArquivo(String nome) {
+        String seguro = nome == null || nome.isBlank() ? "arquivo" : nome;
+        return seguro.replaceAll("[\\\\/\\r\\n]", "_");
     }
 
-    // ─── Helpers ──────────────────────────────────────────────────────────
+    private String limitarPrevia(String conteudo) {
+        return conteudo.length() > 60 ? conteudo.substring(0, 60) + "…" : conteudo;
+    }
 
-    private MensagemDTO toDTO(Mensagem m) {
+    private MensagemDTO toDTO(Mensagem mensagem) {
+        MensagemDTO.MidiaDTO midia = midiaRepository.findByMensagemId(mensagem.getId())
+                .map(item -> new MensagemDTO.MidiaDTO(
+                        item.getTipoMedia(),
+                        item.getMimeType(),
+                        item.getNomeArquivo(),
+                        item.getTamanhoBytes(),
+                        "/api/atendimentos/" + mensagem.getAtendimento().getId()
+                                + "/mensagens/" + mensagem.getId() + "/midia"
+                ))
+                .orElse(null);
         return new MensagemDTO(
-                m.getId(), m.getDirecao(), m.getRemetente(),
-                m.getTipoMedia(), m.getConteudo(), m.getConteudoPrevia(),
-                m.getWhatsappStatus(), m.getDataHora(),
-                m.getEntregueEm(), m.getLidaEm());
+                mensagem.getId(),
+                mensagem.getDirecao(),
+                mensagem.getRemetente(),
+                mensagem.getTipoMedia(),
+                mensagem.getConteudo(),
+                mensagem.getConteudoPrevia(),
+                mensagem.getWhatsappStatus(),
+                mensagem.getMotivoFalha(),
+                mensagem.getDataHora(),
+                mensagem.getEntregueEm(),
+                mensagem.getLidaEm(),
+                midia
+        );
     }
 }

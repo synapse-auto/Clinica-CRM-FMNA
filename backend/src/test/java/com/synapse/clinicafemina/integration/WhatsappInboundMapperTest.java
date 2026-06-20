@@ -8,8 +8,10 @@ import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
+import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.service.N8nEventService;
+import com.synapse.clinicafemina.service.AtendimentoNotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +47,9 @@ class WhatsappInboundMapperTest {
     private MensagemRepository mensagemRepository;
 
     @Mock
+    private MidiaMensagemRepository midiaMensagemRepository;
+
+    @Mock
     private ClinicaRepository clinicaRepository;
 
     @Mock
@@ -52,6 +57,9 @@ class WhatsappInboundMapperTest {
 
     @Mock
     private N8nEventService n8nEventService;
+
+    @Mock
+    private AtendimentoNotificationService notificationService;
 
     private WhatsappInboundMapper mapper;
     private Clinica clinica;
@@ -62,9 +70,12 @@ class WhatsappInboundMapperTest {
                 pacienteRepository,
                 atendimentoRepository,
                 mensagemRepository,
+                midiaMensagemRepository,
                 clinicaRepository,
                 rabbitTemplate,
-                n8nEventService
+                n8nEventService,
+                notificationService,
+                new WhatsappInboundPayloadParser()
         );
 
         clinica = new Clinica();
@@ -97,6 +108,7 @@ class WhatsappInboundMapperTest {
         assertEquals("5511999990000", pacienteCaptor.getAllValues().getFirst().getExternalId());
         verify(n8nEventService).criarPayload(eq(clinica), eq("novo_lead"), any(), any(), any(), any());
         verify(n8nEventService).criarPayload(eq(clinica), eq("nova_mensagem"), any(), any(), any(), any());
+        verify(notificationService).notificarNovaMensagem(any(), any());
     }
 
     @Test
@@ -132,6 +144,53 @@ class WhatsappInboundMapperTest {
         verify(pacienteRepository, never()).save(any(Paciente.class));
         verify(atendimentoRepository, never()).save(any(Atendimento.class));
         verify(mensagemRepository, never()).save(any(Mensagem.class));
+    }
+
+    @Test
+    void should_persist_received_document_metadata() {
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-doc")).thenReturn(Optional.empty());
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setNaoLidas(0);
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(40L);
+            return mensagem;
+        });
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(Map.of(
+                "metadata", Map.of("phone_number_id", "phone-ultra"),
+                "contacts", List.of(Map.of(
+                        "wa_id", "5511999990000",
+                        "profile", Map.of("name", "Paciente Teste")
+                )),
+                "messages", List.of(Map.of(
+                        "id", "wamid-doc",
+                        "timestamp", "1781455200",
+                        "type", "document",
+                        "document", Map.of(
+                                "id", "media-doc",
+                                "filename", "guia.pdf",
+                                "mime_type", "application/pdf"
+                        )
+                ))
+        ));
+
+        verify(midiaMensagemRepository).save(any());
+        verify(notificationService).notificarNovaMensagem(eq(atendimento), any());
     }
 
     private Map<String, Object> validValuePayload(String phoneNumberId) {

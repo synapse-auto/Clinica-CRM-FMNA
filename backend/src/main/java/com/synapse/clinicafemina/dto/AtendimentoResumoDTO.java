@@ -12,6 +12,9 @@ public record AtendimentoResumoDTO(
         Boolean tratadoPorIa,
         OffsetDateTime ultimaMensagemEm,
         Integer naoLidas,
+        String ultimaMensagemPrevia,
+        Boolean requerRevisao,
+        String convenioStatus,
         PacienteResumoDTO paciente,
         AtendenteDTO atendentePrincipal
 ) {

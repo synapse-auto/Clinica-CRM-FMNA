@@ -36,12 +36,17 @@ public class ProductionSecretsValidator implements ApplicationRunner {
                 "spring.datasource.username",
                 "spring.datasource.password",
                 "app.security.jwt.secret",
-                "app.crypto.master-key",
-                "app.whatsapp.verify-token",
-                "app.whatsapp.app-secret",
-                "app.whatsapp.access-token",
-                "app.whatsapp.phone-number-id"
+                "app.crypto.master-key"
         ));
+
+        if (environment.getProperty("app.whatsapp.enabled", Boolean.class, false)) {
+            required.addAll(List.of(
+                    "app.whatsapp.verify-token",
+                    "app.whatsapp.app-secret",
+                    "app.whatsapp.access-token",
+                    "app.whatsapp.phone-number-id"
+            ));
+        }
 
         String clinicSlug = environment.getProperty("app.clinic.slug");
         if (clinicSlug != null && !clinicSlug.isBlank()) {
