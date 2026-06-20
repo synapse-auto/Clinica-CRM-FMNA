@@ -27,6 +27,7 @@ export async function requireSession(
 ): Promise<AuthUser> {
   const user = await getSession();
   if (!user) redirect('/login');
+  if (user.mustChangePassword) redirect('/alterar-senha');
   if (allowedProfiles && !allowedProfiles.includes(user.perfil)) {
     redirect(defaultRouteForProfile(user.perfil));
   }

@@ -1,8 +1,7 @@
-import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { authenticateWithBackend, readBackendLogin } from '@/lib/auth/backend-auth';
-import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from '@/lib/auth/constants';
-import { defaultRouteForProfile } from '@/lib/auth/permissions';
+import { routeAfterAuthentication } from '@/lib/auth/permissions';
+import { setSessionCookie } from '@/lib/auth/session-cookie';
 import { isAuthProfile } from '@/lib/auth/types';
 
 type LoginBody = {
@@ -42,17 +41,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: 'Perfil de acesso inválido.' }, { status: 403 });
   }
 
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: SESSION_MAX_AGE_SECONDS,
-  });
+  await setSessionCookie(token);
 
   return NextResponse.json({
     user,
-    redirectTo: defaultRouteForProfile(user.perfil),
+    redirectTo: routeAfterAuthentication(user.perfil, user.mustChangePassword),
   });
 }

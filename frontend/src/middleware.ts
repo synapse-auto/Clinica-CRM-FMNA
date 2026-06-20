@@ -28,5 +28,6 @@ export const config = {
     '/horarios/:path*',
     '/configuracoes/:path*',
     '/atendimentos/:path*',
+    '/alterar-senha/:path*',
   ],
 };

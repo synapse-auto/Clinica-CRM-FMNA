@@ -2,61 +2,43 @@ package com.synapse.clinicafemina.controller;
 
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.auth.AuthUserResponse;
+import com.synapse.clinicafemina.dto.auth.ChangePasswordRequest;
 import com.synapse.clinicafemina.dto.auth.LoginRequest;
 import com.synapse.clinicafemina.dto.auth.LoginResponse;
-import com.synapse.clinicafemina.security.JwtService;
+import com.synapse.clinicafemina.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.HashMap;
-import java.util.Map;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final AuthenticationManager authenticationManager;
-    private final JwtService jwtService;
+    private final AuthService authService;
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        // Realiza a autenticação com base no UserDetailsService e PasswordEncoder configurados
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getSenha())
-        );
-
-        // Se passar daqui, as credenciais são válidas. Recuperamos o usuário real:
-        Usuario usuario = (Usuario) authentication.getPrincipal();
-
-        // Extra claims adicionais para colocar no Payload do JWT
-        Map<String, Object> extraClaims = new HashMap<>();
-        extraClaims.put("clinicaId", usuario.getClinica().getId());
-        extraClaims.put("perfil", usuario.getPerfil());
-        extraClaims.put("nome", usuario.getNome());
-
-        // Gera o JWT
-        String jwtToken = jwtService.generateToken(extraClaims, usuario);
-
-        // Constrói e retorna o DTO
-        return ResponseEntity.ok(LoginResponse.builder()
-                .token(jwtToken)
-                .id(usuario.getId())
-                .nome(usuario.getNome())
-                .email(usuario.getEmail())
-                .perfil(usuario.getPerfil())
-                .clinicaId(usuario.getClinica().getId())
-                .build());
+        return ResponseEntity.ok(authService.login(request));
     }
 
     @GetMapping("/me")
     public AuthUserResponse me(@AuthenticationPrincipal Usuario usuario) {
         return AuthUserResponse.from(usuario);
+    }
+
+    @PatchMapping("/change-password")
+    public LoginResponse changePassword(
+            @AuthenticationPrincipal Usuario usuario,
+            @Valid @RequestBody ChangePasswordRequest request
+    ) {
+        return authService.changePassword(usuario, request);
     }
 }

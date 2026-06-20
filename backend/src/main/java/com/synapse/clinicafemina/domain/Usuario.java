@@ -51,6 +51,12 @@ public abstract class Usuario implements UserDetails {
     @Column(nullable = false)
     private Boolean ativo = true;
 
+    @Column(name = "must_change_password", nullable = false)
+    private Boolean mustChangePassword = false;
+
+    @Column(name = "admin_interno", nullable = false)
+    private Boolean adminInterno = false;
+
     @Column(name = "ultimo_login_em")
     private OffsetDateTime ultimoLoginEm;
 

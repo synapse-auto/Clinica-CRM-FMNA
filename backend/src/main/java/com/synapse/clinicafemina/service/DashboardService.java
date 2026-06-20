@@ -41,7 +41,7 @@ public class DashboardService {
         PeriodoCalculado intervalo = calcularPeriodo(periodo, data);
         Long clinicaId = clinica.getId();
 
-        int equipeTotal = usuarioRepository.findAtivosByClinicaId(clinicaId).size();
+        int equipeTotal = usuarioRepository.findAtivosVisiveisByClinicaId(clinicaId).size();
         long novosPacientes = pacienteRepository.countNovosPorClinicaAndPeriodo(
                 clinicaId, intervalo.inicio(), intervalo.fim());
         long totalMensagens = mensagemRepository.countByClinicaAndPeriodo(

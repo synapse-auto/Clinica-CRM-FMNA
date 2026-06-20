@@ -34,7 +34,7 @@ describe('DemoSidebar', () => {
     render(
       <DemoSidebar
         clinic={clinic}
-        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7 }}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false }}
       />,
     );
 
@@ -47,7 +47,7 @@ describe('DemoSidebar', () => {
     render(
       <DemoSidebar
         clinic={clinic}
-        user={{ id: 3, nome: 'Dra. Ana', email: 'medica@clinica.local', perfil: 'MEDICO', clinicaId: 7 }}
+        user={{ id: 3, nome: 'Dra. Ana', email: 'medica@clinica.local', perfil: 'MEDICO', clinicaId: 7, mustChangePassword: false }}
       />,
     );
 
@@ -63,7 +63,7 @@ describe('DemoSidebar', () => {
     render(
       <DemoSidebar
         clinic={clinic}
-        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7 }}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false }}
       />,
     );
 

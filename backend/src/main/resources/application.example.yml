@@ -18,10 +18,9 @@ app:
   crypto:
     master-key: troque-por-32-caracteres-exatos
 
-  dev-seed:
+  initial-users:
     enabled: true
-    email: gestor@clinica.local
-    password: troque-esta-senha-local
+    json: '${INITIAL_USERS_JSON:[]}'
 
   rabbitmq:
     username: guest

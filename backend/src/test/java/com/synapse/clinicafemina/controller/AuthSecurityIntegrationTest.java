@@ -21,7 +21,9 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -33,7 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.flyway.enabled=false",
         "app.clinic.slug=auth-test",
         "app.security.jwt.secret=test-only-secret-key-with-at-least-32-bytes",
-        "app.security.jwt.expiration-ms=86400000"
+        "app.security.jwt.expiration-ms=86400000",
+        "app.initial-users.enabled=false"
 })
 @Transactional
 class AuthSecurityIntegrationTest {
@@ -58,7 +61,9 @@ class AuthSecurityIntegrationTest {
 
     private String gestorEmail;
     private String recepcionistaEmail;
+    private String trocaObrigatoriaEmail;
     private String senha;
+    private Long clinicaId;
 
     @BeforeEach
     void setUp() {
@@ -70,26 +75,30 @@ class AuthSecurityIntegrationTest {
         clinica.setEmailContato("auth@clinica.local");
         clinica.setTelefoneContato("44999999999");
         clinica = clinicaRepository.save(clinica);
+        clinicaId = clinica.getId();
 
-        senha = UUID.randomUUID().toString();
+        senha = UUID.randomUUID() + "!Aa1";
         gestorEmail = "gestor-" + UUID.randomUUID() + "@clinica.local";
         recepcionistaEmail = "recepcao-" + UUID.randomUUID() + "@clinica.local";
+        trocaObrigatoriaEmail = "primeiro-acesso-" + UUID.randomUUID() + "@clinica.local";
 
-        saveUser(new Gestor(), clinica, "Gestor Teste", gestorEmail);
-        saveUser(new Recepcionista(), clinica, "Recepção Teste", recepcionistaEmail);
+        saveUser(new Gestor(), clinica, "Gestor Teste", gestorEmail, false, false);
+        saveUser(new Recepcionista(), clinica, "Recepção Teste", recepcionistaEmail, false, false);
+        saveUser(new Gestor(), clinica, "Primeiro Acesso", trocaObrigatoriaEmail, true, true);
         entityManager.flush();
         entityManager.clear();
     }
 
     @Test
     void should_return_authenticated_user_without_token_when_calling_me() throws Exception {
-        String token = login(gestorEmail);
+        String token = login(gestorEmail, senha, false);
 
         mockMvc.perform(get("/api/auth/me")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(gestorEmail))
                 .andExpect(jsonPath("$.perfil").value("GESTOR"))
+                .andExpect(jsonPath("$.mustChangePassword").value(false))
                 .andExpect(jsonPath("$.token").doesNotExist());
     }
 
@@ -109,21 +118,106 @@ class AuthSecurityIntegrationTest {
 
     @Test
     void should_return_forbidden_when_receptionist_calls_manager_integration() throws Exception {
-        String token = login(recepcionistaEmail);
+        String token = login(recepcionistaEmail, senha, false);
 
         mockMvc.perform(post("/api/integracoes/sincronizar")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
     }
 
-    private String login(String email) throws Exception {
+    @Test
+    void should_block_crm_api_until_initial_password_is_changed() throws Exception {
+        String token = login(trocaObrigatoriaEmail, senha, true);
+
+        mockMvc.perform(get("/api/agendamentos")
+                        .header("Authorization", "Bearer " + token)
+                        .param("inicio", "2026-06-22T00:00:00-03:00")
+                        .param("fim", "2026-06-27T00:00:00-03:00"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
+
+        mockMvc.perform(get("/api/auth/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mustChangePassword").value(true));
+    }
+
+    @Test
+    void should_change_initial_password_and_allow_crm_access() throws Exception {
+        String token = login(trocaObrigatoriaEmail, senha, true);
+        String novaSenha = "NovaSenhaSegura!2026";
+
+        String response = mockMvc.perform(patch("/api/auth/change-password")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "senhaAtual":"%s",
+                                  "novaSenha":"%s",
+                                  "confirmacaoNovaSenha":"%s"
+                                }
+                                """.formatted(senha, novaSenha, novaSenha)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.mustChangePassword").value(false))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode json = objectMapper.readTree(response);
+        String refreshedToken = json.get("token").asText();
+
+        mockMvc.perform(get("/api/agendamentos")
+                        .header("Authorization", "Bearer " + refreshedToken)
+                        .param("inicio", "2026-06-22T00:00:00-03:00")
+                        .param("fim", "2026-06-27T00:00:00-03:00"))
+                .andExpect(status().isOk());
+
+        login(trocaObrigatoriaEmail, novaSenha, false);
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","senha":"%s"}
+                                """.formatted(trocaObrigatoriaEmail, senha)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_reject_password_change_when_confirmation_differs() throws Exception {
+        String token = login(trocaObrigatoriaEmail, senha, true);
+
+        mockMvc.perform(patch("/api/auth/change-password")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "senhaAtual":"%s",
+                                  "novaSenha":"NovaSenhaSegura!2026",
+                                  "confirmacaoNovaSenha":"SenhaDiferente!2026"
+                                }
+                                """.formatted(senha)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_hide_internal_admin_from_visible_clinic_users() {
+        boolean internalAdminIsVisible = usuarioRepository
+                .findAtivosVisiveisByClinicaId(clinicaId)
+                .stream()
+                .anyMatch(usuario -> trocaObrigatoriaEmail.equals(usuario.getEmail()));
+
+        assertFalse(internalAdminIsVisible);
+    }
+
+    private String login(String email, String password, boolean mustChangePassword) throws Exception {
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email":"%s","senha":"%s"}
-                                """.formatted(email, senha)))
+                                """.formatted(email, password)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.mustChangePassword").value(mustChangePassword))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -131,11 +225,20 @@ class AuthSecurityIntegrationTest {
         return json.get("token").asText();
     }
 
-    private void saveUser(Usuario usuario, Clinica clinica, String nome, String email) {
+    private void saveUser(
+            Usuario usuario,
+            Clinica clinica,
+            String nome,
+            String email,
+            boolean mustChangePassword,
+            boolean adminInterno
+    ) {
         usuario.setClinica(clinica);
         usuario.setNome(nome);
         usuario.setEmail(email);
         usuario.setSenhaHash(passwordEncoder.encode(senha));
+        usuario.setMustChangePassword(mustChangePassword);
+        usuario.setAdminInterno(adminInterno);
         usuarioRepository.save(usuario);
     }
 }

@@ -19,7 +19,7 @@ app:
       expiration-ms: 3600000
   crypto:
     master-key: test-master-key-32-byte-value!!!
-  dev-seed:
+  initial-users:
     enabled: false
   rabbitmq:
     username: guest

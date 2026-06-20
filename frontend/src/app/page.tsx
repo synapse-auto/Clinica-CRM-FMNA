@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
-import { defaultRouteForProfile } from '@/lib/auth/permissions';
+import { routeAfterAuthentication } from '@/lib/auth/permissions';
 import { getSession } from '@/lib/auth/session';
 
 export default async function Home() {
   const user = await getSession();
-  redirect(user ? defaultRouteForProfile(user.perfil) : '/login');
+  redirect(user ? routeAfterAuthentication(user.perfil, user.mustChangePassword) : '/login');
 }

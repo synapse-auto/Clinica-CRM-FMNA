@@ -39,3 +39,10 @@ export function defaultRouteForProfile(profile: AuthProfile): string {
   if (profile === 'RECEPCIONISTA') return '/atendimentos';
   return '/agenda';
 }
+
+export function routeAfterAuthentication(
+  profile: AuthProfile,
+  mustChangePassword: boolean,
+): string {
+  return mustChangePassword ? '/alterar-senha' : defaultRouteForProfile(profile);
+}

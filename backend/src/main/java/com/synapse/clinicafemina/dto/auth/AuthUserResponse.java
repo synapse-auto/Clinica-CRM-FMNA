@@ -7,7 +7,8 @@ public record AuthUserResponse(
         String nome,
         String email,
         String perfil,
-        Long clinicaId
+        Long clinicaId,
+        Boolean mustChangePassword
 ) {
     public static AuthUserResponse from(Usuario usuario) {
         return new AuthUserResponse(
@@ -15,7 +16,8 @@ public record AuthUserResponse(
                 usuario.getNome(),
                 usuario.getEmail(),
                 usuario.getPerfil(),
-                usuario.getClinica().getId()
+                usuario.getClinica().getId(),
+                usuario.getMustChangePassword()
         );
     }
 }

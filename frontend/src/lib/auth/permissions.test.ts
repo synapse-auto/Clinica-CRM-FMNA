@@ -3,6 +3,7 @@ import {
   defaultRouteForProfile,
   isRouteAllowed,
   menuItemsForProfile,
+  routeAfterAuthentication,
 } from './permissions';
 
 describe('auth permissions', () => {
@@ -44,5 +45,10 @@ describe('auth permissions', () => {
     expect(defaultRouteForProfile('GESTOR')).toBe('/dashboard');
     expect(defaultRouteForProfile('RECEPCIONISTA')).toBe('/atendimentos');
     expect(defaultRouteForProfile('MEDICO')).toBe('/agenda');
+  });
+
+  it('should_force_password_change_before_profile_default_route', () => {
+    expect(routeAfterAuthentication('GESTOR', true)).toBe('/alterar-senha');
+    expect(routeAfterAuthentication('MEDICO', false)).toBe('/agenda');
   });
 });

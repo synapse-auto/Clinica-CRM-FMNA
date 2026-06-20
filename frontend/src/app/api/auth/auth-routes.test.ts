@@ -11,6 +11,7 @@ vi.mock('next/headers', () => ({
   cookies: async () => cookieStore,
 }));
 
+import { PATCH as changePassword } from './change-password/route';
 import { POST as login } from './login/route';
 import { POST as logout } from './logout/route';
 import { GET as me } from './me/route';
@@ -35,6 +36,7 @@ describe('auth BFF routes', () => {
       email: 'gestora@clinica.local',
       perfil: 'GESTOR',
       clinicaId: 7,
+      mustChangePassword: false,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -55,6 +57,7 @@ describe('auth BFF routes', () => {
         email: 'gestora@clinica.local',
         perfil: 'GESTOR',
         clinicaId: 7,
+        mustChangePassword: false,
       },
       redirectTo: '/dashboard',
     });
@@ -80,6 +83,7 @@ describe('auth BFF routes', () => {
       email: 'recepcao@clinica.local',
       perfil: 'RECEPCIONISTA',
       clinicaId: 7,
+      mustChangePassword: false,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -106,5 +110,66 @@ describe('auth BFF routes', () => {
 
     expect(response.status).toBe(204);
     expect(cookieStore.delete).toHaveBeenCalledWith(SESSION_COOKIE_NAME);
+  });
+
+  it('should_redirect_initial_password_login_to_change_password', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      token: 'jwt-server-only',
+      id: 3,
+      nome: 'Primeiro Acesso',
+      email: 'primeiro@clinica.local',
+      perfil: 'GESTOR',
+      clinicaId: 7,
+      mustChangePassword: true,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    const response = await login(new Request('http://localhost/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'primeiro@clinica.local', senha: 'senha-inicial' }),
+    }));
+    const body = await response.json();
+
+    expect(body.redirectTo).toBe('/alterar-senha');
+    expect(body.token).toBeUndefined();
+  });
+
+  it('should_replace_http_only_cookie_after_password_change_without_exposing_token', async () => {
+    cookieStore.get.mockReturnValue({ value: 'jwt-before-change' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      token: 'jwt-after-change',
+      id: 3,
+      nome: 'Primeiro Acesso',
+      email: 'primeiro@clinica.local',
+      perfil: 'GESTOR',
+      clinicaId: 7,
+      mustChangePassword: false,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    const response = await changePassword(new Request('http://localhost/api/auth/change-password', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        senhaAtual: 'senha-inicial',
+        novaSenha: 'NovaSenhaSegura!2026',
+        confirmacaoNovaSenha: 'NovaSenhaSegura!2026',
+      }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.token).toBeUndefined();
+    expect(body.redirectTo).toBe('/dashboard');
+    expect(cookieStore.set).toHaveBeenCalledWith(
+      SESSION_COOKIE_NAME,
+      'jwt-after-change',
+      expect.objectContaining({ httpOnly: true, maxAge: SESSION_MAX_AGE_SECONDS }),
+    );
   });
 });

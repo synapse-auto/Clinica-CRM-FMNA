@@ -53,7 +53,7 @@ class DashboardServiceTest {
         gestor.setClinica(clinica);
         gestor.setAtivo(true);
 
-        when(usuarioRepository.findAtivosByClinicaId(7L)).thenReturn(List.of(gestor));
+        when(usuarioRepository.findAtivosVisiveisByClinicaId(7L)).thenReturn(List.of(gestor));
         when(pacienteRepository.countNovosPorClinicaAndPeriodo(eqLong(7L), any(), any())).thenReturn(5L);
         when(mensagemRepository.countByClinicaAndPeriodo(eqLong(7L), any(), any())).thenReturn(12L);
         when(agendamentoRepository.countByClinicaAndPeriodo(eqLong(7L), any(), any())).thenReturn(8L);

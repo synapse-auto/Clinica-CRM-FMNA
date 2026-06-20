@@ -1,6 +1,7 @@
 package com.synapse.clinicafemina.config;
 
 import com.synapse.clinicafemina.security.JwtAuthenticationFilter;
+import com.synapse.clinicafemina.security.PasswordChangeRequiredFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -28,6 +29,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
+    private final PasswordChangeRequiredFilter passwordChangeRequiredFilter;
     private final AuthenticationProvider authenticationProvider;
 
     @Bean
@@ -59,7 +61,8 @@ public class SecurityConfig {
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider)
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(passwordChangeRequiredFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

@@ -8,6 +8,7 @@ export type AuthUser = {
   email: string;
   perfil: AuthProfile;
   clinicaId: number;
+  mustChangePassword: boolean;
 };
 
 export function isAuthProfile(value: unknown): value is AuthProfile {

@@ -1,12 +1,12 @@
 import { Stethoscope } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { LoginForm } from '@/components/auth/LoginForm';
-import { defaultRouteForProfile } from '@/lib/auth/permissions';
+import { routeAfterAuthentication } from '@/lib/auth/permissions';
 import { getSession } from '@/lib/auth/session';
 
 export default async function LoginPage() {
   const user = await getSession();
-  if (user) redirect(defaultRouteForProfile(user.perfil));
+  if (user) redirect(routeAfterAuthentication(user.perfil, user.mustChangePassword));
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-clinic-canvas px-4 py-10">

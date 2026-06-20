@@ -1,11 +1,14 @@
 package com.synapse.clinicafemina.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Gestor;
-import com.synapse.clinicafemina.domain.TipoClinica;
-import com.synapse.clinicafemina.integration.external.ExternalProviderType;
+import com.synapse.clinicafemina.domain.Recepcionista;
+import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -14,12 +17,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,48 +41,130 @@ class DataSeederTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
-    @Test
-    void should_create_dev_clinic_from_environment_when_seed_enabled() {
-        DataSeeder seeder = new DataSeeder(clinicaRepository, usuarioRepository, passwordEncoder);
-        ReflectionTestUtils.setField(seeder, "seedEnabled", true);
-        ReflectionTestUtils.setField(seeder, "seedEmail", "gestor@ultra.local");
-        ReflectionTestUtils.setField(seeder, "seedPassword", "senha-local-forte");
-        ReflectionTestUtils.setField(seeder, "clinicSlug", "ultramedical");
-        ReflectionTestUtils.setField(seeder, "clinicName", "UltraMedical");
-        ReflectionTestUtils.setField(seeder, "externalProvider", "MEDWARE");
-        ReflectionTestUtils.setField(seeder, "whatsappPhoneNumberId", "phone-ultra");
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-        when(clinicaRepository.findBySlug("ultramedical")).thenReturn(Optional.empty());
-        when(clinicaRepository.save(any(Clinica.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(usuarioRepository.count()).thenReturn(0L);
-        when(passwordEncoder.encode("senha-local-forte")).thenReturn("hash");
+    @Test
+    void should_create_initial_users_from_environment_with_bcrypt_and_required_password_change() {
+        Clinica clinica = clinic();
+        DataSeeder seeder = seeder(true, """
+                [
+                  {
+                    "nome": "Atendente Inicial",
+                    "email": "atendente@local.test",
+                    "perfil": "RECEPCIONISTA",
+                    "password": "SenhaInicial!2026",
+                    "mustChangePassword": true
+                  },
+                  {
+                    "nome": "Admin Interno",
+                    "email": "admin@local.test",
+                    "perfil": "GESTOR",
+                    "password": "OutraSenha!2026",
+                    "mustChangePassword": true,
+                    "adminInterno": true
+                  }
+                ]
+                """);
+
+        when(clinicaRepository.findBySlug("fmna")).thenReturn(Optional.of(clinica));
+        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hash");
 
         seeder.run();
 
-        ArgumentCaptor<Clinica> clinicaCaptor = ArgumentCaptor.forClass(Clinica.class);
-        ArgumentCaptor<Gestor> gestorCaptor = ArgumentCaptor.forClass(Gestor.class);
-        verify(clinicaRepository).save(clinicaCaptor.capture());
-        verify(usuarioRepository).save(gestorCaptor.capture());
+        ArgumentCaptor<Usuario> captor = ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarioRepository, times(2)).save(captor.capture());
+        List<Usuario> users = captor.getAllValues();
 
-        Clinica clinica = clinicaCaptor.getValue();
-        assertEquals("UltraMedical", clinica.getNome());
-        assertEquals("ultramedical", clinica.getSlug());
-        assertEquals(TipoClinica.ULTRASSONOGRAFIA, clinica.getTipoClinica());
-        assertEquals(ExternalProviderType.MEDWARE, clinica.getExternalProvider());
-        assertEquals(false, clinica.getUsaCirurgiasNaAgenda());
-        assertEquals("phone-ultra", clinica.getWhatsappPhoneNumberId());
-        assertEquals("gestor@ultra.local", gestorCaptor.getValue().getEmail());
-        assertNotEquals("senha-local-forte", gestorCaptor.getValue().getSenhaHash());
+        assertInstanceOf(Recepcionista.class, users.get(0));
+        assertInstanceOf(Gestor.class, users.get(1));
+        assertTrue(users.get(0).getMustChangePassword());
+        assertFalse(users.get(0).getAdminInterno());
+        assertTrue(users.get(1).getAdminInterno());
+        assertNotEquals("SenhaInicial!2026", users.get(0).getSenhaHash());
+        assertEquals("$2a$12$hash", users.get(0).getSenhaHash());
     }
 
     @Test
-    void should_not_seed_when_seed_disabled() {
-        DataSeeder seeder = new DataSeeder(clinicaRepository, usuarioRepository, passwordEncoder);
-        ReflectionTestUtils.setField(seeder, "seedEnabled", false);
+    void should_not_overwrite_existing_password_without_explicit_reset() {
+        Clinica clinica = clinic();
+        Gestor existing = new Gestor();
+        existing.setSenhaHash("$2a$12$existing");
+        DataSeeder seeder = seeder(true, """
+                [{
+                  "nome": "Gestor",
+                  "email": "gestor@local.test",
+                  "perfil": "GESTOR",
+                  "password": "NovaSenha!2026",
+                  "mustChangePassword": true
+                }]
+                """);
+
+        when(clinicaRepository.findBySlug("fmna")).thenReturn(Optional.of(clinica));
+        when(usuarioRepository.findByEmail("gestor@local.test")).thenReturn(Optional.of(existing));
 
         seeder.run();
 
-        verify(clinicaRepository, never()).save(any());
+        verify(passwordEncoder, never()).encode(anyString());
         verify(usuarioRepository, never()).save(any());
+        assertEquals("$2a$12$existing", existing.getSenhaHash());
+    }
+
+    @Test
+    void should_reset_existing_password_only_when_json_explicitly_requests_it() {
+        Clinica clinica = clinic();
+        Gestor existing = new Gestor();
+        existing.setSenhaHash("$2a$12$existing");
+        existing.setMustChangePassword(false);
+        DataSeeder seeder = seeder(true, """
+                [{
+                  "nome": "Gestor",
+                  "email": "gestor@local.test",
+                  "perfil": "GESTOR",
+                  "password": "NovaSenha!2026",
+                  "mustChangePassword": true,
+                  "resetPassword": true
+                }]
+                """);
+
+        when(clinicaRepository.findBySlug("fmna")).thenReturn(Optional.of(clinica));
+        when(usuarioRepository.findByEmail("gestor@local.test")).thenReturn(Optional.of(existing));
+        when(passwordEncoder.encode("NovaSenha!2026")).thenReturn("$2a$12$new");
+
+        seeder.run();
+
+        verify(usuarioRepository).save(existing);
+        assertEquals("$2a$12$new", existing.getSenhaHash());
+        assertTrue(existing.getMustChangePassword());
+    }
+
+    @Test
+    void should_not_seed_when_initial_users_are_disabled() {
+        DataSeeder seeder = seeder(false, "[]");
+
+        seeder.run();
+
+        verify(clinicaRepository, never()).findBySlug(anyString());
+        verify(usuarioRepository, never()).save(any());
+    }
+
+    private DataSeeder seeder(boolean enabled, String json) {
+        DataSeeder seeder = new DataSeeder(
+                clinicaRepository,
+                usuarioRepository,
+                passwordEncoder,
+                objectMapper
+        );
+        ReflectionTestUtils.setField(seeder, "initialUsersEnabled", enabled);
+        ReflectionTestUtils.setField(seeder, "initialUsersJson", json);
+        ReflectionTestUtils.setField(seeder, "clinicSlug", "fmna");
+        return seeder;
+    }
+
+    private Clinica clinic() {
+        Clinica clinica = new Clinica();
+        clinica.setNome("Clínica Teste");
+        clinica.setSlug("fmna");
+        return clinica;
     }
 }

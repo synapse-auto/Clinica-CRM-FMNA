@@ -37,10 +37,9 @@ app:
   crypto:
     master-key: ${CRYPTO_MASTER_KEY:}
 
-  dev-seed:
-    enabled: ${DEV_SEED_ENABLED:false}
-    email: ${DEV_SEED_EMAIL:}
-    password: ${DEV_SEED_PASSWORD:}
+  initial-users:
+    enabled: ${INITIAL_USERS_ENABLED:false}
+    json: '${INITIAL_USERS_JSON:[]}'
 
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}

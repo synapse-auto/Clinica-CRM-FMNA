@@ -35,6 +35,26 @@ export async function validateBackendSession(token: string): Promise<Response> {
   });
 }
 
+export async function changePasswordWithBackend(
+  token: string,
+  payload: {
+    senhaAtual: string;
+    novaSenha: string;
+    confirmacaoNovaSenha: string;
+  },
+): Promise<Response> {
+  return fetch(`${backendUrl()}/api/auth/change-password`, {
+    method: 'PATCH',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+}
+
 export async function readBackendLogin(response: Response): Promise<BackendLoginResponse> {
   return response.json() as Promise<BackendLoginResponse>;
 }

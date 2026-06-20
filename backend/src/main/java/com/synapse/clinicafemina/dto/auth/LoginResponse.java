@@ -16,4 +16,5 @@ public class LoginResponse {
     private String email;
     private String perfil;
     private Long clinicaId;
+    private Boolean mustChangePassword;
 }

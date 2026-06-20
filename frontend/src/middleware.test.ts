@@ -24,4 +24,13 @@ describe('auth middleware', () => {
 
     expect(response.headers.get('location')).toBeNull();
   });
+
+  it('should_protect_change_password_route_without_session_cookie', () => {
+    const response = middleware(new NextRequest('https://crm.test/alterar-senha'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe(
+      'https://crm.test/login?next=%2Falterar-senha',
+    );
+  });
 });

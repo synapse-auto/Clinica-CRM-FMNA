@@ -34,6 +34,7 @@ describe('LoginForm', () => {
         email: 'recepcao@clinica.local',
         perfil: 'RECEPCIONISTA',
         clinicaId: 7,
+        mustChangePassword: false,
       },
       redirectTo: '/atendimentos',
     }), {
@@ -48,5 +49,30 @@ describe('LoginForm', () => {
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/atendimentos'));
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it('should_redirect_initial_password_to_change_password', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      user: {
+        id: 3,
+        nome: 'Primeiro Acesso',
+        email: 'primeiro@clinica.local',
+        perfil: 'GESTOR',
+        clinicaId: 7,
+        mustChangePassword: true,
+      },
+      redirectTo: '/alterar-senha',
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+    render(<LoginForm />);
+
+    await user.type(screen.getByLabelText('Email'), 'primeiro@clinica.local');
+    await user.type(screen.getByLabelText('Senha'), 'senha-inicial');
+    await user.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/alterar-senha'));
   });
 });

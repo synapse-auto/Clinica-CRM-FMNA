@@ -1,19 +1,16 @@
 package com.synapse.clinicafemina.repository;
 
 import com.synapse.clinicafemina.domain.Usuario;
+import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Optional;
-import java.util.List;
-
 public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 
-    /** Busca por email — usado pelo UserDetailsService para autenticação JWT. */
     Optional<Usuario> findByEmail(String email);
 
-    /** Busca usuário ativo por email. */
     @Query("SELECT u FROM Usuario u WHERE u.email = :email AND u.ativo = true AND u.deletadoEm IS NULL")
     Optional<Usuario> findAtivoByEmail(@Param("email") String email);
 
@@ -24,8 +21,10 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
               AND u.ativo = true
               AND u.deletadoEm IS NULL
             """)
-    Optional<Usuario> findAtivoByIdAndClinicaId(@Param("id") Long id,
-                                                @Param("clinicaId") Long clinicaId);
+    Optional<Usuario> findAtivoByIdAndClinicaId(
+            @Param("id") Long id,
+            @Param("clinicaId") Long clinicaId
+    );
 
     @Query("""
             SELECT u FROM Usuario u
@@ -37,7 +36,21 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
             """)
     List<Usuario> findMedicosAtivosByClinicaId(@Param("clinicaId") Long clinicaId);
 
-    /** Busca usuários ativos de uma clínica. */
-    @Query("SELECT u FROM Usuario u WHERE u.clinica.id = :clinicaId AND u.ativo = true AND u.deletadoEm IS NULL")
+    @Query("""
+            SELECT u FROM Usuario u
+            WHERE u.clinica.id = :clinicaId
+              AND u.ativo = true
+              AND u.deletadoEm IS NULL
+            """)
     List<Usuario> findAtivosByClinicaId(@Param("clinicaId") Long clinicaId);
+
+    @Query("""
+            SELECT u FROM Usuario u
+            WHERE u.clinica.id = :clinicaId
+              AND u.ativo = true
+              AND u.adminInterno = false
+              AND u.deletadoEm IS NULL
+            ORDER BY u.nome ASC
+            """)
+    List<Usuario> findAtivosVisiveisByClinicaId(@Param("clinicaId") Long clinicaId);
 }
