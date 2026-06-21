@@ -23,8 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -36,7 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.clinic.slug=auth-test",
         "app.security.jwt.secret=test-only-secret-key-with-at-least-32-bytes",
         "app.security.jwt.expiration-ms=86400000",
-        "app.initial-users.enabled=false"
+        "app.initial-users.enabled=false",
+        "CORS_ALLOWED_ORIGINS=https://clinica-crm-fmna.vercel.app"
 })
 @Transactional
 class AuthSecurityIntegrationTest {
@@ -109,11 +112,58 @@ class AuthSecurityIntegrationTest {
     }
 
     @Test
+    void should_allow_production_frontend_cors_preflight_with_required_headers() throws Exception {
+        mockMvc.perform(options("/api/auth/login")
+                        .header("Origin", "https://clinica-crm-fmna.vercel.app")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header(
+                                "Access-Control-Request-Headers",
+                                "authorization,content-type,accept,origin,x-requested-with"
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        "Access-Control-Allow-Origin",
+                        "https://clinica-crm-fmna.vercel.app"
+                ))
+                .andExpect(header().string(
+                        "Access-Control-Allow-Methods",
+                        org.hamcrest.Matchers.allOf(
+                                org.hamcrest.Matchers.containsString("GET"),
+                                org.hamcrest.Matchers.containsString("POST"),
+                                org.hamcrest.Matchers.containsString("PUT"),
+                                org.hamcrest.Matchers.containsString("PATCH"),
+                                org.hamcrest.Matchers.containsString("DELETE"),
+                                org.hamcrest.Matchers.containsString("OPTIONS")
+                        )
+                ))
+                .andExpect(header().string(
+                        "Access-Control-Allow-Headers",
+                        org.hamcrest.Matchers.allOf(
+                                org.hamcrest.Matchers.containsStringIgnoringCase("Authorization"),
+                                org.hamcrest.Matchers.containsStringIgnoringCase("Content-Type"),
+                                org.hamcrest.Matchers.containsStringIgnoringCase("Accept"),
+                                org.hamcrest.Matchers.containsStringIgnoringCase("Origin"),
+                                org.hamcrest.Matchers.containsStringIgnoringCase("X-Requested-With")
+                        )
+                ))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+    }
+
+    @Test
     void should_return_unauthorized_when_sensitive_endpoint_has_no_token() throws Exception {
         mockMvc.perform(get("/api/agendamentos")
                         .param("inicio", "2026-06-22T00:00:00-03:00")
                         .param("fim", "2026-06-27T00:00:00-03:00"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_reach_whatsapp_webhook_without_crm_authentication() throws Exception {
+        mockMvc.perform(get("/api/webhooks/whatsapp/verify")
+                        .param("hub.mode", "subscribe")
+                        .param("hub.verify_token", "test-token")
+                        .param("hub.challenge", "challenge"))
+                .andExpect(status().isForbidden());
     }
 
     @Test

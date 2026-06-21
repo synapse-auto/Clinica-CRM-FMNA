@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -145,6 +146,45 @@ class DataSeederTest {
         seeder.run();
 
         verify(clinicaRepository, never()).findBySlug(anyString());
+        verify(usuarioRepository, never()).save(any());
+    }
+
+    @Test
+    void should_explain_required_format_when_initial_users_json_is_invalid() {
+        DataSeeder seeder = seeder(true, "[{\"email\":]");
+        when(clinicaRepository.findBySlug("fmna")).thenReturn(Optional.of(clinic()));
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                seeder::run
+        );
+
+        assertEquals(
+                "INITIAL_USERS_JSON possui formato inválido. Use JSON puro, sem Markdown ou mailto.",
+                exception.getMessage()
+        );
+        verify(usuarioRepository, never()).save(any());
+    }
+
+    @Test
+    void should_reject_markdown_email_before_creating_initial_user() {
+        DataSeeder seeder = seeder(true, """
+                [{
+                  "nome": "Admin Interno",
+                  "email": "[admin@local.test](mailto:admin@local.test)",
+                  "perfil": "GESTOR",
+                  "password": "SenhaInicial!2026",
+                  "adminInterno": true
+                }]
+                """);
+        when(clinicaRepository.findBySlug("fmna")).thenReturn(Optional.of(clinic()));
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                seeder::run
+        );
+
+        assertEquals("Email inválido em INITIAL_USERS_JSON", exception.getMessage());
         verify(usuarioRepository, never()).save(any());
     }
 

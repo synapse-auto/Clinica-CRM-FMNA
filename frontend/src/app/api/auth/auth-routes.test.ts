@@ -137,6 +137,48 @@ describe('auth BFF routes', () => {
     expect(body.token).toBeUndefined();
   });
 
+  it('should_return_clear_service_unavailable_when_backend_url_is_missing', async () => {
+    vi.stubEnv('BACKEND_API_URL', '');
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'http://public-fallback-must-not-be-used.test');
+    const fetchMock = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await login(new Request('http://localhost/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'gestora@clinica.local', senha: 'segredo-digitado' }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.message).toBe('Backend não configurado para autenticação.');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(
+      '[auth/login] BACKEND_API_URL não configurada.',
+    );
+  });
+
+  it('should_report_backend_unavailable_when_upstream_returns_server_error', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('Bad Gateway', {
+      status: 502,
+    })));
+
+    const response = await login(new Request('http://localhost/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'gestora@clinica.local', senha: 'segredo-digitado' }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.message).toBe('Backend de autenticação indisponível.');
+    expect(consoleError).toHaveBeenCalledWith(
+      '[auth/login] Backend respondeu com status 502.',
+    );
+  });
+
   it('should_replace_http_only_cookie_after_password_change_without_exposing_token', async () => {
     cookieStore.get.mockReturnValue({ value: 'jwt-before-change' });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({

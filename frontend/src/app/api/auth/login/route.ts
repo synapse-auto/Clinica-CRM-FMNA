@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
-import { authenticateWithBackend, readBackendLogin } from '@/lib/auth/backend-auth';
+import {
+  authenticateWithBackend,
+  BackendConfigurationError,
+  readBackendLogin,
+} from '@/lib/auth/backend-auth';
 import { routeAfterAuthentication } from '@/lib/auth/permissions';
 import { setSessionCookie } from '@/lib/auth/session-cookie';
 import { isAuthProfile } from '@/lib/auth/types';
@@ -21,17 +25,37 @@ export async function POST(request: Request) {
   let backendResponse: Response;
   try {
     backendResponse = await authenticateWithBackend(email, senha);
-  } catch {
+  } catch (error) {
+    if (error instanceof BackendConfigurationError) {
+      console.error('[auth/login] BACKEND_API_URL não configurada.');
+      return NextResponse.json(
+        { message: 'Backend não configurado para autenticação.' },
+        { status: 503 },
+      );
+    }
+    console.error('[auth/login] Falha ao conectar ao backend.');
     return NextResponse.json(
-      { message: 'Serviço de autenticação indisponível.' },
+      { message: 'Backend de autenticação indisponível.' },
       { status: 503 },
     );
   }
 
   if (!backendResponse.ok) {
-    const status = backendResponse.status === 401 ? 401 : 502;
+    if (backendResponse.status >= 500) {
+      console.error(`[auth/login] Backend respondeu com status ${backendResponse.status}.`);
+      return NextResponse.json(
+        { message: 'Backend de autenticação indisponível.' },
+        { status: 503 },
+      );
+    }
+
+    const status = backendResponse.status === 401 ? 401 : backendResponse.status;
     return NextResponse.json(
-      { message: status === 401 ? 'Credenciais inválidas.' : 'Não foi possível autenticar.' },
+      {
+        message: status === 401
+          ? 'Credenciais inválidas.'
+          : 'Backend recusou a solicitação de autenticação.',
+      },
       { status },
     );
   }

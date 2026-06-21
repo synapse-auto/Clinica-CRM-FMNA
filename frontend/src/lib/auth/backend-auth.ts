@@ -5,9 +5,18 @@ type BackendLoginResponse = AuthUser & {
 };
 
 function backendUrl() {
-  return process.env.BACKEND_API_URL
-    ?? process.env.NEXT_PUBLIC_API_BASE_URL
-    ?? 'http://localhost:8080';
+  const url = process.env.BACKEND_API_URL?.trim();
+  if (!url) {
+    throw new BackendConfigurationError();
+  }
+  return url.replace(/\/+$/, '');
+}
+
+export class BackendConfigurationError extends Error {
+  constructor() {
+    super('BACKEND_API_URL não configurada.');
+    this.name = 'BackendConfigurationError';
+  }
 }
 
 export async function authenticateWithBackend(

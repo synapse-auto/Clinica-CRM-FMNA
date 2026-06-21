@@ -13,6 +13,7 @@ import com.synapse.clinicafemina.repository.UsuarioRepository;
 import com.synapse.clinicafemina.security.PasswordPolicy;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @RequiredArgsConstructor
 public class DataSeeder implements CommandLineRunner {
+
+    private static final Pattern PLAIN_EMAIL = Pattern.compile(
+            "^[^\\s@\\[\\]()]+@[^\\s@\\[\\]()]+\\.[^\\s@\\[\\]()]+$"
+    );
 
     private final ClinicaRepository clinicaRepository;
     private final UsuarioRepository usuarioRepository;
@@ -90,7 +95,9 @@ public class DataSeeder implements CommandLineRunner {
                     new TypeReference<List<InitialUserDefinition>>() {}
             );
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("INITIAL_USERS_JSON possui formato inválido");
+            throw new IllegalStateException(
+                    "INITIAL_USERS_JSON possui formato inválido. Use JSON puro, sem Markdown ou mailto."
+            );
         }
     }
 
@@ -134,6 +141,7 @@ public class DataSeeder implements CommandLineRunner {
         if (isBlank(definition.nome()) || isBlank(definition.email()) || isBlank(definition.perfil())) {
             throw new IllegalStateException("Usuário inicial possui campos obrigatórios ausentes");
         }
+        validateEmail(definition.email());
         validatePassword(definition.password());
         if (Boolean.TRUE.equals(definition.adminInterno())
                 && !"GESTOR".equalsIgnoreCase(definition.perfil().trim())) {
@@ -144,6 +152,14 @@ public class DataSeeder implements CommandLineRunner {
     private void validatePassword(String password) {
         if (!PasswordPolicy.isStrong(password)) {
             throw new IllegalStateException("Senha inicial não atende aos requisitos mínimos de segurança");
+        }
+    }
+
+    private void validateEmail(String email) {
+        String normalizedEmail = email.trim();
+        if (normalizedEmail.toLowerCase(Locale.ROOT).contains("mailto:")
+                || !PLAIN_EMAIL.matcher(normalizedEmail).matches()) {
+            throw new IllegalStateException("Email inválido em INITIAL_USERS_JSON");
         }
     }
 
