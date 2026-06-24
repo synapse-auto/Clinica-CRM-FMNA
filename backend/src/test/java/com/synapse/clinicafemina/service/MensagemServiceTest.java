@@ -53,6 +53,7 @@ class MensagemServiceTest {
 
     private MensagemService service;
     private Atendimento atendimento;
+    private Usuario remetente;
 
     @BeforeEach
     void setUp() {
@@ -79,15 +80,15 @@ class MensagemServiceTest {
         atendimento.setPaciente(paciente);
         atendimento.setStatus("ATIVO");
 
-        Usuario remetente = new Recepcionista();
+        remetente = new Recepcionista();
         remetente.setId(99L);
         remetente.setClinica(clinica);
-        when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L))
-                .thenReturn(Optional.of(remetente));
     }
 
     @Test
     void should_persist_human_text_message_with_atendente_sender() {
+        when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L))
+                .thenReturn(Optional.of(remetente));
         when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(whatsappOutboundClient.enviarTexto("5544999990000", "Oi, tudo bem?"))
@@ -116,6 +117,8 @@ class MensagemServiceTest {
                 "image/png",
                 new byte[] {1, 2, 3}
         );
+        when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L))
+                .thenReturn(Optional.of(remetente));
         when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(whatsappOutboundClient.uploadMidia(any(), eq("image/png"), eq("exame.png")))
@@ -130,5 +133,58 @@ class MensagemServiceTest {
         mensagemCaptor.getAllValues().forEach(mensagem ->
                 assertEquals("ATENDENTE", mensagem.getRemetente()));
         verify(midiaMensagemRepository).save(any());
+    }
+
+    @Test
+    void should_download_media_successfully() {
+        byte[] content = new byte[] {1, 2, 3};
+        com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada mockBaixada = 
+                new com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada(content, "image/png");
+        when(whatsappOutboundClient.baixarMidia("media-id")).thenReturn(mockBaixada);
+
+        com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada result = service.baixarBinarioMidia("media-id");
+
+        org.junit.jupiter.api.Assertions.assertNotNull(result);
+        assertEquals(content, result.bytes());
+        assertEquals("image/png", result.mimeType());
+    }
+
+    @Test
+    void should_return_null_when_download_fails() {
+        when(whatsappOutboundClient.baixarMidia("media-id")).thenReturn(null);
+
+        com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada result = service.baixarBinarioMidia("media-id");
+
+        org.junit.jupiter.api.Assertions.assertNull(result);
+    }
+
+    @Test
+    void should_return_null_when_media_id_is_blank() {
+        org.junit.jupiter.api.Assertions.assertNull(service.baixarBinarioMidia(""));
+        org.junit.jupiter.api.Assertions.assertNull(service.baixarBinarioMidia(null));
+    }
+
+    @Test
+    void should_throw_not_found_exception_when_media_unauthorized_or_missing() {
+        when(midiaMensagemRepository.findAutorizada(100L, 30L, 9L)).thenReturn(Optional.empty());
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.synapse.clinicafemina.exception.NotFoundException.class,
+                () -> service.buscarMidia(30L, 100L, 9L)
+        );
+    }
+
+    @Test
+    void should_return_media_metadata_when_authorized() {
+        com.synapse.clinicafemina.domain.MidiaMensagem midia = new com.synapse.clinicafemina.domain.MidiaMensagem();
+        midia.setWhatsappMediaId("media-123");
+        midia.setMimeType("image/png");
+        when(midiaMensagemRepository.findAutorizada(100L, 30L, 9L)).thenReturn(Optional.of(midia));
+
+        com.synapse.clinicafemina.domain.MidiaMensagem result = service.buscarMidia(30L, 100L, 9L);
+
+        org.junit.jupiter.api.Assertions.assertNotNull(result);
+        assertEquals("media-123", result.getWhatsappMediaId());
+        assertEquals("image/png", result.getMimeType());
     }
 }

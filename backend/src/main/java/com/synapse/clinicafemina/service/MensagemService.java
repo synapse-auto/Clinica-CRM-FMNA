@@ -133,6 +133,18 @@ public class MensagemService {
                 .orElseThrow(() -> new NotFoundException("Mídia não encontrada"));
     }
 
+    public WhatsappOutboundClient.MidiaBaixada baixarBinarioMidia(String mediaId) {
+        if (mediaId == null || mediaId.isBlank()) {
+            return null;
+        }
+        try {
+            return whatsappOutboundClient.baixarMidia(mediaId);
+        } catch (Exception e) {
+            log.error("Erro ao baixar binário da mídia {}: tipoErro={}", mediaId, e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
     private Atendimento buscarAtendimentoAtivo(Long atendimentoId, Long clinicaId) {
         Atendimento atendimento = atendimentoRepository.findByIdAndClinicaId(atendimentoId, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));

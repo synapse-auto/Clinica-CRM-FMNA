@@ -201,4 +201,59 @@ public class WhatsappOutboundClient {
         log.error("Circuit breaker ativado para envio WhatsApp. tipoErro={}", t.getClass().getSimpleName());
         throw new RuntimeException("WhatsApp indisponivel (circuit breaker aberto)", t);
     }
+
+    public record MidiaBaixada(byte[] bytes, String mimeType) {}
+
+    /**
+     * Busca os metadados da mídia na Meta e faz o download do binário.
+     * Retorna um record MidiaBaixada contendo os bytes e o mimeType, ou null se falhar.
+     */
+    public MidiaBaixada baixarMidia(String mediaId) {
+        validarConfiguracao();
+        String urlMetadata = graphApiUrl + "/" + mediaId;
+        log.info("Buscando metadados da mídia {} na Meta", maskId(mediaId));
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> metadata = restClient.get()
+                    .uri(urlMetadata)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .retrieve()
+                    .body(Map.class);
+
+            if (metadata == null || !metadata.containsKey("url")) {
+                log.error("Metadados da mídia não contêm URL de download.");
+                return null;
+            }
+
+            String urlDownload = (String) metadata.get("url");
+            String mimeType = (String) metadata.get("mime_type");
+            log.info("Baixando binário da mídia na Meta");
+
+            byte[] bytes = restClient.get()
+                    .uri(urlDownload)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .retrieve()
+                    .body(byte[].class);
+
+            return new MidiaBaixada(bytes, mimeType);
+
+        } catch (RestClientResponseException e) {
+            log.error("Erro da Meta ao baixar mídia: status={}, response={}", e.getStatusCode(), e.getResponseBodyAsString());
+            return null;
+        } catch (Exception e) {
+            log.error("Erro inesperado ao baixar mídia da Meta: tipoErro={}", e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private String maskId(String id) {
+        if (id == null || id.isBlank()) {
+            return "vazio";
+        }
+        String trimmed = id.trim();
+        if (trimmed.length() <= 4) {
+            return "****";
+        }
+        return "****" + trimmed.substring(trimmed.length() - 4);
+    }
 }

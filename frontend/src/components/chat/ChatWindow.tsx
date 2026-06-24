@@ -155,23 +155,41 @@ function MessageBubble({ message }: { message: MensagemAtendimento }) {
 
 function MediaContent({ message }: { message: MensagemAtendimento }) {
   const media = message.midia;
+  const [error, setError] = useState(false);
+
   if (!media) return null;
+
+  if (error) {
+    const errorText = media.tipoMedia === 'IMAGEM'
+      ? 'Imagem indisponível'
+      : media.tipoMedia === 'AUDIO'
+        ? 'Áudio indisponível'
+        : 'Documento indisponível';
+    return <span className="italic text-clinic-muted">{errorText}</span>;
+  }
+
   if (media.tipoMedia === 'IMAGEM') {
     return (
       <a href={media.url} target="_blank" rel="noreferrer">
-        <Image
+        <img
           src={media.url}
           alt={media.nomeArquivo ?? 'Imagem recebida'}
-          width={320}
-          height={220}
-          unoptimized
+          onError={() => setError(true)}
           className="max-h-56 w-auto rounded-lg object-contain"
         />
       </a>
     );
   }
   if (media.tipoMedia === 'AUDIO') {
-    return <audio controls preload="none" src={media.url} className="max-w-full" />;
+    return (
+      <audio
+        controls
+        preload="none"
+        src={media.url}
+        onError={() => setError(true)}
+        className="max-w-full"
+      />
+    );
   }
   return (
     <a

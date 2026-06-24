@@ -149,7 +149,9 @@ async function getJson<T>(path: string): Promise<T> {
 async function fetchBackend(path: string, init: RequestInit = {}): Promise<Response> {
   const cookieStore = await cookies();
   const requestHeaders = new Headers(init.headers);
-  requestHeaders.set('Accept', 'application/json');
+  if (!requestHeaders.has('Accept')) {
+    requestHeaders.set('Accept', 'application/json');
+  }
 
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (token) {

@@ -7,6 +7,8 @@ import com.synapse.clinicafemina.dto.AtendimentoResumoDTO;
 import com.synapse.clinicafemina.dto.ConvenioReviewRequest;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
+import com.synapse.clinicafemina.domain.MidiaMensagem;
+import com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada;
 import com.synapse.clinicafemina.service.AtendimentoService;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.ConvenioReviewService;
@@ -17,6 +19,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -110,6 +114,28 @@ public class AtendimentoController {
             @RequestParam(required = false) String motivo
     ) {
         return atendimentoService.encerrar(id, clinicaId(), motivo);
+    }
+
+    @GetMapping("/{id}/mensagens/{mensagemId}/midia")
+    public ResponseEntity<byte[]> obterMidia(
+            @PathVariable Long id,
+            @PathVariable Long mensagemId
+    ) {
+        Long clinicaId = clinicaId();
+        MidiaMensagem midia = mensagemService.buscarMidia(id, mensagemId, clinicaId);
+        
+        MidiaBaixada baixada = mensagemService.baixarBinarioMidia(midia.getWhatsappMediaId());
+        if (baixada == null || baixada.bytes() == null || baixada.bytes().length == 0) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+        
+        String mime = baixada.mimeType() != null ? baixada.mimeType() : midia.getMimeType();
+        
+        return ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.parseMediaType(mime))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + midia.getNomeArquivo() + "\"")
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, must-revalidate")
+                .body(baixada.bytes());
     }
 
     private Long clinicaId() {
