@@ -1,5 +1,5 @@
 package com.synapse.clinicafemina.integration;
-
+ 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.service.RealtimeBroadcastService;
@@ -7,22 +7,23 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
-
+ 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-
+ 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class WhatsappInboundListener {
-
+ 
     private final WhatsappInboundMapper inboundMapper;
     private final ObjectMapper objectMapper;
     private final RealtimeBroadcastService broadcastService;
-
+ 
     @RabbitListener(queues = "whatsapp.inbound.queue")
     public void processarMensagem(byte[] rawBody) {
+        log.info("Iniciando processamento de payload inbound recebido.");
         try {
             Map<String, Object> payload = objectMapper.readValue(
                     rawBody, new TypeReference<Map<String, Object>>() {}
@@ -33,12 +34,15 @@ public class WhatsappInboundListener {
                     exception.getClass().getSimpleName());
         }
     }
-
+ 
     @SuppressWarnings("unchecked")
     private void despachar(Map<String, Object> payload) {
         List<Map<String, Object>> entries = (List<Map<String, Object>>) payload.get("entry");
-        if (entries == null) return;
-
+        if (entries == null) {
+            log.warn("Payload recebido não possui campo 'entry'.");
+            return;
+        }
+ 
         for (Map<String, Object> entry : entries) {
             List<Map<String, Object>> changes = (List<Map<String, Object>>) entry.get("changes");
             if (changes == null) continue;
@@ -49,15 +53,21 @@ public class WhatsappInboundListener {
                     .forEach(this::processarValue);
         }
     }
-
+ 
     @SuppressWarnings("unchecked")
     private void processarValue(Map<String, Object> value) {
         List<?> mensagens = (List<?>) value.get("messages");
-        if (mensagens != null && !mensagens.isEmpty()) {
+        int numMensagens = mensagens != null ? mensagens.size() : 0;
+ 
+        List<Map<String, Object>> statuses = (List<Map<String, Object>>) value.get("statuses");
+        int numStatus = statuses != null ? statuses.size() : 0;
+ 
+        log.info("Processando payload de eventos do WhatsApp: mensagens={}, status_updates={}", numMensagens, numStatus);
+ 
+        if (numMensagens > 0) {
             executarSeguro(() -> inboundMapper.processarMensagemTexto(value), "mensagem inbound");
         }
-
-        List<Map<String, Object>> statuses = (List<Map<String, Object>>) value.get("statuses");
+ 
         if (statuses == null) return;
         statuses.forEach(status -> executarSeguro(
                 () -> inboundMapper.processarStatusUpdate(value, status)
@@ -71,7 +81,7 @@ public class WhatsappInboundListener {
                 "status WhatsApp"
         ));
     }
-
+ 
     private void executarSeguro(Runnable operacao, String contexto) {
         try {
             operacao.run();

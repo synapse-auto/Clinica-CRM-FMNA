@@ -29,6 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -164,6 +165,26 @@ class AuthSecurityIntegrationTest {
                         .param("hub.verify_token", "test-token")
                         .param("hub.challenge", "challenge"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_verify_whatsapp_webhook_on_root_path_with_valid_token() throws Exception {
+        mockMvc.perform(get("/api/webhooks/whatsapp")
+                        .param("hub.mode", "subscribe")
+                        .param("hub.verify_token", "test")
+                        .param("hub.challenge", "challenge-root"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("challenge-root"));
+    }
+
+    @Test
+    void should_verify_whatsapp_webhook_on_legacy_verify_path_with_valid_token() throws Exception {
+        mockMvc.perform(get("/api/webhooks/whatsapp/verify")
+                        .param("hub.mode", "subscribe")
+                        .param("hub.verify_token", "test")
+                        .param("hub.challenge", "challenge-legacy"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("challenge-legacy"));
     }
 
     @Test

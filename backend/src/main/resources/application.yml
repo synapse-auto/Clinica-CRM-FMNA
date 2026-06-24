@@ -32,7 +32,7 @@ app:
     slug: ${CLINIC_SLUG:}
     name: ${CLINIC_NAME:Clínica Femina CRM}
     external-provider: ${EXTERNAL_PROVIDER:DARWIN}
-    whatsapp-phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:}
+    whatsapp-phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:${META_WHATSAPP_PHONE_NUMBER_ID:${APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID:}}}
 
   security:
     jwt:
@@ -53,11 +53,12 @@ app:
     virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
 
   whatsapp:
-    enabled: ${WHATSAPP_ENABLED:false}
-    verify-token: ${WHATSAPP_VERIFY_TOKEN:}
-    app-secret: ${WHATSAPP_APP_SECRET:}
-    access-token: ${WHATSAPP_ACCESS_TOKEN:}
-    phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:}
+    enabled: ${WHATSAPP_ENABLED:${APP_WHATSAPP_ENABLED:false}}
+    verify-token: ${WHATSAPP_VERIFY_TOKEN:${META_WHATSAPP_VERIFY_TOKEN:}}
+    app-secret: ${WHATSAPP_APP_SECRET:${META_WHATSAPP_APP_SECRET:}}
+    access-token: ${WHATSAPP_ACCESS_TOKEN:${META_WHATSAPP_ACCESS_TOKEN:}}
+    phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:${META_WHATSAPP_PHONE_NUMBER_ID:${APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID:}}}
+    business-account-id: ${WHATSAPP_BUSINESS_ACCOUNT_ID:}
     graph-api-url: ${WHATSAPP_GRAPH_API_URL:https://graph.facebook.com/v20.0}
 
   darwin:
