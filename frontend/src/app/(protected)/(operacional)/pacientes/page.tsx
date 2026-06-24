@@ -1,44 +1,26 @@
 import {
   Activity,
-  Filter,
-  Grid2X2,
   Mail,
   Phone,
-  Search,
-  UserPlus,
   Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { DemoTable } from '@/components/demo/DemoTable';
 import { StatusBadge } from '@/components/demo/StatusBadge';
-import {
-  demoPacientes,
-  demoPacientesResumo,
-  type DemoPaciente,
-} from '@/mocks/demoOperacional';
+import { getPacientes } from '@/services/backend';
+import type { PacienteResumo } from '@/types/paciente';
 
-const avatarTones = {
-  green: 'bg-clinic-success text-white',
-  blue: 'bg-clinic-blue text-white',
-  pink: 'bg-clinic-pink text-white',
-  orange: 'bg-clinic-orange text-white',
-  purple: 'bg-clinic-indigo text-white',
-};
+export default async function PacientesPage() {
+  let pacientes: PacienteResumo[] = [];
+  let erroCarregamento: string | null = null;
 
-const tagTones: Record<string, string> = {
-  Cirurgia: 'bg-clinic-primary/15 text-clinic-primary',
-  Particular: 'bg-clinic-success/15 text-clinic-success',
-  'Consulta Pré-natal': 'bg-clinic-blue/15 text-clinic-blue',
-  'Plano de Saúde': 'bg-clinic-orange/15 text-clinic-orange',
-  'Alta Prioridade': 'bg-clinic-danger/15 text-clinic-danger',
-  'Novo Paciente': 'bg-clinic-indigo/15 text-clinic-indigo',
-  'Follow-up': 'bg-clinic-pink/15 text-clinic-pink',
-  Retorno: 'bg-clinic-orange/15 text-clinic-orange',
-  VIP: 'bg-clinic-orange/15 text-clinic-orange',
-};
+  try {
+    pacientes = await getPacientes();
+  } catch {
+    erroCarregamento = 'Não foi possível carregar os pacientes. Verifique a conexão com o servidor.';
+  }
 
-export default function PacientesPage() {
-  const status = demoPacientesResumo.status;
+  const statusCount = contarStatus(pacientes);
 
   return (
     <div className="h-full overflow-auto bg-clinic-canvas p-4 custom-scrollbar">
@@ -46,38 +28,16 @@ export default function PacientesPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-[17px] font-extrabold leading-6 text-clinic-text">Pacientes</h1>
-            <p className="text-[10px] text-clinic-muted">{demoPacientesResumo.total} pacientes</p>
+            <p className="text-[10px] text-clinic-muted">{pacientes.length} pacientes</p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <HeaderButton icon={Grid2X2} label="Ver em Kanban" />
-            <HeaderButton icon={Filter} label="Filtros" />
-            <button
-              type="button"
-              className="flex h-8 items-center gap-2 rounded-lg bg-clinic-primary px-3 text-[10px] font-bold text-white shadow-sm transition hover:bg-clinic-primary-strong"
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-              Novo Paciente
-            </button>
-          </div>
-        </div>
-
-        <label className="relative mt-3 block max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-clinic-muted" />
-          <input
-            type="search"
-            placeholder="Buscar por nome, telefone ou e-mail..."
-            className="h-9 w-full rounded-lg border border-clinic-border bg-clinic-input pl-9 pr-3 text-[10px] text-clinic-text outline-none transition placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/10"
-          />
-        </label>
-
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <FilterChip label="Em Atendimento" value={status.emAtendimento} />
-          <FilterChip label="Agendado" value={status.agendado} />
-          <FilterChip label="Follow UP" value={status.followUp} />
-          <FilterChip label="Finalizado" value={status.finalizado} />
         </div>
       </header>
+
+      {erroCarregamento ? (
+        <p role="alert" className="mb-3 rounded-lg border border-clinic-danger/30 bg-clinic-danger/10 px-3 py-2 text-[10px] font-semibold text-clinic-danger">
+          {erroCarregamento}
+        </p>
+      ) : null}
 
       <div className="mb-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_180px]">
         <section className="flex min-h-[64px] flex-wrap items-center gap-3 rounded-xl border border-clinic-border bg-clinic-surface px-4 py-3 shadow-[0_1px_2px_rgba(4,32,36,0.04)]">
@@ -85,105 +45,72 @@ export default function PacientesPage() {
             <Activity className="h-4 w-4 text-clinic-primary" />
             Status Atual
           </div>
-          <StatusCount tone="green" value={status.emAtendimento} label="Em Atendimento" />
-          <StatusCount tone="blue" value={status.agendado} label="Agendados" />
-          <StatusCount tone="orange" value={status.followUp} label="Follow UP" />
-          <StatusCount tone="slate" value={status.finalizado} label="Finalizados" />
+          <StatusBadge tone="green">{`${statusCount.emAtendimento} Em Atendimento`}</StatusBadge>
+          <StatusBadge tone="blue">{`${statusCount.agendado} Agendados`}</StatusBadge>
+          <StatusBadge tone="orange">{`${statusCount.outros} Outros`}</StatusBadge>
+          <StatusBadge tone="slate">{`${statusCount.finalizado} Finalizados`}</StatusBadge>
         </section>
 
         <SummaryCard
           icon={Users}
-          value={demoPacientesResumo.total.toString()}
+          value={pacientes.length.toString()}
           label="Total de Pacientes"
         />
       </div>
 
-      <DemoTable
-        data={demoPacientes}
-        getKey={(item) => item.id}
-        columns={[
-          {
-            key: 'contato',
-            label: 'Contato',
-            className: 'min-w-[260px] w-[27%]',
-            render: (item) => <PatientContact patient={item} />,
-          },
-          {
-            key: 'status',
-            label: 'Status',
-            className: 'min-w-[130px] w-[14%]',
-            render: (item) => (
-              <StatusBadge tone={patientStatusTone(item.status)}>{item.status}</StatusBadge>
-            ),
-          },
-          {
-            key: 'telefone',
-            label: 'Telefone',
-            className: 'min-w-[145px] w-[15%]',
-            render: (item) => (
-              <span className="flex items-center gap-1.5 whitespace-nowrap font-semibold text-clinic-text">
-                <Phone className="h-3 w-3 text-clinic-muted" />
-                {item.telefone}
-              </span>
-            ),
-          },
-          {
-            key: 'tags',
-            label: 'Tags',
-            className: 'min-w-[245px] w-[25%]',
-            render: (item) => <PatientTags tags={item.tags} />,
-          },
-          {
-            key: 'atendente',
-            label: 'Atendente',
-            className: 'min-w-[115px] w-[9%]',
-            render: (item) => <Attendant patient={item} />,
-          },
-        ]}
-      />
+      {pacientes.length === 0 && !erroCarregamento ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-clinic-border bg-clinic-surface py-16 text-center">
+          <Users className="mb-3 h-10 w-10 text-clinic-muted" />
+          <p className="text-[12px] font-bold text-clinic-text">Nenhum paciente encontrado</p>
+          <p className="mt-1 text-[10px] text-clinic-muted">
+            Os pacientes serão importados automaticamente após a sincronização com o sistema clínico.
+          </p>
+        </div>
+      ) : (
+        <DemoTable
+          data={pacientes}
+          getKey={(item) => item.id}
+          columns={[
+            {
+              key: 'contato',
+              label: 'Paciente',
+              className: 'min-w-[260px] w-[30%]',
+              render: (item) => <PatientContact paciente={item} />,
+            },
+            {
+              key: 'status',
+              label: 'Status',
+              className: 'min-w-[130px] w-[14%]',
+              render: (item) => (
+                <StatusBadge tone={statusTone(item.status)}>{formatStatus(item.status)}</StatusBadge>
+              ),
+            },
+            {
+              key: 'telefone',
+              label: 'Telefone',
+              className: 'min-w-[160px] w-[18%]',
+              render: (item) => (
+                <span className="flex items-center gap-1.5 whitespace-nowrap font-semibold text-clinic-text">
+                  <Phone className="h-3 w-3 text-clinic-muted" />
+                  {item.telefone ?? '—'}
+                </span>
+              ),
+            },
+            {
+              key: 'origem',
+              label: 'Origem',
+              className: 'min-w-[110px] w-[12%]',
+              render: (item) => (
+                <span className="text-[9px] text-clinic-muted">
+                  {item.externalSource ?? 'Manual'}
+                </span>
+              ),
+            },
+          ]}
+        />
+      )}
     </div>
   );
-}
-
-function HeaderButton({
-  icon: Icon,
-  label,
-}: {
-  icon: LucideIcon;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      className="flex h-8 items-center gap-2 rounded-lg border border-clinic-border bg-clinic-surface px-3 text-[10px] font-bold text-clinic-text transition hover:bg-clinic-hover"
-    >
-      <Icon className="h-3.5 w-3.5 text-clinic-muted" />
-      {label}
-    </button>
-  );
-}
-
-function FilterChip({ label, value }: { label: string; value: number }) {
-  return (
-    <button
-      type="button"
-      className="rounded-full border border-clinic-border bg-clinic-surface px-2.5 py-1 text-[9px] font-semibold text-clinic-muted transition hover:border-clinic-primary/40 hover:text-clinic-text"
-    >
-      {label} {value}
-    </button>
-  );
-}
-
-function StatusCount({
-  tone,
-  value,
-  label,
-}: {
-  tone: 'green' | 'blue' | 'orange' | 'slate';
-  value: number;
-  label: string;
-}) {
-  return <StatusBadge tone={tone}>{`${value} ${label}`}</StatusBadge>;
 }
 
 function SummaryCard({
@@ -208,62 +135,25 @@ function SummaryCard({
   );
 }
 
-function PatientContact({ patient }: { patient: DemoPaciente }) {
+function PatientContact({ paciente }: { paciente: PacienteResumo }) {
   return (
     <div className="flex items-center gap-2.5">
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-clinic-primary/20 text-[10px] font-extrabold text-clinic-primary">
-        {patientInitials(patient.nome)}
+        {iniciais(paciente.nome)}
       </div>
       <div className="min-w-0">
-        <p className="truncate text-[10px] font-extrabold text-clinic-text">{patient.nome}</p>
+        <p className="truncate text-[10px] font-extrabold text-clinic-text">{paciente.nome}</p>
         <p className="mt-0.5 flex items-center gap-1 truncate text-[8px] text-clinic-muted">
           <Mail className="h-2.5 w-2.5 shrink-0" />
-          {patient.email}
+          {paciente.externalId ? `ID ${paciente.externalId}` : 'Sem ID externo'}
         </p>
       </div>
     </div>
   );
 }
 
-function PatientTags({ tags }: { tags: string[] }) {
-  return (
-    <div className="flex items-center gap-1 overflow-hidden">
-      {tags.slice(0, 2).map((tag) => (
-        <span
-          key={tag}
-          className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[8px] font-bold ${
-            tagTones[tag] ?? 'bg-clinic-muted/10 text-clinic-muted'
-          }`}
-        >
-          {tag}
-        </span>
-      ))}
-      {tags.length > 2 ? (
-        <span className="rounded-full bg-clinic-muted/10 px-2 py-0.5 text-[8px] font-bold text-clinic-muted">
-          +{tags.length - 2}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function Attendant({ patient }: { patient: DemoPaciente }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span
-        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[8px] font-extrabold ${
-          avatarTones[patient.atendenteTone]
-        }`}
-      >
-        {patient.atendenteIniciais}
-      </span>
-      <span className="truncate text-[9px] font-semibold text-clinic-text">{patient.atendente}</span>
-    </div>
-  );
-}
-
-function patientInitials(name: string) {
-  return name
+function iniciais(nome: string) {
+  return nome
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -271,9 +161,32 @@ function patientInitials(name: string) {
     .join('');
 }
 
-function patientStatusTone(status: DemoPaciente['status']) {
-  if (status === 'Em Atendimento') return 'green';
-  if (status === 'Agendado') return 'blue';
-  if (status === 'Follow UP') return 'orange';
-  return 'slate';
+function formatStatus(status: string) {
+  const map: Record<string, string> = {
+    EM_ATENDIMENTO: 'Em Atendimento',
+    AGENDADO: 'Agendado',
+    FINALIZADO: 'Finalizado',
+    INATIVO: 'Inativo',
+  };
+  return map[status] ?? status;
+}
+
+function statusTone(status: string): 'green' | 'blue' | 'orange' | 'slate' {
+  if (status === 'EM_ATENDIMENTO') return 'green';
+  if (status === 'AGENDADO') return 'blue';
+  if (status === 'FINALIZADO') return 'slate';
+  return 'orange';
+}
+
+function contarStatus(pacientes: PacienteResumo[]) {
+  return pacientes.reduce(
+    (acc, p) => {
+      if (p.status === 'EM_ATENDIMENTO') acc.emAtendimento++;
+      else if (p.status === 'AGENDADO') acc.agendado++;
+      else if (p.status === 'FINALIZADO') acc.finalizado++;
+      else acc.outros++;
+      return acc;
+    },
+    { emAtendimento: 0, agendado: 0, finalizado: 0, outros: 0 },
+  );
 }

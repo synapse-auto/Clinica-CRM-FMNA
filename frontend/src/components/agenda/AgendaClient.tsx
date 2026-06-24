@@ -5,7 +5,6 @@ import {
   Activity,
   CalendarDays,
   CalendarRange,
-  Plus,
   Stethoscope,
   UserRoundCheck,
 } from 'lucide-react';
@@ -14,17 +13,10 @@ import { DonutChart } from '@/components/demo/DonutChart';
 import { GroupedBarChart } from '@/components/demo/GroupedBarChart';
 import { MetricCard } from '@/components/demo/MetricCard';
 import { PageHeader } from '@/components/demo/PageHeader';
-import {
-  cancelAgendamento,
-  createAgendamento,
-  updateAgendamento,
-} from '@/services/agendamentos';
 import type {
   Agendamento,
-  AgendamentoPayload,
   AgendaOptions,
 } from '@/types/agendamento';
-import { AgendamentoModal } from './AgendamentoModal';
 
 type AgendaClientProps = {
   initialAppointments: Agendamento[];
@@ -39,11 +31,8 @@ export function AgendaClient({
   initialError,
   weekStart,
 }: AgendaClientProps) {
-  const [appointments, setAppointments] = useState(initialAppointments);
+  const [appointments] = useState(initialAppointments);
   const [selectedDoctor, setSelectedDoctor] = useState<number | 'all'>('all');
-  const [modalAppointment, setModalAppointment] = useState<Agendamento | null | undefined>();
-  const [busy, setBusy] = useState(false);
-  const [operationError, setOperationError] = useState<string | null>(null);
   const weekDays = useMemo(() => buildWeekDays(weekStart), [weekStart]);
   const activeAppointments = appointments.filter((item) => item.status !== 'CANCELADO');
   const visibleAppointments = selectedDoctor === 'all'
@@ -53,73 +42,25 @@ export function AgendaClient({
   const donutItems = buildDonutItems(activeAppointments);
   const barData = buildBarData(activeAppointments, initialOptions);
 
-  async function handleSave(payload: AgendamentoPayload) {
-    setBusy(true);
-    setOperationError(null);
-    try {
-      const saved = modalAppointment
-        ? await updateAgendamento(modalAppointment.id, payload)
-        : await createAgendamento(payload);
-      setAppointments((current) => upsertAppointment(current, saved));
-      setModalAppointment(undefined);
-    } catch (error) {
-      setOperationError(getErrorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleCancel(motivo: string) {
-    if (!modalAppointment) {
-      return;
-    }
-    setBusy(true);
-    setOperationError(null);
-    try {
-      const canceled = await cancelAgendamento(modalAppointment.id, motivo);
-      setAppointments((current) => upsertAppointment(current, canceled));
-      setModalAppointment(undefined);
-    } catch (error) {
-      setOperationError(getErrorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function openModal(appointment: Agendamento | null) {
-    setOperationError(null);
-    setModalAppointment(appointment);
-  }
-
   return (
     <div className="h-full overflow-auto bg-clinic-canvas p-4 custom-scrollbar">
       <PageHeader
         title="Agenda"
-        description="Gestão de agendamentos da semana"
+        description="Agendamentos da semana (somente leitura)"
         actions={
-          <>
-            <button
-              type="button"
-              className="flex h-8 items-center gap-2 rounded-lg border border-clinic-border bg-clinic-surface px-3 text-[10px] font-bold text-clinic-text"
-            >
-              <CalendarRange className="h-3.5 w-3.5 text-clinic-primary" />
-              Semana atual
-            </button>
-            <button
-              type="button"
-              onClick={() => openModal(null)}
-              className="flex h-8 items-center gap-2 rounded-lg bg-clinic-primary px-3 text-[10px] font-bold text-white transition hover:bg-clinic-primary-strong"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Novo agendamento
-            </button>
-          </>
+          <button
+            type="button"
+            className="flex h-8 items-center gap-2 rounded-lg border border-clinic-border bg-clinic-surface px-3 text-[10px] font-bold text-clinic-text"
+          >
+            <CalendarRange className="h-3.5 w-3.5 text-clinic-primary" />
+            Semana atual
+          </button>
         }
       />
 
-      {initialError || (operationError && modalAppointment === undefined) ? (
+      {initialError ? (
         <p role="alert" className="mb-3 rounded-lg border border-clinic-danger/30 bg-clinic-danger/10 px-3 py-2 text-[10px] font-semibold text-clinic-danger">
-          {operationError ?? initialError}
+          {initialError}
         </p>
       ) : null}
 
@@ -146,7 +87,6 @@ export function AgendaClient({
             <WeekGrid
               days={weekDays}
               appointments={visibleAppointments}
-              onSelect={openModal}
             />
           </div>
         </DemoCard>
@@ -161,20 +101,6 @@ export function AgendaClient({
       <DemoCard className="mt-3" title="Agenda por Médico" description="Distribuição de atendimentos na semana">
         <GroupedBarChart height={230} labels={barData.labels} series={barData.series} />
       </DemoCard>
-
-      {modalAppointment !== undefined ? (
-        <AgendamentoModal
-          key={modalAppointment?.id ?? 'new'}
-          appointment={modalAppointment}
-          options={initialOptions}
-          weekStart={weekStart}
-          busy={busy}
-          error={operationError}
-          onClose={() => setModalAppointment(undefined)}
-          onSave={handleSave}
-          onCancel={handleCancel}
-        />
-      ) : null}
     </div>
   );
 }
@@ -210,11 +136,9 @@ function DoctorFilters({
 function WeekGrid({
   days,
   appointments,
-  onSelect,
 }: {
   days: Array<{ date: string; label: string }>;
   appointments: Agendamento[];
-  onSelect: (appointment: Agendamento) => void;
 }) {
   return (
     <div className="overflow-x-auto custom-scrollbar">
@@ -230,7 +154,7 @@ function WeekGrid({
               </p>
               <div className="space-y-1.5">
                 {dayAppointments.map((appointment) => (
-                  <AppointmentCard key={appointment.id} appointment={appointment} onSelect={onSelect} />
+                  <AppointmentCard key={appointment.id} appointment={appointment} />
                 ))}
                 {dayAppointments.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-clinic-border px-2 py-3 text-center text-[8px] text-clinic-muted">
@@ -248,19 +172,14 @@ function WeekGrid({
 
 function AppointmentCard({
   appointment,
-  onSelect,
 }: {
   appointment: Agendamento;
-  onSelect: (appointment: Agendamento) => void;
 }) {
   const canceled = appointment.status === 'CANCELADO';
-  const status = canceled ? 'Cancelado' : 'Agendado';
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(appointment)}
-      aria-label={`${appointment.pacienteNome}, ${appointment.servicoNome}, ${formatTime(appointment.dataHoraInicio)}, ${status}`}
-      className={`min-h-12 w-full rounded-lg px-2.5 py-2 text-left transition hover:ring-1 hover:ring-clinic-primary ${
+    <div
+      aria-label={`${appointment.pacienteNome}, ${appointment.servicoNome}, ${formatTime(appointment.dataHoraInicio)}`}
+      className={`min-h-12 w-full rounded-lg px-2.5 py-2 ${
         canceled ? 'bg-clinic-danger/10 opacity-70' : 'bg-clinic-cyan/15'
       }`}
     >
@@ -271,7 +190,7 @@ function AppointmentCard({
         {formatTime(appointment.dataHoraInicio)} · {appointment.medicoNome ?? 'Sem profissional'}
       </p>
       {canceled ? <span className="text-[7px] font-bold uppercase text-clinic-danger">Cancelado</span> : null}
-    </button>
+    </div>
   );
 }
 
@@ -358,14 +277,4 @@ function formatTime(value: string) {
   }).format(new Date(value));
 }
 
-function upsertAppointment(current: Agendamento[], saved: Agendamento) {
-  const exists = current.some((item) => item.id === saved.id);
-  const next = exists
-    ? current.map((item) => item.id === saved.id ? saved : item)
-    : [...current, saved];
-  return next.sort((left, right) => left.dataHoraInicio.localeCompare(right.dataHoraInicio));
-}
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Não foi possível salvar o agendamento';
-}

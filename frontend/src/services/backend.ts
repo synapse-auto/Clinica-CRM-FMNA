@@ -23,6 +23,7 @@ import type {
   AtendimentoPage,
   AtendimentoResumo,
 } from '@/types/atendimento';
+import type { PacienteResumo } from '@/types/paciente';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/constants';
 
 const API_BASE_URL =
@@ -96,6 +97,10 @@ export async function getAtendimentosIniciais(): Promise<AtendimentoPage<Atendim
 
 export async function getAtendentesAtivos(): Promise<AtendenteOption[]> {
   return getJson<AtendenteOption[]>('/api/atendimentos/atendentes');
+}
+
+export async function getPacientes(): Promise<PacienteResumo[]> {
+  return getJson<PacienteResumo[]>('/api/pacientes');
 }
 
 export async function forwardBackendRequest(
