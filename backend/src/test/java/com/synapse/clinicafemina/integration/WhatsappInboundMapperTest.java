@@ -19,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.core.env.Environment;
 
 import java.util.List;
 import java.util.Map;
@@ -61,6 +62,9 @@ class WhatsappInboundMapperTest {
     @Mock
     private AtendimentoNotificationService notificationService;
 
+    @Mock
+    private Environment environment;
+
     private WhatsappInboundMapper mapper;
     private Clinica clinica;
 
@@ -75,7 +79,8 @@ class WhatsappInboundMapperTest {
                 rabbitTemplate,
                 n8nEventService,
                 notificationService,
-                new WhatsappInboundPayloadParser()
+                new WhatsappInboundPayloadParser(),
+                environment
         );
 
         clinica = new Clinica();
@@ -191,6 +196,70 @@ class WhatsappInboundMapperTest {
 
         verify(midiaMensagemRepository).save(any());
         verify(notificationService).notificarNovaMensagem(eq(atendimento), any());
+    }
+
+    @Test
+    void should_resolve_clinic_when_phone_id_is_already_in_db() {
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000")).thenReturn(Optional.empty());
+        when(pacienteRepository.save(any(Paciente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(atendimentoRepository.findAtivo(2L, null)).thenReturn(Optional.empty());
+        when(atendimentoRepository.existeEncerradoDesde(any(), any(), any())).thenReturn(false);
+        when(atendimentoRepository.save(any(Atendimento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(validValuePayload("phone-ultra"));
+
+        verify(clinicaRepository, never()).findBySlug(any());
+        verify(clinicaRepository, never()).save(any());
+    }
+
+    @Test
+    void should_resolve_and_update_clinic_when_phone_id_matches_env_but_missing_in_db() {
+        org.springframework.test.util.ReflectionTestUtils.setField(mapper, "resolvedPhoneId", "env-phone-id");
+        when(clinicaRepository.findByWhatsappPhoneNumberId("env-phone-id")).thenReturn(Optional.empty());
+        when(environment.getProperty("app.clinic.slug", "ultramedical")).thenReturn("ultramedical");
+        when(clinicaRepository.findBySlug("ultramedical")).thenReturn(Optional.of(clinica));
+        
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000")).thenReturn(Optional.empty());
+        when(pacienteRepository.save(any(Paciente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(atendimentoRepository.findAtivo(2L, null)).thenReturn(Optional.empty());
+        when(atendimentoRepository.existeEncerradoDesde(any(), any(), any())).thenReturn(false);
+        when(atendimentoRepository.save(any(Atendimento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(validValuePayload("env-phone-id"));
+
+        verify(clinicaRepository).save(clinica);
+        assertEquals("env-phone-id", clinica.getWhatsappPhoneNumberId());
+    }
+
+    @Test
+    void should_fail_when_phone_id_does_not_match_env_and_missing_in_db() {
+        org.springframework.test.util.ReflectionTestUtils.setField(mapper, "resolvedPhoneId", "env-phone-id");
+        when(clinicaRepository.findByWhatsappPhoneNumberId("wrong-phone-id")).thenReturn(Optional.empty());
+        when(environment.getProperty("app.clinic.slug", "ultramedical")).thenReturn("ultramedical");
+
+        mapper.processarMensagemTexto(validValuePayload("wrong-phone-id"));
+
+        verify(clinicaRepository, never()).findBySlug(any());
+        verify(clinicaRepository, never()).save(any());
+        verify(pacienteRepository, never()).save(any());
+    }
+
+    @Test
+    void should_fail_when_clinic_by_slug_not_found_on_fallback() {
+        org.springframework.test.util.ReflectionTestUtils.setField(mapper, "resolvedPhoneId", "env-phone-id");
+        when(clinicaRepository.findByWhatsappPhoneNumberId("env-phone-id")).thenReturn(Optional.empty());
+        when(environment.getProperty("app.clinic.slug", "ultramedical")).thenReturn("ultramedical");
+        when(clinicaRepository.findBySlug("ultramedical")).thenReturn(Optional.empty());
+
+        mapper.processarMensagemTexto(validValuePayload("env-phone-id"));
+
+        verify(clinicaRepository, never()).save(any());
+        verify(pacienteRepository, never()).save(any());
     }
 
     private Map<String, Object> validValuePayload(String phoneNumberId) {

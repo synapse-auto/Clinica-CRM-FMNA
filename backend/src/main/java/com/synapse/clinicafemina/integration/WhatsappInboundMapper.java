@@ -18,6 +18,8 @@ import com.synapse.clinicafemina.service.N8nEventService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
  
@@ -45,6 +47,19 @@ public class WhatsappInboundMapper {
     private final N8nEventService n8nEventService;
     private final AtendimentoNotificationService notificationService;
     private final WhatsappInboundPayloadParser payloadParser;
+    private final Environment environment;
+
+    @Value("${WHATSAPP_PHONE_NUMBER_ID:}")
+    private String envWhatsappPhoneId;
+
+    @Value("${META_WHATSAPP_PHONE_NUMBER_ID:}")
+    private String envMetaWhatsappPhoneId;
+
+    @Value("${APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID:}")
+    private String envAppClinicPhoneId;
+
+    @Value("${app.whatsapp.phone-number-id:}")
+    private String resolvedPhoneId;
  
     @Transactional
     public void processarMensagemTexto(Map<String, Object> value) {
@@ -226,9 +241,46 @@ public class WhatsappInboundMapper {
             log.warn("Payload WhatsApp sem phone_number_id");
             return Optional.empty();
         }
+
+        log.info("Diagnóstico Phone Number ID: Payload (fim) = {}, " +
+                 "Resolved Config (fim) = {}, " +
+                 "WHATSAPP_PHONE_NUMBER_ID (fim) = {}, " +
+                 "META_WHATSAPP_PHONE_NUMBER_ID (fim) = {}, " +
+                 "APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID (fim) = {}",
+                 maskId(phoneNumberId),
+                 maskId(resolvedPhoneId),
+                 maskId(envWhatsappPhoneId),
+                 maskId(envMetaWhatsappPhoneId),
+                 maskId(envAppClinicPhoneId));
+
         Optional<Clinica> clinica = clinicaRepository.findByWhatsappPhoneNumberId(phoneNumberId);
         if (clinica.isEmpty()) {
-            log.warn("Payload WhatsApp para phone_number_id não configurado");
+            boolean matchesEnv = phoneNumberId.equals(resolvedPhoneId)
+                    || phoneNumberId.equals(envWhatsappPhoneId)
+                    || phoneNumberId.equals(envMetaWhatsappPhoneId)
+                    || phoneNumberId.equals(envAppClinicPhoneId);
+
+            String clinicSlug = environment.getProperty("app.clinic.slug", "ultramedical");
+
+            if (matchesEnv) {
+                Optional<Clinica> clinicaFallback = clinicaRepository.findBySlug(clinicSlug);
+                if (clinicaFallback.isPresent()) {
+                    Clinica c = clinicaFallback.get();
+                    log.info("Mapeamento da clínica resolvida por fallback (slug: {}). Atualizando whatsapp_phone_number_id para: {}", 
+                             c.getSlug(), maskId(phoneNumberId));
+                    c.setWhatsappPhoneNumberId(phoneNumberId);
+                    clinicaRepository.save(c);
+                    clinica = Optional.of(c);
+                } else {
+                    log.error("Clínica de slug '{}' não encontrada no banco durante o fallback.", clinicSlug);
+                }
+            } else {
+                log.warn("Payload WhatsApp para phone_number_id {} não configurado. " +
+                         "Não coincide com as envs (resolved={}, env={}, meta={}, appClinic={}). " +
+                         "Clínica fallback considerada: '{}'. Motivo: ID recebido não coincide com nenhum ID configurado no ambiente.",
+                         maskId(phoneNumberId), maskId(resolvedPhoneId), maskId(envWhatsappPhoneId),
+                         maskId(envMetaWhatsappPhoneId), maskId(envAppClinicPhoneId), clinicSlug);
+            }
         }
         return clinica;
     }
@@ -309,6 +361,17 @@ public class WhatsappInboundMapper {
             return "****";
         }
         return "******" + normal.substring(normal.length() - 4);
+    }
+
+    private String maskId(String id) {
+        if (id == null || id.isBlank()) {
+            return "vazio";
+        }
+        String trimmed = id.trim();
+        if (trimmed.length() <= 4) {
+            return "****";
+        }
+        return "****" + trimmed.substring(trimmed.length() - 4);
     }
  
     private record EntradaResolvida(
