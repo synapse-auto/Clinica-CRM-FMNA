@@ -48,44 +48,107 @@ public class DataSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
+        boolean hasPassword = false;
+        boolean hasSenha = false;
+        for (java.lang.reflect.RecordComponent rc : InitialUserDefinition.class.getRecordComponents()) {
+            if ("password".equals(rc.getName())) hasPassword = true;
+            if ("senha".equals(rc.getName())) hasSenha = true;
+        }
+        String campoSenhaEsperado = hasPassword ? "password" : (hasSenha ? "senha" : "desconhecido");
+
+        log.info("Diagnóstico DataSeeder: enabled={}", initialUsersEnabled);
+        log.info("Diagnóstico DataSeeder: campo de senha esperado = '{}'", campoSenhaEsperado);
+
         if (!initialUsersEnabled) {
-            log.debug("Seed de usuários iniciais desabilitado.");
+            if (initialUsersJson != null && !initialUsersJson.isBlank() && !initialUsersJson.equals("[]")) {
+                try {
+                    List<InitialUserDefinition> tempDefs = objectMapper.readValue(
+                            initialUsersJson,
+                            new TypeReference<List<InitialUserDefinition>>() {}
+                    );
+                    log.info("Diagnóstico DataSeeder: JSON lido com sucesso (seeder desabilitado). Quantidade = {}", tempDefs.size());
+                } catch (Exception e) {
+                    log.error("Diagnóstico DataSeeder: JSON possui formato inválido (seeder desabilitado). Motivo: {}", e.getMessage());
+                }
+            } else {
+                log.info("0 definições de usuários encontradas");
+            }
+            log.info("Seed de usuários iniciais desabilitado (INITIAL_USERS_ENABLED=false).");
             return;
         }
 
-        Clinica clinica = clinicaRepository.findBySlug(clinicSlug)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Clínica configurada não encontrada para o seed de usuários iniciais"
-                ));
-        List<InitialUserDefinition> definitions = parseDefinitions();
-        int created = 0;
-        int reset = 0;
-        int skipped = 0;
+        try {
+            Clinica clinica = clinicaRepository.findBySlug(clinicSlug)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Clínica com slug '" + clinicSlug + "' não encontrada no banco de dados para o seeder"
+                    ));
 
-        for (InitialUserDefinition definition : definitions) {
-            validate(definition);
-            String normalizedEmail = definition.email().trim().toLowerCase(Locale.ROOT);
-            Usuario existing = usuarioRepository.findByEmail(normalizedEmail).orElse(null);
-            if (existing != null) {
-                if (Boolean.TRUE.equals(definition.resetPassword())) {
-                    resetPassword(existing, definition);
-                    reset++;
+            List<InitialUserDefinition> definitions = null;
+            boolean jsonLidoComSucesso = false;
+            try {
+                definitions = parseDefinitions();
+                jsonLidoComSucesso = true;
+                int totalDefs = definitions.size();
+                if (totalDefs == 1) {
+                    log.info("1 definição de usuário encontrada");
                 } else {
-                    skipped++;
+                    log.info("{} definições de usuários encontradas", totalDefs);
                 }
-                continue;
+            } catch (Exception e) {
+                log.error("Diagnóstico DataSeeder: erro ao ler INITIAL_USERS_JSON. Motivo: {}", e.getMessage());
+                if (e instanceof RuntimeException re) {
+                    throw re;
+                }
+                throw new IllegalStateException("Falha crítica ao ler definições de usuários iniciais.", e);
             }
 
-            usuarioRepository.save(createUser(clinica, definition, normalizedEmail));
-            created++;
-        }
+            int created = 0;
+            int reset = 0;
+            int skipped = 0;
 
-        log.info(
-                "Seed de usuários iniciais concluído. criados={}, redefinidos={}, ignorados={}",
-                created,
-                reset,
-                skipped
-        );
+            for (InitialUserDefinition definition : definitions) {
+                String maskedEmail = maskEmail(definition.email());
+                log.info("processando usuário {}", maskedEmail);
+                try {
+                    validate(definition);
+                    String normalizedEmail = definition.email().trim().toLowerCase(Locale.ROOT);
+                    Usuario existing = usuarioRepository.findByEmail(normalizedEmail).orElse(null);
+
+                    if (existing != null) {
+                        if (Boolean.TRUE.equals(definition.resetPassword())) {
+                            log.info("Usuário existente encontrado para {}. Redefinindo senha (resetPassword=true).", maskedEmail);
+                            resetPassword(existing, definition);
+                            log.info("senha redefinida");
+                            log.info("mustChangePassword=true");
+                            reset++;
+                        } else {
+                            log.info("Usuário existente encontrado para {}. Ignorando redefinição de senha (resetPassword=false).", maskedEmail);
+                            skipped++;
+                        }
+                        continue;
+                    }
+
+                    log.info("Usuário {} não encontrado no banco. Criando novo usuário.", maskedEmail);
+                    usuarioRepository.save(createUser(clinica, definition, normalizedEmail));
+                    log.info("usuário criado");
+                    log.info("mustChangePassword=true");
+                    created++;
+                } catch (Exception e) {
+                    log.error("Erro ao processar usuário {} no seeder. Motivo: {}", maskedEmail, e.getMessage());
+                    throw e; // Relança para expor falha
+                }
+            }
+
+            log.info(
+                    "Seed de usuários iniciais concluído com sucesso. criados={}, redefinidos={}, ignorados={}",
+                    created,
+                    reset,
+                    skipped
+            );
+        } catch (Exception e) {
+            log.error("Falha geral na execução do DataSeeder. Motivo: {}", e.getMessage());
+            throw e;
+        }
     }
 
     private List<InitialUserDefinition> parseDefinitions() {
@@ -165,6 +228,23 @@ public class DataSeeder implements CommandLineRunner {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private String maskEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return "vazio";
+        }
+        String trimmed = email.trim();
+        int atIdx = trimmed.indexOf('@');
+        if (atIdx <= 0) {
+            return "***";
+        }
+        String local = trimmed.substring(0, atIdx);
+        String domain = trimmed.substring(atIdx);
+        if (local.length() <= 3) {
+            return "***" + domain;
+        }
+        return local.substring(0, 2) + "***" + local.substring(local.length() - 1) + domain;
     }
 
     private record InitialUserDefinition(
