@@ -50,4 +50,38 @@ describe('ChangePasswordForm', () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/dashboard'));
     expect(refresh).toHaveBeenCalled();
   });
+
+  it('should_reject_password_under_8_characters_before_request', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ChangePasswordForm />);
+
+    await user.type(screen.getByLabelText('Senha atual'), 'SenhaInicial!2026');
+    await user.type(screen.getByLabelText('Nova senha'), '12345');
+    await user.type(screen.getByLabelText('Confirmar nova senha'), '12345');
+    await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('A senha deve ter pelo menos 8 caracteres.');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('should_accept_8_character_simple_password', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      redirectTo: '/dashboard',
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+    render(<ChangePasswordForm />);
+
+    await user.type(screen.getByLabelText('Senha atual'), 'SenhaInicial!2026');
+    await user.type(screen.getByLabelText('Nova senha'), '12345678');
+    await user.type(screen.getByLabelText('Confirmar nova senha'), '12345678');
+    await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/dashboard'));
+    expect(refresh).toHaveBeenCalled();
+  });
 });

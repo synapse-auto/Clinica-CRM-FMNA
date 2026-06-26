@@ -18,7 +18,7 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-    private static final long MAX_TOKEN_EXPIRATION_MS = Duration.ofHours(1).toMillis();
+    private static final long MAX_TOKEN_EXPIRATION_MS = Duration.ofHours(48).toMillis();
 
     @Value("${app.security.jwt.secret}")
     private String secretKey;

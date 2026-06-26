@@ -23,6 +23,8 @@ async function forward(request: Request, { params }: RouteContext) {
   const headers = new Headers();
   const contentType = request.headers.get('content-type');
   if (contentType) headers.set('Content-Type', contentType);
+  const accept = request.headers.get('accept');
+  if (accept) headers.set('Accept', accept);
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
   return forwardBackendRequest(target, {
     method: request.method,

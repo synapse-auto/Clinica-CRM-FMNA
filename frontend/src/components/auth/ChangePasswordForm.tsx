@@ -29,7 +29,7 @@ export function ChangePasswordForm() {
       return;
     }
     if (!isStrongPassword(payload.novaSenha)) {
-      setError('Use ao menos 12 caracteres, com maiúscula, minúscula, número e símbolo.');
+      setError('A senha deve ter pelo menos 8 caracteres.');
       return;
     }
 
@@ -85,8 +85,7 @@ export function ChangePasswordForm() {
       />
 
       <p className="text-[10px] leading-4 text-clinic-muted">
-        A nova senha deve ter ao menos 12 caracteres, incluindo letra maiúscula,
-        letra minúscula, número e símbolo.
+        A senha deve ter pelo menos 8 caracteres.
       </p>
 
       <button
@@ -126,7 +125,7 @@ function PasswordField({
           type="password"
           autoComplete={autoComplete}
           required
-          minLength={12}
+          minLength={8}
           maxLength={72}
           className="h-11 w-full rounded-lg border border-clinic-border bg-clinic-input pl-10 pr-3 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15"
         />
@@ -136,9 +135,5 @@ function PasswordField({
 }
 
 function isStrongPassword(password: string) {
-  return password.length >= 12
-    && /[A-Z]/.test(password)
-    && /[a-z]/.test(password)
-    && /\d/.test(password)
-    && /[^A-Za-z0-9]/.test(password);
+  return password.length >= 8;
 }

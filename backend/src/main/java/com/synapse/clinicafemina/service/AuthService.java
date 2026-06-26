@@ -47,7 +47,7 @@ public class AuthService {
         }
         if (!PasswordPolicy.isStrong(request.novaSenha())) {
             throw new BadRequestException(
-                    "A nova senha deve ter ao menos 12 caracteres, com maiúscula, minúscula, número e símbolo."
+                    "A senha deve ter pelo menos 8 caracteres."
             );
         }
         if (passwordEncoder.matches(request.novaSenha(), usuario.getSenhaHash())) {

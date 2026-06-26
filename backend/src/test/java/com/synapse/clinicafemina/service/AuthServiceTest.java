@@ -119,11 +119,30 @@ class AuthServiceTest {
     void should_reject_weak_new_password() {
         ChangePasswordRequest request = new ChangePasswordRequest(
                 "SenhaInicial!2026",
-                "senha-fraca",
-                "senha-fraca"
+                "curta",
+                "curta"
         );
         when(passwordEncoder.matches("SenhaInicial!2026", "$2a$12$old")).thenReturn(true);
 
         assertThrows(BadRequestException.class, () -> service.changePassword(usuario, request));
+    }
+
+    @Test
+    void should_accept_eight_character_simple_password() {
+        ChangePasswordRequest request = new ChangePasswordRequest(
+                "SenhaInicial!2026",
+                "12345678",
+                "12345678"
+        );
+        when(passwordEncoder.matches("SenhaInicial!2026", "$2a$12$old")).thenReturn(true);
+        when(passwordEncoder.matches("12345678", "$2a$12$old")).thenReturn(false);
+        when(passwordEncoder.encode("12345678")).thenReturn("$2a$12$new");
+        when(jwtService.generateToken(anyMap(), any())).thenReturn("new-jwt");
+
+        LoginResponse response = service.changePassword(usuario, request);
+
+        assertEquals("$2a$12$new", usuario.getSenhaHash());
+        assertFalse(usuario.getMustChangePassword());
+        assertEquals("new-jwt", response.getToken());
     }
 }

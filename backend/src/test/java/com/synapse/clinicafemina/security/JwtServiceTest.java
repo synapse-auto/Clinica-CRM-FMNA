@@ -12,11 +12,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class JwtServiceTest {
 
     @Test
-    void should_limit_token_expiration_to_one_hour_when_configuration_is_longer() {
+    void should_limit_token_expiration_to_48_hours_when_configuration_is_longer() {
         JwtService service = new JwtService();
         ReflectionTestUtils.setField(service, "secretKey",
                 "test-only-secret-key-with-at-least-32-bytes");
-        ReflectionTestUtils.setField(service, "jwtExpiration", Duration.ofHours(24).toMillis());
+        ReflectionTestUtils.setField(service, "jwtExpiration", Duration.ofHours(72).toMillis());
 
         Gestor usuario = new Gestor();
         usuario.setEmail("gestor@clinica.local");
@@ -25,6 +25,6 @@ class JwtServiceTest {
         Date issuedAt = service.extractClaim(token, Claims::getIssuedAt);
         Date expiration = service.extractClaim(token, Claims::getExpiration);
 
-        assertTrue(expiration.getTime() - issuedAt.getTime() <= Duration.ofHours(1).toMillis());
+        assertTrue(expiration.getTime() - issuedAt.getTime() <= Duration.ofHours(48).toMillis());
     }
 }
