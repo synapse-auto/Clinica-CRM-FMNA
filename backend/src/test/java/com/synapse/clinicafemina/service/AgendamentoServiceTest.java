@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.mock;
@@ -173,16 +174,18 @@ class AgendamentoServiceTest {
     }
 
     @Test
-    void should_list_patient_and_doctor_options_for_current_clinic() {
-        when(pacienteRepository.findDisponiveisByClinicaId(7L)).thenReturn(List.of(paciente));
+    void should_list_patient_options_without_loading_encrypted_patient_entity() {
+        when(pacienteRepository.findOpcoesDisponiveisByClinicaId(7L))
+                .thenReturn(List.of(pacienteOption(20L, "maria da silva")));
         when(usuarioRepository.findMedicosAtivosByClinicaId(7L)).thenReturn(List.of(medico));
 
         AgendaOptionsResponse response = service.listarOpcoes(clinica);
 
         assertEquals(1, response.pacientes().size());
-        assertEquals("Maria da Silva", response.pacientes().getFirst().nome());
+        assertEquals("maria da silva", response.pacientes().getFirst().nome());
         assertEquals(1, response.medicos().size());
         assertEquals("Dra. Renata", response.medicos().getFirst().nome());
+        verify(pacienteRepository, never()).findDisponiveisByClinicaId(7L);
     }
 
     @Test
@@ -223,5 +226,19 @@ class AgendamentoServiceTest {
         agendamento.setOrigem("MANUAL");
         agendamento.setConfirmacaoEnviada(0);
         return agendamento;
+    }
+
+    private PacienteRepository.PacienteOptionProjection pacienteOption(Long id, String nomeBusca) {
+        return new PacienteRepository.PacienteOptionProjection() {
+            @Override
+            public Long getId() {
+                return id;
+            }
+
+            @Override
+            public String getNomeBusca() {
+                return nomeBusca;
+            }
+        };
     }
 }

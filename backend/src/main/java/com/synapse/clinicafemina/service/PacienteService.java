@@ -1,7 +1,6 @@
 package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.domain.Clinica;
-import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.dto.paciente.PacienteResumoDTO;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.PacienteRepository;
@@ -17,39 +16,34 @@ public class PacienteService {
     private final PacienteRepository pacienteRepository;
 
     /**
-     * Retorna todos os pacientes ativos da clínica, ordenados por nomeBusca ASC.
-     * Pacientes com deletadoEm preenchido são excluídos.
+     * Retorna pacientes ativos da clínica usando apenas colunas não criptografadas.
+     * Isso evita que dados legados em campos cifrados quebrem a listagem.
      */
     @Transactional(readOnly = true)
     public List<PacienteResumoDTO> listar(Clinica clinica) {
-        return pacienteRepository.findDisponiveisByClinicaId(clinica.getId())
+        return pacienteRepository.findResumosDisponiveisByClinicaId(clinica.getId())
                 .stream()
                 .map(this::toResumo)
                 .toList();
     }
 
     /**
-     * Busca um paciente por ID dentro da clínica.
-     * Lança NotFoundException se inexistente ou deletado.
+     * Busca um resumo seguro do paciente por ID dentro da clínica.
      */
     @Transactional(readOnly = true)
     public PacienteResumoDTO buscarPorId(Long id, Clinica clinica) {
-        Paciente paciente = pacienteRepository.findByIdAndClinicaId(id, clinica.getId())
-                .filter(p -> p.getDeletadoEm() == null)
+        return pacienteRepository.findResumoByIdAndClinicaId(id, clinica.getId())
+                .map(this::toResumo)
                 .orElseThrow(() -> new NotFoundException("Paciente não encontrado"));
-        return toResumo(paciente);
     }
 
-    private PacienteResumoDTO toResumo(Paciente paciente) {
-        String externalSource = paciente.getExternalSource() != null
-                ? paciente.getExternalSource().name()
-                : null;
+    private PacienteResumoDTO toResumo(PacienteRepository.PacienteResumoProjection paciente) {
         return new PacienteResumoDTO(
                 paciente.getId(),
-                paciente.getNome(),
+                paciente.getNomeBusca(),
                 paciente.getTelefoneNormalizado(),
                 paciente.getStatus(),
-                externalSource,
+                paciente.getExternalSource(),
                 paciente.getExternalId(),
                 paciente.getCriadoEm(),
                 paciente.getUltimaInteracaoEm()

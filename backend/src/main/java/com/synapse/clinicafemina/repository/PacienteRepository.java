@@ -12,6 +12,30 @@ import java.util.Optional;
 
 public interface PacienteRepository extends JpaRepository<Paciente, Long> {
 
+    interface PacienteResumoProjection {
+        Long getId();
+
+        String getNomeBusca();
+
+        String getTelefoneNormalizado();
+
+        String getStatus();
+
+        String getExternalSource();
+
+        String getExternalId();
+
+        OffsetDateTime getCriadoEm();
+
+        OffsetDateTime getUltimaInteracaoEm();
+    }
+
+    interface PacienteOptionProjection {
+        Long getId();
+
+        String getNomeBusca();
+    }
+
     Optional<Paciente> findByIdAndClinicaId(Long id, Long clinicaId);
 
     /** Localiza paciente pelo número E.164 normalizado (usado na integração WhatsApp). */
@@ -33,6 +57,54 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
             ORDER BY p.nomeBusca ASC
             """)
     List<Paciente> findDisponiveisByClinicaId(@Param("clinicaId") Long clinicaId);
+
+    @Query(value = """
+            SELECT
+                id AS id,
+                COALESCE(NULLIF(nome_busca, ''), CONCAT('Paciente ', id)) AS "nomeBusca",
+                telefone_normalizado AS "telefoneNormalizado",
+                status AS status,
+                external_source AS "externalSource",
+                external_id AS "externalId",
+                criado_em AS "criadoEm",
+                ultima_interacao_em AS "ultimaInteracaoEm"
+            FROM paciente
+            WHERE clinica_id = :clinicaId
+              AND deletado_em IS NULL
+            ORDER BY nome_busca ASC
+            """, nativeQuery = true)
+    List<PacienteResumoProjection> findResumosDisponiveisByClinicaId(@Param("clinicaId") Long clinicaId);
+
+    @Query(value = """
+            SELECT
+                id AS id,
+                COALESCE(NULLIF(nome_busca, ''), CONCAT('Paciente ', id)) AS "nomeBusca",
+                telefone_normalizado AS "telefoneNormalizado",
+                status AS status,
+                external_source AS "externalSource",
+                external_id AS "externalId",
+                criado_em AS "criadoEm",
+                ultima_interacao_em AS "ultimaInteracaoEm"
+            FROM paciente
+            WHERE id = :id
+              AND clinica_id = :clinicaId
+              AND deletado_em IS NULL
+            """, nativeQuery = true)
+    Optional<PacienteResumoProjection> findResumoByIdAndClinicaId(
+            @Param("id") Long id,
+            @Param("clinicaId") Long clinicaId
+    );
+
+    @Query(value = """
+            SELECT
+                id AS id,
+                COALESCE(NULLIF(nome_busca, ''), CONCAT('Paciente ', id)) AS "nomeBusca"
+            FROM paciente
+            WHERE clinica_id = :clinicaId
+              AND deletado_em IS NULL
+            ORDER BY nome_busca ASC
+            """, nativeQuery = true)
+    List<PacienteOptionProjection> findOpcoesDisponiveisByClinicaId(@Param("clinicaId") Long clinicaId);
 
     @Query("""
             SELECT COUNT(p) FROM Paciente p

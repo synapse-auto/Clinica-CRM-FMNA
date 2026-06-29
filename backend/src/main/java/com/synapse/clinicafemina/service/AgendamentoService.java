@@ -55,9 +55,9 @@ public class AgendamentoService {
     @Transactional(readOnly = true)
     public AgendaOptionsResponse listarOpcoes(Clinica clinica) {
         List<AgendaOptionResponse> pacientes = pacienteRepository
-                .findDisponiveisByClinicaId(clinica.getId())
+                .findOpcoesDisponiveisByClinicaId(clinica.getId())
                 .stream()
-                .map(paciente -> new AgendaOptionResponse(paciente.getId(), paciente.getNome()))
+                .map(paciente -> new AgendaOptionResponse(paciente.getId(), paciente.getNomeBusca()))
                 .toList();
         List<AgendaOptionResponse> medicos = usuarioRepository
                 .findMedicosAtivosByClinicaId(clinica.getId())

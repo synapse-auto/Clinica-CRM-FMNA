@@ -84,7 +84,7 @@ class AtendimentoControllerTest {
 
     @Test
     @WithMockUser(roles = "GESTOR")
-    void should_return_not_found_when_download_fails() throws Exception {
+    void should_return_controlled_json_error_when_download_fails() throws Exception {
         MidiaMensagem midia = new MidiaMensagem();
         midia.setWhatsappMediaId("media-123");
         midia.setNomeArquivo("exame.png");
@@ -94,7 +94,9 @@ class AtendimentoControllerTest {
         when(mensagemService.baixarBinarioMidia("media-123")).thenReturn(null);
 
         mockMvc.perform(get("/api/atendimentos/30/mensagens/100/midia"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isBadGateway())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.message").value("Mídia indisponível no momento. Tente novamente em instantes."));
     }
 
     @Test
