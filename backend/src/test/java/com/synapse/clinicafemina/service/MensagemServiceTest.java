@@ -8,6 +8,7 @@ import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
+import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
@@ -107,6 +108,32 @@ class MensagemServiceTest {
                 assertEquals("ATENDENTE", mensagem.getRemetente()));
         mensagemCaptor.getAllValues().forEach(mensagem ->
                 assertEquals(99L, mensagem.getRemetenteUsuario().getId()));
+    }
+
+    @Test
+    void should_explain_template_requirement_when_meta_rejects_first_outbound_message() {
+        when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L))
+                .thenReturn(Optional.of(remetente));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(whatsappOutboundClient.enviarTexto("5544999990000", "Mensagem inicial"))
+                .thenThrow(new WhatsappTemplateRequiredException());
+
+        service.enviar(
+                30L,
+                9L,
+                new EnviarMensagemRequest("TEXTO", "Mensagem inicial"),
+                99L
+        );
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository, atLeastOnce()).save(mensagemCaptor.capture());
+        Mensagem mensagemFinal = mensagemCaptor.getAllValues().getLast();
+        assertEquals("FALHA", mensagemFinal.getWhatsappStatus());
+        assertEquals(
+                "A Meta exige template aprovado para iniciar conversa ativa ou responder fora da janela de 24h.",
+                mensagemFinal.getMotivoFalha()
+        );
     }
 
     @Test

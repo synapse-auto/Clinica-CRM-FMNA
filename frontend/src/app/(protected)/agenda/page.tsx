@@ -1,5 +1,6 @@
 import { AgendaClient } from '@/components/agenda/AgendaClient';
-import { getAgendaOptions, getAgendamentos } from '@/services/backend';
+import { redirect } from 'next/navigation';
+import { getAgendaOptions, getAgendamentos, isBackendAuthorizationError } from '@/services/backend';
 import type { Agendamento, AgendaOptions } from '@/types/agendamento';
 
 export default async function AgendaPage() {
@@ -13,7 +14,10 @@ export default async function AgendaPage() {
       getAgendamentos(range.inicio, range.fim),
       getAgendaOptions(),
     ]);
-  } catch {
+  } catch (caughtError) {
+    if (isBackendAuthorizationError(caughtError)) {
+      redirect('/login');
+    }
     error = 'Não foi possível carregar a agenda. Verifique a conexão e tente novamente.';
   }
 

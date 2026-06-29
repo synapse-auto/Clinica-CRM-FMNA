@@ -10,6 +10,7 @@ import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
+import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
@@ -140,7 +141,8 @@ public class MensagemService {
         try {
             return whatsappOutboundClient.baixarMidia(mediaId);
         } catch (Exception e) {
-            log.error("Erro ao baixar binário da mídia {}: tipoErro={}", mediaId, e.getClass().getSimpleName());
+            log.error("Erro ao baixar binário da mídia: mediaId={}, tipoErro={}",
+                    maskId(mediaId), e.getClass().getSimpleName());
             return null;
         }
     }
@@ -203,7 +205,7 @@ public class MensagemService {
     }
 
     private void registrarFalha(Mensagem mensagem, Exception exception, boolean midia) {
-        mensagem.setMotivoFalha("WhatsApp/Meta indisponível ou não configurado");
+        mensagem.setMotivoFalha(motivoFalha(exception));
         mensagem.setWhatsappStatus("FALHA");
         log.error(
                 "Falha ao enviar {} {} para WhatsApp. tipoErro={}",
@@ -221,6 +223,36 @@ public class MensagemService {
             log.error("Falha ao registrar retry da mensagem {}. tipoErro={}",
                     mensagem.getId(), publishException.getClass().getSimpleName());
         }
+    }
+
+    private String motivoFalha(Throwable exception) {
+        WhatsappTemplateRequiredException templateRequired = findTemplateRequired(exception);
+        if (templateRequired != null) {
+            return templateRequired.getMessage();
+        }
+        return "WhatsApp/Meta indisponível ou não configurado";
+    }
+
+    private WhatsappTemplateRequiredException findTemplateRequired(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof WhatsappTemplateRequiredException exception) {
+                return exception;
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
+    private String maskId(String id) {
+        if (id == null || id.isBlank()) {
+            return "vazio";
+        }
+        String trimmed = id.trim();
+        if (trimmed.length() <= 4) {
+            return "****";
+        }
+        return "****" + trimmed.substring(trimmed.length() - 4);
     }
 
     private void validarArquivo(MultipartFile arquivo) {

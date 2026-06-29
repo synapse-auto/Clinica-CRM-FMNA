@@ -165,8 +165,13 @@ async function fetchBackend(path: string, init: RequestInit = {}): Promise<Respo
   });
 }
 
-class BackendAuthorizationError extends Error {
+export class BackendAuthorizationError extends Error {
   constructor(readonly status: number) {
     super(`Backend recusou a sessão (${status})`);
+    this.name = 'BackendAuthorizationError';
   }
+}
+
+export function isBackendAuthorizationError(error: unknown): error is BackendAuthorizationError {
+  return error instanceof BackendAuthorizationError;
 }

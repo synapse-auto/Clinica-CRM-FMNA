@@ -1,5 +1,7 @@
 package com.synapse.clinicafemina.integration;
- 
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
  
+import java.util.Locale;
 import java.util.Map;
  
 /**
@@ -25,6 +28,8 @@ import java.util.Map;
 @Slf4j
 @Component
 public class WhatsappOutboundClient {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
  
     @Value("${app.whatsapp.enabled:false}")
     private boolean enabled;
@@ -91,7 +96,7 @@ public class WhatsappOutboundClient {
             return messages.getFirst().get("id");
  
         } catch (RestClientResponseException e) {
-            log.error("Erro da Meta ao enviar mensagem: status={}, response={}", e.getStatusCode(), e.getResponseBodyAsString());
+            handleMetaSendError("mensagem", e);
             throw e;
         }
     }
@@ -134,7 +139,7 @@ public class WhatsappOutboundClient {
             return (String) response.get("id");
  
         } catch (RestClientResponseException e) {
-            log.error("Erro da Meta no upload de mídia: status={}, response={}", e.getStatusCode(), e.getResponseBodyAsString());
+            logMetaError("upload de mídia", e);
             throw e;
         }
     }
@@ -181,13 +186,17 @@ public class WhatsappOutboundClient {
             return messages.getFirst().get("id");
  
         } catch (RestClientResponseException e) {
-            log.error("Erro da Meta ao enviar mídia: status={}, response={}", e.getStatusCode(), e.getResponseBodyAsString());
+            handleMetaSendError("mídia", e);
             throw e;
         }
     }
  
     @SuppressWarnings("unused")
     public String enviarMidiaFallback(String telefoneE164, String tipo, String mediaId, Throwable t) {
+        WhatsappTemplateRequiredException templateRequired = findTemplateRequired(t);
+        if (templateRequired != null) {
+            throw templateRequired;
+        }
         log.error("Circuit breaker: envio de midia falhou. tipoErro={}", t.getClass().getSimpleName());
         throw new RuntimeException("Envio de midia indisponivel", t);
     }
@@ -198,6 +207,10 @@ public class WhatsappOutboundClient {
      */
     @SuppressWarnings("unused")
     public String enviarTextoFallback(String telefoneE164, String corpo, Throwable t) {
+        WhatsappTemplateRequiredException templateRequired = findTemplateRequired(t);
+        if (templateRequired != null) {
+            throw templateRequired;
+        }
         log.error("Circuit breaker ativado para envio WhatsApp. tipoErro={}", t.getClass().getSimpleName());
         throw new RuntimeException("WhatsApp indisponivel (circuit breaker aberto)", t);
     }
@@ -238,12 +251,70 @@ public class WhatsappOutboundClient {
             return new MidiaBaixada(bytes, mimeType);
 
         } catch (RestClientResponseException e) {
-            log.error("Erro da Meta ao baixar mídia: status={}, response={}", e.getStatusCode(), e.getResponseBodyAsString());
+            logMetaError("download de mídia", e);
             return null;
         } catch (Exception e) {
             log.error("Erro inesperado ao baixar mídia da Meta: tipoErro={}", e.getClass().getSimpleName());
             return null;
         }
+    }
+
+    private void handleMetaSendError(String operacao, RestClientResponseException e) {
+        MetaError error = logMetaError("envio de " + operacao, e);
+        if (isTemplateRequired(error)) {
+            throw new WhatsappTemplateRequiredException();
+        }
+    }
+
+    private MetaError logMetaError(String operacao, RestClientResponseException e) {
+        MetaError error = parseMetaError(e);
+        log.error(
+                "Erro da Meta no {}: status={}, code={}, subcode={}, type={}",
+                operacao,
+                e.getStatusCode().value(),
+                error.code(),
+                error.subcode(),
+                error.type()
+        );
+        return error;
+    }
+
+    private MetaError parseMetaError(RestClientResponseException e) {
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(e.getResponseBodyAsByteArray());
+            JsonNode error = root.path("error");
+            return new MetaError(
+                    error.path("code").asText(""),
+                    error.path("error_subcode").asText(""),
+                    error.path("type").asText(""),
+                    error.path("message").asText("")
+            );
+        } catch (Exception parseException) {
+            return new MetaError("", "", "", "");
+        }
+    }
+
+    private boolean isTemplateRequired(MetaError error) {
+        if ("131047".equals(error.code()) || "470".equals(error.code())) {
+            return true;
+        }
+        String message = error.message().toLowerCase(Locale.ROOT);
+        return message.contains("template")
+                || message.contains("24 hour")
+                || message.contains("24-hour")
+                || message.contains("outside")
+                || message.contains("re-engagement");
+    }
+
+    private WhatsappTemplateRequiredException findTemplateRequired(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof WhatsappTemplateRequiredException exception) {
+                return exception;
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     private String maskId(String id) {
@@ -256,4 +327,6 @@ public class WhatsappOutboundClient {
         }
         return "****" + trimmed.substring(trimmed.length() - 4);
     }
+
+    private record MetaError(String code, String subcode, String type, String message) {}
 }

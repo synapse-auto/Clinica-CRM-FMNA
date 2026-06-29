@@ -5,9 +5,10 @@ import {
   Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { redirect } from 'next/navigation';
 import { DemoTable } from '@/components/demo/DemoTable';
 import { StatusBadge } from '@/components/demo/StatusBadge';
-import { getPacientes } from '@/services/backend';
+import { getPacientes, isBackendAuthorizationError } from '@/services/backend';
 import type { PacienteResumo } from '@/types/paciente';
 
 export default async function PacientesPage() {
@@ -16,7 +17,10 @@ export default async function PacientesPage() {
 
   try {
     pacientes = await getPacientes();
-  } catch {
+  } catch (error) {
+    if (isBackendAuthorizationError(error)) {
+      redirect('/login');
+    }
     erroCarregamento = 'Não foi possível carregar os pacientes. Verifique a conexão com o servidor.';
   }
 
