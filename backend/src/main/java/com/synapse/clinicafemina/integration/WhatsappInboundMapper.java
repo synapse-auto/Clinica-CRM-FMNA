@@ -7,6 +7,7 @@ import com.synapse.clinicafemina.domain.Mensagem;
 import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
+import com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada;
 import com.synapse.clinicafemina.messaging.MensagemEntradaEvent;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
@@ -48,6 +49,7 @@ public class WhatsappInboundMapper {
     private final AtendimentoNotificationService notificationService;
     private final WhatsappInboundPayloadParser payloadParser;
     private final Environment environment;
+    private final WhatsappOutboundClient whatsappOutboundClient;
 
     @Value("${WHATSAPP_PHONE_NUMBER_ID:}")
     private String envWhatsappPhoneId;
@@ -171,7 +173,30 @@ public class WhatsappInboundMapper {
         midia.setNomeArquivo(dados.nomeArquivo());
         midia.setTamanhoBytes(0L);
         midia.setWhatsappMediaId(dados.mediaId());
+        persistirBinarioRecebido(midia, dados.mediaId());
         return midia;
+    }
+
+    private void persistirBinarioRecebido(MidiaMensagem midia, String mediaId) {
+        if (mediaId == null || mediaId.isBlank()) {
+            return;
+        }
+        try {
+            MidiaBaixada baixada = whatsappOutboundClient.baixarMidia(mediaId);
+            if (baixada == null || baixada.bytes() == null || baixada.bytes().length == 0) {
+                log.warn("Mídia inbound não foi persistida localmente: bytes ausentes. mediaId={}", maskId(mediaId));
+                return;
+            }
+            midia.setS3Bucket("database");
+            midia.setS3Chave(baixada.bytes());
+            midia.setTamanhoBytes((long) baixada.bytes().length);
+            if (baixada.mimeType() != null && !baixada.mimeType().isBlank()) {
+                midia.setMimeType(baixada.mimeType());
+            }
+        } catch (Exception exception) {
+            log.warn("Mídia inbound não foi persistida localmente. mediaId={}, tipoErro={}",
+                    maskId(mediaId), exception.getClass().getSimpleName());
+        }
     }
  
     private void atualizarConversa(Atendimento atendimento, Paciente paciente, Mensagem mensagem) {

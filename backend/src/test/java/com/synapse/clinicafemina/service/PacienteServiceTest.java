@@ -4,7 +4,9 @@ import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.dto.paciente.PacienteResumoDTO;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.PacienteRepository;
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -95,6 +97,28 @@ class PacienteServiceTest {
     }
 
     @Test
+    void listar_converteTimestampsInstantDaProjecaoParaOffsetDateTimeUtc() {
+        Instant criadoEm = Instant.parse("2026-06-29T15:44:03Z");
+        Instant ultimaInteracaoEm = Instant.parse("2026-06-29T16:10:00Z");
+        PacienteRepository.PacienteResumoProjection paciente = resumoProjection(
+                5L,
+                "lucas rezende",
+                "5511966660000",
+                null,
+                null,
+                criadoEm,
+                ultimaInteracaoEm
+        );
+        when(pacienteRepository.findResumosDisponiveisByClinicaId(clinica.getId()))
+                .thenReturn(List.of(paciente));
+
+        List<PacienteResumoDTO> result = service.listar(clinica);
+
+        assertEquals(OffsetDateTime.ofInstant(criadoEm, ZoneOffset.UTC), result.get(0).criadoEm());
+        assertEquals(OffsetDateTime.ofInstant(ultimaInteracaoEm, ZoneOffset.UTC), result.get(0).ultimaInteracaoEm());
+    }
+
+    @Test
     void buscarPorId_retornaPacienteExistenteSemCarregarEntidadeCriptografada() {
         PacienteRepository.PacienteResumoProjection paciente = resumoProjection(10L, "clara dias", "5511966665555");
         when(pacienteRepository.findResumoByIdAndClinicaId(10L, clinica.getId()))
@@ -127,7 +151,18 @@ class PacienteServiceTest {
             String externalSource,
             String externalId
     ) {
-        OffsetDateTime criadoEm = OffsetDateTime.now();
+        return resumoProjection(id, nomeBusca, telefone, externalSource, externalId, Instant.now(), null);
+    }
+
+    private PacienteRepository.PacienteResumoProjection resumoProjection(
+            Long id,
+            String nomeBusca,
+            String telefone,
+            String externalSource,
+            String externalId,
+            Instant criadoEm,
+            Instant ultimaInteracaoEm
+    ) {
         return new PacienteRepository.PacienteResumoProjection() {
             @Override
             public Long getId() {
@@ -160,13 +195,13 @@ class PacienteServiceTest {
             }
 
             @Override
-            public OffsetDateTime getCriadoEm() {
+            public Instant getCriadoEm() {
                 return criadoEm;
             }
 
             @Override
-            public OffsetDateTime getUltimaInteracaoEm() {
-                return null;
+            public Instant getUltimaInteracaoEm() {
+                return ultimaInteracaoEm;
             }
         };
     }

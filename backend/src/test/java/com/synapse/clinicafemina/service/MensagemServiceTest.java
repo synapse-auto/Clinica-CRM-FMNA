@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.service;
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Mensagem;
+import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.domain.Usuario;
@@ -24,10 +25,12 @@ import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -189,6 +192,20 @@ class MensagemServiceTest {
     void should_return_null_when_media_id_is_blank() {
         org.junit.jupiter.api.Assertions.assertNull(service.baixarBinarioMidia(""));
         org.junit.jupiter.api.Assertions.assertNull(service.baixarBinarioMidia(null));
+    }
+
+    @Test
+    void should_serve_persisted_media_without_downloading_from_meta_again() {
+        byte[] persisted = new byte[] {9, 8, 7};
+        MidiaMensagem midia = new MidiaMensagem();
+        midia.setS3Chave(persisted);
+        midia.setMimeType("image/jpeg");
+
+        WhatsappOutboundClient.MidiaBaixada result = service.obterBinarioMidia(midia);
+
+        assertArrayEquals(persisted, result.bytes());
+        assertEquals("image/jpeg", result.mimeType());
+        verify(whatsappOutboundClient, never()).baixarMidia(any());
     }
 
     @Test

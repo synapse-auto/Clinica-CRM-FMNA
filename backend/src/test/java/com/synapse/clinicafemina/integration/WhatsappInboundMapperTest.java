@@ -3,7 +3,9 @@ package com.synapse.clinicafemina.integration;
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Mensagem;
+import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.domain.Paciente;
+import com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
@@ -25,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -65,6 +68,9 @@ class WhatsappInboundMapperTest {
     @Mock
     private Environment environment;
 
+    @Mock
+    private WhatsappOutboundClient whatsappOutboundClient;
+
     private WhatsappInboundMapper mapper;
     private Clinica clinica;
 
@@ -80,7 +86,8 @@ class WhatsappInboundMapperTest {
                 n8nEventService,
                 notificationService,
                 new WhatsappInboundPayloadParser(),
-                environment
+                environment,
+                whatsappOutboundClient
         );
 
         clinica = new Clinica();
@@ -173,6 +180,9 @@ class WhatsappInboundMapperTest {
             mensagem.setId(40L);
             return mensagem;
         });
+        byte[] documentBytes = new byte[] {1, 3, 5, 7};
+        when(whatsappOutboundClient.baixarMidia("media-doc"))
+                .thenReturn(new MidiaBaixada(documentBytes, "application/pdf"));
         when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -194,7 +204,11 @@ class WhatsappInboundMapperTest {
                 ))
         ));
 
-        verify(midiaMensagemRepository).save(any());
+        ArgumentCaptor<MidiaMensagem> midiaCaptor = ArgumentCaptor.forClass(MidiaMensagem.class);
+        verify(midiaMensagemRepository).save(midiaCaptor.capture());
+        assertArrayEquals(documentBytes, midiaCaptor.getValue().getS3Chave());
+        assertEquals("database", midiaCaptor.getValue().getS3Bucket());
+        assertEquals(documentBytes.length, midiaCaptor.getValue().getTamanhoBytes());
         verify(notificationService).notificarNovaMensagem(eq(atendimento), any());
     }
 

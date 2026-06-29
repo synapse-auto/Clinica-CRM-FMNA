@@ -147,6 +147,41 @@ public class MensagemService {
         }
     }
 
+    public WhatsappOutboundClient.MidiaBaixada obterBinarioMidia(MidiaMensagem midia) {
+        if (midia == null) {
+            return null;
+        }
+        byte[] bytesPersistidos = midia.getS3Chave();
+        if (bytesPersistidos != null && bytesPersistidos.length > 0) {
+            return new WhatsappOutboundClient.MidiaBaixada(bytesPersistidos, midia.getMimeType());
+        }
+
+        WhatsappOutboundClient.MidiaBaixada baixada = baixarBinarioMidia(midia.getWhatsappMediaId());
+        if (baixada != null && baixada.bytes() != null && baixada.bytes().length > 0) {
+            armazenarLocalmente(midia, baixada);
+            try {
+                midiaRepository.save(midia);
+            } catch (Exception exception) {
+                log.warn("Mídia baixada servida, mas não persistida localmente. mensagemId={}, tipoErro={}",
+                        midia.getMensagem() == null ? null : midia.getMensagem().getId(),
+                        exception.getClass().getSimpleName());
+            }
+        }
+        return baixada;
+    }
+
+    private void armazenarLocalmente(
+            MidiaMensagem midia,
+            WhatsappOutboundClient.MidiaBaixada baixada
+    ) {
+        midia.setS3Bucket("database");
+        midia.setS3Chave(baixada.bytes());
+        midia.setTamanhoBytes((long) baixada.bytes().length);
+        if (baixada.mimeType() != null && !baixada.mimeType().isBlank()) {
+            midia.setMimeType(baixada.mimeType());
+        }
+    }
+
     private Atendimento buscarAtendimentoAtivo(Long atendimentoId, Long clinicaId) {
         Atendimento atendimento = atendimentoRepository.findByIdAndClinicaId(atendimentoId, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));

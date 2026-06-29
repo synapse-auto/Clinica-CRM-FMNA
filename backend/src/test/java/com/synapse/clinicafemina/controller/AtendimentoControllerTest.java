@@ -71,7 +71,7 @@ class AtendimentoControllerTest {
         WhatsappOutboundClient.MidiaBaixada baixada = new WhatsappOutboundClient.MidiaBaixada(content, "image/png");
 
         when(mensagemService.buscarMidia(eq(30L), eq(100L), eq(9L))).thenReturn(midia);
-        when(mensagemService.baixarBinarioMidia("media-123")).thenReturn(baixada);
+        when(mensagemService.obterBinarioMidia(midia)).thenReturn(baixada);
 
         mockMvc.perform(get("/api/atendimentos/30/mensagens/100/midia")
                         .accept("image/png"))
@@ -91,7 +91,7 @@ class AtendimentoControllerTest {
         midia.setMimeType("image/png");
 
         when(mensagemService.buscarMidia(eq(30L), eq(100L), eq(9L))).thenReturn(midia);
-        when(mensagemService.baixarBinarioMidia("media-123")).thenReturn(null);
+        when(mensagemService.obterBinarioMidia(midia)).thenReturn(null);
 
         mockMvc.perform(get("/api/atendimentos/30/mensagens/100/midia"))
                 .andExpect(status().isBadGateway())

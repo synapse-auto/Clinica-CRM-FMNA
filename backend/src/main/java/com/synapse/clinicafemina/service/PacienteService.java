@@ -4,6 +4,9 @@ import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.dto.paciente.PacienteResumoDTO;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.PacienteRepository;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -45,8 +48,12 @@ public class PacienteService {
                 paciente.getStatus(),
                 paciente.getExternalSource(),
                 paciente.getExternalId(),
-                paciente.getCriadoEm(),
-                paciente.getUltimaInteracaoEm()
+                toOffsetDateTime(paciente.getCriadoEm()),
+                toOffsetDateTime(paciente.getUltimaInteracaoEm())
         );
+    }
+
+    private OffsetDateTime toOffsetDateTime(Instant instant) {
+        return instant == null ? null : OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
 }

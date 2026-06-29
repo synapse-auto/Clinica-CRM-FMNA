@@ -126,7 +126,7 @@ public class AtendimentoController {
         Long clinicaId = clinicaId();
         MidiaMensagem midia = mensagemService.buscarMidia(id, mensagemId, clinicaId);
         
-        MidiaBaixada baixada = mensagemService.baixarBinarioMidia(midia.getWhatsappMediaId());
+        MidiaBaixada baixada = mensagemService.obterBinarioMidia(midia);
         if (baixada == null || baixada.bytes() == null || baixada.bytes().length == 0) {
             return midiaIndisponivel();
         }
