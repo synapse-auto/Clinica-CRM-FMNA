@@ -1,19 +1,19 @@
+import { redirect } from 'next/navigation';
 import {
+  AlertCircle,
   Bot,
   CalendarCheck,
   Heart,
+  Info,
   MessageCircle,
-  Save,
   Settings2,
-  Sparkles,
   Star,
   ToggleLeft,
   ToggleRight,
 } from 'lucide-react';
 import { DemoCard } from '@/components/demo/DemoCard';
-import { DonutChart } from '@/components/demo/DonutChart';
-import { GroupedBarChart } from '@/components/demo/GroupedBarChart';
 import { DemoTable } from '@/components/demo/DemoTable';
+import { EmptyState } from '@/components/demo/EmptyState';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { StatusBadge } from '@/components/demo/StatusBadge';
 import {
@@ -21,15 +21,57 @@ import {
   getFollowUpConfigs,
   getFollowUpsTemporary,
   getMensagemFestivaConfigs,
+  isBackendAuthorizationError,
 } from '@/services/backend';
+import type {
+  ConsultaLembreteConfig,
+  FollowUpConfig,
+  FollowUpTemporary,
+  MensagemFestivaConfig,
+} from '@/types/automacao';
 
 export default async function AutomacaoIaPage() {
-  const [followUps, lembretes, festivas, fila] = await Promise.all([
-    getFollowUpConfigs(),
-    getConsultaLembreteConfigs(),
-    getMensagemFestivaConfigs(),
-    getFollowUpsTemporary(),
-  ]);
+  let followUps: FollowUpConfig[] = [];
+  let lembretes: ConsultaLembreteConfig[] = [];
+  let festivas: MensagemFestivaConfig[] = [];
+  let fila: FollowUpTemporary[] = [];
+  let erroCarregamento: string | null = null;
+
+  try {
+    [followUps, lembretes, festivas, fila] = await Promise.all([
+      getFollowUpConfigs(),
+      getConsultaLembreteConfigs(),
+      getMensagemFestivaConfigs(),
+      getFollowUpsTemporary(),
+    ]);
+  } catch (error) {
+    if (isBackendAuthorizationError(error)) {
+      redirect('/login');
+    }
+    erroCarregamento =
+      'Não foi possível carregar as automações. Verifique a conexão com o servidor.';
+  }
+
+  const header = (
+    <PageHeader
+      icon={<Bot className="h-4 w-4" />}
+      title="Automação"
+      description="Configure confirmações de consultas, follow-ups e fidelização de pacientes"
+    />
+  );
+
+  if (erroCarregamento) {
+    return (
+      <div className="h-full overflow-auto bg-clinic-canvas p-4 custom-scrollbar">
+        {header}
+        <EmptyState
+          icon={AlertCircle}
+          title="Automações indisponíveis"
+          description={erroCarregamento}
+        />
+      </div>
+    );
+  }
 
   const automacoesAtivas = [
     ...followUps.map((item) => item.ativo),
@@ -39,23 +81,21 @@ export default async function AutomacaoIaPage() {
 
   return (
     <div className="h-full overflow-auto bg-clinic-canvas p-4 custom-scrollbar">
-      <PageHeader
-        icon={<Bot className="h-4 w-4" />}
-        title="Automação"
-        description="Configure confirmações de consultas, follow-ups e fidelização de pacientes"
-        actions={
-          <button className="flex h-8 items-center gap-2 rounded-lg bg-clinic-primary px-3 text-[10px] font-bold text-white">
-            <Save className="h-3.5 w-3.5" />
-            Salvar ajustes
-          </button>
-        }
-      />
+      {header}
+
+      <div className="mb-3 flex items-start gap-2 rounded-lg border border-clinic-border bg-clinic-surface-muted px-3 py-2 text-[10px] text-clinic-muted">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-clinic-primary" />
+        <span>
+          Visualização somente leitura. A edição e o disparo das automações serão habilitados em
+          uma próxima etapa.
+        </span>
+      </div>
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
         <AutomationMetric icon={Settings2} label="Automações ativas" value={automacoesAtivas} />
         <AutomationMetric icon={MessageCircle} label="Itens na fila" value={fila.length} />
         <AutomationMetric icon={Heart} label="Campanhas festivas" value={festivas.length} />
-        <AutomationMetric icon={Sparkles} label="Taxa de sucesso" value="91%" />
+        <AutomationMetric icon={CalendarCheck} label="Lembretes configurados" value={lembretes.length} />
       </div>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
@@ -65,19 +105,23 @@ export default async function AutomacaoIaPage() {
           icon={<CalendarCheck className="h-4 w-4" />}
         >
           <div className="space-y-3 px-4 pb-4">
-            {lembretes.map((item) => (
-              <AutomationEditor
-                key={item.id}
-                title={item.nome}
-                description={item.descricao}
-                active={item.ativo}
-                primaryLabel="Enviar com antecedência de"
-                primaryValue={`${item.antecedenciaQuantidade} ${formatUnit(item.antecedenciaUnidade)}`}
-                secondaryLabel="Horário de envio"
-                secondaryValue={item.horarioEnvio ?? '08:00'}
-                message={item.mensagemTemplate ?? 'Mensagem ainda não configurada.'}
-              />
-            ))}
+            {lembretes.length > 0 ? (
+              lembretes.map((item) => (
+                <AutomationEditor
+                  key={item.id}
+                  title={item.nome}
+                  description={item.descricao}
+                  active={item.ativo}
+                  primaryLabel="Enviar com antecedência de"
+                  primaryValue={`${item.antecedenciaQuantidade} ${formatUnit(item.antecedenciaUnidade)}`}
+                  secondaryLabel="Horário de envio"
+                  secondaryValue={item.horarioEnvio ?? '08:00'}
+                  message={item.mensagemTemplate ?? 'Mensagem ainda não configurada.'}
+                />
+              ))
+            ) : (
+              <ConfigPlaceholder text="Nenhum lembrete de consulta configurado." />
+            )}
           </div>
         </DemoCard>
 
@@ -87,19 +131,23 @@ export default async function AutomacaoIaPage() {
           icon={<Heart className="h-4 w-4" />}
         >
           <div className="space-y-3 px-4 pb-4">
-            {followUps.map((item) => (
-              <AutomationEditor
-                key={item.id}
-                title={item.nome}
-                description={item.descricao}
-                active={item.ativo}
-                primaryLabel="Quando enviar"
-                primaryValue={`${item.delayQuantidade ?? 1} ${formatUnit(item.delayUnidade ?? 'DIAS')}`}
-                secondaryLabel="Horário preferencial"
-                secondaryValue={item.horarioEnvio ?? '09:00'}
-                message={item.mensagemTemplate ?? 'Mensagem ainda não configurada.'}
-              />
-            ))}
+            {followUps.length > 0 ? (
+              followUps.map((item) => (
+                <AutomationEditor
+                  key={item.id}
+                  title={item.nome}
+                  description={item.descricao}
+                  active={item.ativo}
+                  primaryLabel="Quando enviar"
+                  primaryValue={`${item.delayQuantidade ?? 1} ${formatUnit(item.delayUnidade ?? 'DIAS')}`}
+                  secondaryLabel="Horário preferencial"
+                  secondaryValue={item.horarioEnvio ?? '09:00'}
+                  message={item.mensagemTemplate ?? 'Mensagem ainda não configurada.'}
+                />
+              ))
+            ) : (
+              <ConfigPlaceholder text="Nenhum follow-up configurado." />
+            )}
           </div>
         </DemoCard>
       </div>
@@ -111,15 +159,19 @@ export default async function AutomacaoIaPage() {
           icon={<Star className="h-4 w-4" />}
         >
           <div className="px-4 pb-4">
-            <DemoTable
-              data={festivas}
-              getKey={(item) => item.id}
-              columns={[
-                { key: 'nome', label: 'Data', render: (item) => <span className="font-bold text-clinic-text">{item.nome}</span> },
-                { key: 'mesDia', label: 'Dia', render: (item) => item.mesDia },
-                { key: 'status', label: 'Status', render: (item) => <StatusBadge tone={item.ativo ? 'green' : 'slate'}>{item.ativo ? 'Ativo' : 'Pausado'}</StatusBadge> },
-              ]}
-            />
+            {festivas.length > 0 ? (
+              <DemoTable
+                data={festivas}
+                getKey={(item) => item.id}
+                columns={[
+                  { key: 'nome', label: 'Data', render: (item) => <span className="font-bold text-clinic-text">{item.nome}</span> },
+                  { key: 'mesDia', label: 'Dia', render: (item) => item.mesDia },
+                  { key: 'status', label: 'Status', render: (item) => <StatusBadge tone={item.ativo ? 'green' : 'slate'}>{item.ativo ? 'Ativo' : 'Pausado'}</StatusBadge> },
+                ]}
+              />
+            ) : (
+              <ConfigPlaceholder text="Nenhuma campanha festiva configurada." />
+            )}
           </div>
         </DemoCard>
 
@@ -129,41 +181,18 @@ export default async function AutomacaoIaPage() {
           icon={<MessageCircle className="h-4 w-4" />}
         >
           <div className="px-4 pb-4">
-            <DemoTable
-              data={fila}
-              getKey={(item) => item.id}
-              columns={[
-                { key: 'titulo', label: 'Follow-up', render: (item) => <span className="font-bold text-clinic-text">{item.titulo}</span> },
-                { key: 'status', label: 'Status', render: (item) => <StatusBadge tone={item.status === 'PENDENTE' ? 'orange' : 'teal'}>{item.status}</StatusBadge> },
-              ]}
-            />
-          </div>
-        </DemoCard>
-      </div>
-
-      <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-12">
-        <DemoCard className="xl:col-span-8" title="Performance das automações" description="Envios, confirmações e conversões nos últimos dias">
-          <GroupedBarChart
-            height={190}
-            labels={['Seg', 'Ter', 'Qua', 'Qui', 'Sex']}
-            series={[
-              { label: 'Enviadas', color: 'var(--clinic-primary)', values: [42, 56, 49, 63, 58] },
-              { label: 'Respondidas', color: 'var(--clinic-blue)', values: [31, 40, 38, 49, 45] },
-              { label: 'Convertidas', color: 'var(--clinic-success)', values: [19, 27, 24, 32, 29] },
-            ]}
-          />
-        </DemoCard>
-        <DemoCard className="xl:col-span-4" title="Saúde das automações" description="Status dos fluxos ativos">
-          <div className="flex min-h-[190px] items-center px-5 pb-4">
-            <DonutChart
-              compact
-              centerLabel="91%"
-              items={[
-                { label: 'Sucesso', value: 91, color: 'var(--clinic-success)' },
-                { label: 'Reprocessando', value: 6, color: 'var(--clinic-orange)' },
-                { label: 'Falhas', value: 3, color: 'var(--clinic-danger)' },
-              ]}
-            />
+            {fila.length > 0 ? (
+              <DemoTable
+                data={fila}
+                getKey={(item) => item.id}
+                columns={[
+                  { key: 'titulo', label: 'Follow-up', render: (item) => <span className="font-bold text-clinic-text">{item.titulo}</span> },
+                  { key: 'status', label: 'Status', render: (item) => <StatusBadge tone={item.status === 'PENDENTE' ? 'orange' : 'teal'}>{item.status}</StatusBadge> },
+                ]}
+              />
+            ) : (
+              <ConfigPlaceholder text="Nenhum item na fila no momento." />
+            )}
           </div>
         </DemoCard>
       </div>
@@ -186,6 +215,14 @@ function AutomationMetric({ icon: Icon, label, value }: AutomationMetricProps) {
       <p className="text-[20px] font-extrabold leading-none text-clinic-text">{value}</p>
       <p className="mt-1.5 text-[9px] font-bold text-clinic-muted">{label}</p>
     </div>
+  );
+}
+
+function ConfigPlaceholder({ text }: { text: string }) {
+  return (
+    <p className="rounded-lg border border-dashed border-clinic-border bg-clinic-surface-muted px-3 py-6 text-center text-[10px] text-clinic-muted">
+      {text}
+    </p>
   );
 }
 
@@ -217,9 +254,13 @@ function AutomationEditor({
           <h3 className="text-[11px] font-extrabold text-clinic-text">{title}</h3>
           <p className="mt-0.5 text-[9px] text-clinic-muted">{description}</p>
         </div>
-        <button aria-label={active ? 'Desativar automação' : 'Ativar automação'} className="text-clinic-primary">
-          {active ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6 text-clinic-muted" />}
-        </button>
+        <span
+          className={`flex items-center gap-1 text-[9px] font-bold ${active ? 'text-clinic-primary' : 'text-clinic-muted'}`}
+          aria-label={active ? 'Automação ativa' : 'Automação pausada'}
+        >
+          {active ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
+          {active ? 'Ativo' : 'Pausado'}
+        </span>
       </div>
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <Field label={primaryLabel} value={primaryValue} />
@@ -228,8 +269,9 @@ function AutomationEditor({
       <label className="mt-3 block">
         <span className="mb-1.5 block text-[9px] font-bold text-clinic-muted">Mensagem</span>
         <textarea
-          defaultValue={message}
-          className="h-20 w-full resize-none rounded-lg border border-clinic-border bg-clinic-input p-3 text-[10px] leading-5 text-clinic-text outline-none focus:border-clinic-primary"
+          readOnly
+          value={message}
+          className="h-20 w-full resize-none rounded-lg border border-clinic-border bg-clinic-input p-3 text-[10px] leading-5 text-clinic-text outline-none"
         />
       </label>
     </article>
