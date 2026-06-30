@@ -216,62 +216,6 @@ export const demoPacientes: DemoPaciente[] = [
   },
 ];
 
-export type DemoEquipePessoa = {
-  id: number;
-  nome: string;
-  iniciais: string;
-  funcao: string;
-  email?: string;
-  telefone?: string;
-  status: 'Online' | 'Ocupado' | 'Offline';
-  acesso?: string;
-  atendimentosAtivos?: number;
-  tempoMedio?: string;
-  tone: 'teal' | 'blue' | 'purple' | 'cyan' | 'orange' | 'pink';
-};
-
-export const demoEquipeGrupos: Array<{
-  id: string;
-  titulo: string;
-  pessoas: DemoEquipePessoa[];
-}> = [
-  {
-    id: 'gestor',
-    titulo: 'Gestor',
-    pessoas: [
-      {
-        id: 1,
-        nome: 'Dra. Renata Fiuza',
-        iniciais: 'RF',
-        funcao: 'Diretora Clínica',
-        email: 'renata@clinicabemestar.com.br',
-        telefone: '44 9 9900-0001',
-        status: 'Online',
-        acesso: 'Gestor',
-        tone: 'teal',
-      },
-    ],
-  },
-  {
-    id: 'medicos',
-    titulo: 'Médicos',
-    pessoas: [
-      { id: 2, nome: 'Dra. Renata Fiuza', iniciais: 'RF', funcao: 'Obstetrícia & Pré-natal', status: 'Online', acesso: 'Sem acesso ao sistema', tone: 'teal' },
-      { id: 3, nome: 'Dr. Carlos Mendes', iniciais: 'CM', funcao: 'Ginecologia', status: 'Online', acesso: 'Sem acesso ao sistema', tone: 'blue' },
-      { id: 4, nome: 'Dra. Patrícia Lima', iniciais: 'PL', funcao: 'Ultrassonografia', status: 'Ocupado', acesso: 'Sem acesso ao sistema', tone: 'purple' },
-      { id: 5, nome: 'Dr. Roberto Alves', iniciais: 'RA', funcao: 'Clínica Geral', status: 'Offline', acesso: 'Sem acesso ao sistema', tone: 'cyan' },
-    ],
-  },
-  {
-    id: 'recepcionistas',
-    titulo: 'Recepcionistas',
-    pessoas: [
-      { id: 6, nome: 'Ana Lima', iniciais: 'AL', funcao: 'Recepcionista', status: 'Online', atendimentosAtivos: 14, tempoMedio: '3,2min', tone: 'teal' },
-      { id: 7, nome: 'Marcos Costa', iniciais: 'MC', funcao: 'Recepcionista', status: 'Online', atendimentosAtivos: 8, tempoMedio: '4,8min', tone: 'blue' },
-    ],
-  },
-];
-
 export type DemoTag = {
   id: number;
   nome: string;

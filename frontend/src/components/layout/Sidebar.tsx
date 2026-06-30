@@ -121,11 +121,11 @@ export function Sidebar({ clinicName = 'Clínica' }: SidebarProps) {
         <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between px-2 cursor-pointer hover:bg-slate-800/50 p-2 rounded-lg transition-colors">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-teal-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
-              RF
+              US
             </div>
             <div className="overflow-hidden">
-              <p className="text-sm font-medium text-white truncate">Dra. Renata Fiuza</p>
-              <p className="text-xs text-slate-500 truncate">Gestor</p>
+              <p className="text-sm font-medium text-white truncate">Usuário conectado</p>
+              <p className="text-xs text-slate-500 truncate">Equipe</p>
             </div>
           </div>
           <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />

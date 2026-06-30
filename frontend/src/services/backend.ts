@@ -23,6 +23,7 @@ import type {
   AtendimentoPage,
   AtendimentoResumo,
 } from '@/types/atendimento';
+import type { EquipeResponse } from '@/types/equipe';
 import type { PacienteResumo } from '@/types/paciente';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/constants';
 
@@ -101,6 +102,10 @@ export async function getAtendentesAtivos(): Promise<AtendenteOption[]> {
 
 export async function getPacientes(): Promise<PacienteResumo[]> {
   return getJson<PacienteResumo[]>('/api/pacientes');
+}
+
+export async function getEquipe(): Promise<EquipeResponse> {
+  return getJson<EquipeResponse>('/api/equipe');
 }
 
 export async function forwardBackendRequest(
