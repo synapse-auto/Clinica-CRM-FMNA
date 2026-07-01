@@ -8,7 +8,6 @@ import com.synapse.clinicafemina.dto.followup.FollowUpConfigResponse;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.FollowUpConfigRepository;
 import java.util.List;
-import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,10 +57,19 @@ public class FollowUpConfigService {
         config.setNome(request.nome());
         config.setDescricao(request.descricao());
         config.setAtivo(request.ativo() == null ? Boolean.TRUE : request.ativo());
-        config.setGatilho(normalizar(request.gatilho()));
-        config.setCanal(normalizarPadrao(request.canal(), "WHATSAPP"));
+        config.setGatilho(AutomacaoValidation.normalizar(request.gatilho()));
+        config.setCanal(AutomacaoValidation.opcaoPadrao(
+                request.canal(),
+                "WHATSAPP",
+                AutomacaoValidation.CANAIS,
+                "Canal"
+        ));
         config.setDelayQuantidade(request.delayQuantidade());
-        config.setDelayUnidade(normalizarOpcional(request.delayUnidade()));
+        config.setDelayUnidade(AutomacaoValidation.opcaoOpcional(
+                request.delayUnidade(),
+                AutomacaoValidation.DELAY_UNIDADES,
+                "Unidade do delay"
+        ));
         config.setHorarioEnvio(request.horarioEnvio());
         config.setMensagemTemplate(request.mensagemTemplate());
         config.setConfigJson(request.configJson());
@@ -86,21 +94,4 @@ public class FollowUpConfigService {
         );
     }
 
-    private String normalizarPadrao(String valor, String padrao) {
-        if (valor == null || valor.isBlank()) {
-            return padrao;
-        }
-        return normalizar(valor);
-    }
-
-    private String normalizarOpcional(String valor) {
-        if (valor == null || valor.isBlank()) {
-            return null;
-        }
-        return normalizar(valor);
-    }
-
-    private String normalizar(String valor) {
-        return valor.trim().toUpperCase(Locale.ROOT);
-    }
 }

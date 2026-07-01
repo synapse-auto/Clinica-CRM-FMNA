@@ -8,7 +8,6 @@ import com.synapse.clinicafemina.dto.lembrete.MensagemFestivaConfigResponse;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.MensagemFestivaConfigRepository;
 import java.util.List;
-import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,11 +54,16 @@ public class MensagemFestivaConfigService {
     }
 
     private void aplicarRequest(MensagemFestivaConfig config, MensagemFestivaConfigRequest request) {
-        config.setChave(normalizar(request.chave()));
+        config.setChave(AutomacaoValidation.normalizar(request.chave()));
         config.setNome(request.nome());
         config.setMesDia(request.mesDia());
         config.setAtivo(request.ativo() == null ? Boolean.TRUE : request.ativo());
-        config.setCanal(normalizarPadrao(request.canal(), "WHATSAPP"));
+        config.setCanal(AutomacaoValidation.opcaoPadrao(
+                request.canal(),
+                "WHATSAPP",
+                AutomacaoValidation.CANAIS,
+                "Canal"
+        ));
         config.setMensagemTemplate(request.mensagemTemplate());
         config.setConfigJson(request.configJson());
     }
@@ -80,14 +84,4 @@ public class MensagemFestivaConfigService {
         );
     }
 
-    private String normalizarPadrao(String valor, String padrao) {
-        if (valor == null || valor.isBlank()) {
-            return padrao;
-        }
-        return normalizar(valor);
-    }
-
-    private String normalizar(String valor) {
-        return valor.trim().toUpperCase(Locale.ROOT);
-    }
 }

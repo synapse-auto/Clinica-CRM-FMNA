@@ -14,6 +14,17 @@ type TagsClientProps = {
 };
 
 const DEFAULT_COLOR = '#0d9488';
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+const COLOR_PALETTE = [
+  '#0d9488',
+  '#2563eb',
+  '#7c3aed',
+  '#ef4444',
+  '#f97316',
+  '#16a34a',
+  '#db2777',
+  '#64748b',
+];
 
 export function TagsClient({ initialTags, initialError, canManage }: TagsClientProps) {
   const [tags, setTags] = useState(initialTags);
@@ -177,6 +188,9 @@ function TagDialog({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const [color, setColor] = useState(tagItem?.cor ?? DEFAULT_COLOR);
+  const previewColor = HEX_COLOR_PATTERN.test(color) ? color : DEFAULT_COLOR;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
       <section role="dialog" aria-modal="true" aria-labelledby="tag-dialog-title" className="w-full max-w-lg rounded-2xl border border-clinic-border bg-clinic-surface p-5 shadow-xl">
@@ -184,7 +198,7 @@ function TagDialog({
         {error ? <ErrorMessage message={error} /> : null}
         <form onSubmit={onSubmit} className="space-y-3">
           <Field label="Nome" name="nome" defaultValue={tagItem?.nome ?? ''} required />
-          <Field label="Cor" name="cor" defaultValue={tagItem?.cor ?? DEFAULT_COLOR} pattern="^#[0-9a-fA-F]{6}$" required />
+          <ColorField color={color} previewColor={previewColor} onChange={setColor} />
           <label className="block">
             <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Descrição</span>
             <textarea name="descricao" defaultValue={tagItem?.descricao ?? ''} className="h-20 w-full resize-none rounded-lg border border-clinic-border bg-clinic-input p-3 text-sm text-clinic-text outline-none focus:border-clinic-primary" />
@@ -193,6 +207,58 @@ function TagDialog({
           <DialogActions isSubmitting={isSubmitting} submitLabel="Salvar tag" onClose={onClose} />
         </form>
       </section>
+    </div>
+  );
+}
+
+function ColorField({
+  color,
+  previewColor,
+  onChange,
+}: {
+  color: string;
+  previewColor: string;
+  onChange: (color: string) => void;
+}) {
+  return (
+    <div>
+      <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Cor</span>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          aria-label="Cor visual"
+          value={previewColor}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-10 w-12 shrink-0 rounded-lg border border-clinic-border bg-clinic-input p-1"
+        />
+        <input
+          name="cor"
+          value={color}
+          onChange={(event) => onChange(event.target.value)}
+          required
+          pattern="^#[0-9a-fA-F]{6}$"
+          aria-label="Hex da cor"
+          className="h-10 min-w-0 flex-1 rounded-lg border border-clinic-border bg-clinic-input px-3 text-sm text-clinic-text outline-none focus:border-clinic-primary"
+        />
+        <span
+          className="inline-flex h-8 shrink-0 items-center rounded-full border border-clinic-border bg-clinic-soft px-2 text-[9px] font-bold text-clinic-text"
+          style={{ color: previewColor }}
+        >
+          Preview
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {COLOR_PALETTE.map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-label={`Usar cor ${option}`}
+            onClick={() => onChange(option)}
+            className="h-6 w-6 rounded-full border border-clinic-border ring-offset-2 focus:outline-none focus:ring-2 focus:ring-clinic-primary"
+            style={{ backgroundColor: option }}
+          />
+        ))}
+      </div>
     </div>
   );
 }

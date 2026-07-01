@@ -7,12 +7,12 @@ import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.dto.followup.FollowUpTemporaryRequest;
 import com.synapse.clinicafemina.dto.followup.FollowUpTemporaryResponse;
 import com.synapse.clinicafemina.dto.followup.FollowUpTemporaryStatusRequest;
+import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.FollowUpConfigRepository;
 import com.synapse.clinicafemina.repository.FollowUpTemporaryRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import java.time.OffsetDateTime;
-import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -38,7 +38,7 @@ public class FollowUpTemporaryService {
     public Page<FollowUpTemporaryResponse> listar(Clinica clinica, String status, Long pacienteId,
                                                   OffsetDateTime from, OffsetDateTime to, Pageable pageable) {
         return followUpTemporaryRepository.findByClinica(
-                        clinica.getId(), normalizarOpcional(status), pacienteId, from, to, pageable)
+                        clinica.getId(), validarStatusOpcional(status), pacienteId, from, to, pageable)
                 .map(this::toResponse);
     }
 
@@ -53,7 +53,7 @@ public class FollowUpTemporaryService {
     public FollowUpTemporaryResponse criar(Clinica clinica, Long pacienteId, FollowUpTemporaryRequest request) {
         Paciente paciente = buscarPacienteNaClinica(pacienteId, clinica.getId());
         if (request.scheduledAt() == null) {
-            throw new IllegalArgumentException("scheduledAt é obrigatório para follow-up temporário");
+            throw new BadRequestException("scheduledAt e obrigatorio para follow-up temporario.");
         }
 
         FollowUpTemporary followUp = new FollowUpTemporary();
@@ -62,8 +62,18 @@ public class FollowUpTemporaryService {
         followUp.setFollowUpConfig(buscarConfigOpcional(request.followUpConfigId(), clinica.getId()));
         followUp.setTitulo(request.titulo());
         followUp.setDescricao(request.descricao());
-        followUp.setOrigem(normalizarPadrao(request.origem(), ORIGEM_MANUAL));
-        followUp.setStatus(normalizarPadrao(request.status(), STATUS_PENDENTE));
+        followUp.setOrigem(AutomacaoValidation.opcaoPadrao(
+                request.origem(),
+                ORIGEM_MANUAL,
+                AutomacaoValidation.ORIGENS,
+                "Origem"
+        ));
+        followUp.setStatus(AutomacaoValidation.opcaoPadrao(
+                request.status(),
+                STATUS_PENDENTE,
+                AutomacaoValidation.STATUS_FOLLOW_UP,
+                "Status"
+        ));
         followUp.setScheduledAt(request.scheduledAt());
         followUp.setPayload(request.payload());
 
@@ -76,7 +86,7 @@ public class FollowUpTemporaryService {
     public FollowUpTemporaryResponse alterarStatus(Clinica clinica, Long id, FollowUpTemporaryStatusRequest request) {
         FollowUpTemporary followUp = followUpTemporaryRepository.findByIdAndClinicaId(id, clinica.getId())
                 .orElseThrow(() -> new NotFoundException("Follow-up temporário não encontrado"));
-        String status = normalizar(request.status());
+        String status = validarStatus(request.status());
         followUp.setStatus(status);
 
         if (STATUS_PROCESSADO.equals(status) || STATUS_EXECUTADO.equals(status)) {
@@ -143,21 +153,18 @@ public class FollowUpTemporaryService {
         );
     }
 
-    private String normalizarPadrao(String valor, String padrao) {
-        if (valor == null || valor.isBlank()) {
-            return padrao;
-        }
-        return normalizar(valor);
-    }
-
-    private String normalizarOpcional(String valor) {
+    private String validarStatusOpcional(String valor) {
         if (valor == null || valor.isBlank()) {
             return null;
         }
-        return normalizar(valor);
+        return validarStatus(valor);
     }
 
-    private String normalizar(String valor) {
-        return valor.trim().toUpperCase(Locale.ROOT);
+    private String validarStatus(String valor) {
+        return AutomacaoValidation.opcao(
+                valor,
+                AutomacaoValidation.STATUS_FOLLOW_UP,
+                "Status"
+        );
     }
 }

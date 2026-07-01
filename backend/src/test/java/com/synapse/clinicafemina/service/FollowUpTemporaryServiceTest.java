@@ -5,6 +5,7 @@ import com.synapse.clinicafemina.domain.FollowUpTemporary;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.dto.followup.FollowUpTemporaryRequest;
 import com.synapse.clinicafemina.dto.followup.FollowUpTemporaryStatusRequest;
+import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.FollowUpConfigRepository;
 import com.synapse.clinicafemina.repository.FollowUpTemporaryRepository;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -127,7 +129,35 @@ class FollowUpTemporaryServiceTest {
         );
         when(pacienteRepository.findByIdAndClinicaId(20L, 9L)).thenReturn(Optional.of(paciente));
 
-        assertThrows(IllegalArgumentException.class, () -> service.criar(clinica, 20L, request));
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> service.criar(clinica, 20L, request)
+        );
+
+        assertEquals("scheduledAt e obrigatorio para follow-up temporario.", exception.getMessage());
+        verify(followUpTemporaryRepository, never()).save(any());
+    }
+
+    @Test
+    void should_reject_invalid_temporary_follow_up_status_before_database_constraint() {
+        FollowUpTemporaryRequest request = new FollowUpTemporaryRequest(
+                null,
+                "Retorno",
+                null,
+                "MANUAL",
+                "ABERTO",
+                OffsetDateTime.parse("2026-06-20T13:30:00Z"),
+                null
+        );
+        when(pacienteRepository.findByIdAndClinicaId(20L, 9L)).thenReturn(Optional.of(paciente));
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> service.criar(clinica, 20L, request)
+        );
+
+        assertEquals("Status deve ser um destes valores: PENDENTE, PROCESSANDO, PROCESSADO, EXECUTADO, CANCELADO, FALHOU.", exception.getMessage());
+        verify(followUpTemporaryRepository, never()).save(any());
     }
 
     @Test

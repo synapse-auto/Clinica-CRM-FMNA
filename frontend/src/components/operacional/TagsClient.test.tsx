@@ -35,7 +35,7 @@ describe('TagsClient', () => {
       ...tags[0],
       id: 4,
       nome: 'Ultrassom',
-      cor: '#0d9488',
+      cor: '#2563eb',
       descricao: 'Interesse em exame',
     }), {
       status: 201,
@@ -46,8 +46,8 @@ describe('TagsClient', () => {
 
     await user.click(screen.getByRole('button', { name: /nova tag/i }));
     await user.type(screen.getByLabelText('Nome'), 'Ultrassom');
-    await user.clear(screen.getByLabelText('Cor'));
-    await user.type(screen.getByLabelText('Cor'), '#0d9488');
+    await user.click(screen.getByRole('button', { name: 'Usar cor #2563eb' }));
+    expect(screen.getByLabelText('Hex da cor')).toHaveValue('#2563eb');
     await user.type(screen.getByLabelText('Descrição'), 'Interesse em exame');
     await user.click(screen.getByRole('button', { name: 'Salvar tag' }));
 
@@ -57,7 +57,7 @@ describe('TagsClient', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nome: 'Ultrassom',
-        cor: '#0d9488',
+        cor: '#2563eb',
         descricao: 'Interesse em exame',
         ativo: true,
       }),

@@ -16,6 +16,10 @@ export async function PATCH(request: Request, context: RouteContext) {
   return forward(request, context);
 }
 
+export async function DELETE(request: Request, context: RouteContext) {
+  return forward(request, context);
+}
+
 async function forward(request: Request, { params }: RouteContext) {
   const { path = [] } = await params;
   const url = new URL(request.url);

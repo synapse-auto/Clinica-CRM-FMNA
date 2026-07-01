@@ -4,6 +4,7 @@ import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.ConsultaLembreteConfig;
 import com.synapse.clinicafemina.dto.followup.ConfigStatusRequest;
 import com.synapse.clinicafemina.dto.lembrete.ConsultaLembreteConfigRequest;
+import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.repository.ConsultaLembreteConfigRepository;
 import java.time.LocalTime;
 import java.util.Optional;
@@ -17,7 +18,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -80,5 +83,31 @@ class ConsultaLembreteConfigServiceTest {
         service.alterarStatus(clinica, 11L, new ConfigStatusRequest(false));
 
         assertFalse(config.getAtivo());
+    }
+
+    @Test
+    void should_reject_invalid_reminder_unit_before_database_constraint() {
+        ConsultaLembreteConfigRequest request = new ConsultaLembreteConfigRequest(
+                "Lembrete",
+                null,
+                true,
+                "WHATSAPP",
+                1,
+                "MESES",
+                LocalTime.of(9, 0),
+                true,
+                true,
+                true,
+                "Ola",
+                null
+        );
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> service.criar(clinica, request)
+        );
+
+        assertEquals("Unidade da antecedencia deve ser um destes valores: MINUTOS, HORAS, DIAS, SEMANAS.", exception.getMessage());
+        verify(repository, never()).save(any());
     }
 }

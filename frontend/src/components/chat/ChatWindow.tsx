@@ -8,26 +8,33 @@ import {
   CheckCheck,
   Clock3,
   FileText,
+  MessageSquareText,
   Paperclip,
   Send,
+  Search,
 } from 'lucide-react';
 import type {
   AtendimentoDetalhe,
   MensagemAtendimento,
 } from '@/types/atendimento';
+import type { MensagemRapida } from '@/types/operacional';
 
 type Props = {
   detail: AtendimentoDetalhe | null;
   messages: MensagemAtendimento[];
+  quickMessages: MensagemRapida[];
   busy: boolean;
   error: string | null;
   onSend: (content: string) => Promise<void>;
   onAttach: (file: File) => Promise<void>;
 };
 
-export function ChatWindow({ detail, messages, busy, error, onSend, onAttach }: Props) {
+export function ChatWindow({ detail, messages, quickMessages, busy, error, onSend, onAttach }: Props) {
   const [content, setContent] = useState('');
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickSearch, setQuickSearch] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
+  const filteredQuickMessages = filterQuickMessages(quickMessages, quickSearch);
 
   async function submit() {
     const value = content.trim();
@@ -86,7 +93,58 @@ export function ChatWindow({ detail, messages, busy, error, onSend, onAttach }: 
             event.target.value = '';
           }}
         />
+        {quickOpen && detail ? (
+          <div className="mb-2 rounded-lg border border-clinic-border bg-clinic-surface p-2 shadow-lg">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-clinic-muted" />
+              <input
+                value={quickSearch}
+                onChange={(event) => setQuickSearch(event.target.value)}
+                placeholder="Buscar mensagem rápida"
+                aria-label="Buscar mensagens rápidas"
+                className="h-8 w-full rounded-lg border border-clinic-border bg-clinic-input pl-8 pr-3 text-[10px] text-clinic-text outline-none focus:border-clinic-primary"
+              />
+            </label>
+            <div className="mt-2 max-h-52 space-y-1 overflow-y-auto custom-scrollbar">
+              {filteredQuickMessages.length === 0 ? (
+                <p className="px-2 py-3 text-center text-[10px] text-clinic-muted">
+                  Nenhuma mensagem rápida ativa.
+                </p>
+              ) : filteredQuickMessages.map((message) => (
+                <button
+                  key={message.id}
+                  type="button"
+                  onClick={() => {
+                    setContent(message.conteudo);
+                    setQuickOpen(false);
+                    setQuickSearch('');
+                  }}
+                  className="w-full rounded-md px-2 py-2 text-left hover:bg-clinic-hover"
+                >
+                  <span className="block truncate text-[10px] font-extrabold text-clinic-text">
+                    {message.titulo}
+                  </span>
+                  <span className="block truncate text-[9px] font-semibold text-clinic-primary">
+                    {message.atalho}
+                  </span>
+                  <span className="block truncate text-[9px] text-clinic-muted">
+                    {message.conteudo}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Mensagens rápidas"
+            disabled={!detail || busy || quickMessages.length === 0}
+            onClick={() => setQuickOpen((current) => !current)}
+            className="rounded-full p-2 text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary disabled:opacity-40"
+          >
+            <MessageSquareText className="h-4 w-4" />
+          </button>
           <button
             type="button"
             aria-label="Anexar"
@@ -122,6 +180,20 @@ export function ChatWindow({ detail, messages, busy, error, onSend, onAttach }: 
       </div>
     </section>
   );
+}
+
+function filterQuickMessages(messages: MensagemRapida[], search: string) {
+  const term = search.trim().toLocaleLowerCase('pt-BR');
+  return messages
+    .filter((message) => message.ativo)
+    .filter((message) => {
+      if (!term) return true;
+      return [
+        message.titulo,
+        message.atalho,
+        message.conteudo,
+      ].some((value) => value.toLocaleLowerCase('pt-BR').includes(term));
+    });
 }
 
 function MessageBubble({ message }: { message: MensagemAtendimento }) {

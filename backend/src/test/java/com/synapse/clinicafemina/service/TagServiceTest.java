@@ -76,6 +76,18 @@ class TagServiceTest {
     }
 
     @Test
+    void should_reject_invalid_hex_color() {
+        TagRequest request = new TagRequest("Prioridade", "vermelho", null, true);
+        when(repository.existsByClinicaIdAndNomeIgnoreCaseAndDeletadoEmIsNull(7L, "Prioridade"))
+                .thenReturn(false);
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> service.criar(clinica, request));
+
+        assertEquals("Cor deve estar no formato hexadecimal #RRGGBB.", exception.getMessage());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
     void should_soft_delete_tag_by_clinic() {
         Tag tag = tag(9L, "Retorno");
         when(repository.findByIdAndClinicaIdAndDeletadoEmIsNull(9L, 7L)).thenReturn(Optional.of(tag));

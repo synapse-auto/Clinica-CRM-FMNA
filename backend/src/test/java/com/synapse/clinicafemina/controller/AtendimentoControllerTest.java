@@ -6,6 +6,7 @@ import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.security.JwtService;
 import com.synapse.clinicafemina.service.AtendimentoService;
+import com.synapse.clinicafemina.service.AtendimentoTagService;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.ConvenioReviewService;
 import com.synapse.clinicafemina.service.MensagemService;
@@ -33,6 +34,9 @@ class AtendimentoControllerTest {
 
     @MockBean
     private AtendimentoService atendimentoService;
+
+    @MockBean
+    private AtendimentoTagService atendimentoTagService;
 
     @MockBean
     private MensagemService mensagemService;

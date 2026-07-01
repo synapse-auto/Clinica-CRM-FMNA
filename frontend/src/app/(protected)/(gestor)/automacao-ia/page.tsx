@@ -17,7 +17,7 @@ import type {
 import type { ClinicaAtualResponse } from '@/types/dashboard';
 
 const FALLBACK_CLINIC: ClinicaAtualResponse = {
-  nome: 'Clínica',
+  nome: 'Clinica',
   slug: 'clinica',
   tipoClinica: 'PRE_NATAL',
   corPrimaria: '#0d9488',
@@ -28,32 +28,48 @@ const FALLBACK_CLINIC: ClinicaAtualResponse = {
   n8nWebhookConfigurado: false,
 };
 
+const endpointLabels = [
+  '/api/follow-up/config',
+  '/api/consulta-lembrete/config',
+  '/api/mensagens-festivas/config',
+  '/api/follow-ups-temporary',
+  '/api/configuracoes/clinica-atual',
+];
+
 export default async function AutomacaoIaPage() {
   let followUps: FollowUpConfig[] = [];
   let lembretes: ConsultaLembreteConfig[] = [];
   let festivas: MensagemFestivaConfig[] = [];
   let fila: FollowUpTemporary[] = [];
-  let clinic: ClinicaAtualResponse | null = null;
+  let clinic: ClinicaAtualResponse = FALLBACK_CLINIC;
   let error: string | null = null;
 
-  try {
-    [followUps, lembretes, festivas, fila, clinic] = await Promise.all([
-      getFollowUpConfigs(),
-      getConsultaLembreteConfigs(),
-      getMensagemFestivaConfigs(),
-      getFollowUpsTemporary(),
-      getClinicaAtual(),
-    ]);
-  } catch (caughtError) {
-    if (isBackendAuthorizationError(caughtError)) {
-      redirect('/login');
+  const results = await Promise.allSettled([
+    getFollowUpConfigs(),
+    getConsultaLembreteConfigs(),
+    getMensagemFestivaConfigs(),
+    getFollowUpsTemporary(),
+    getClinicaAtual(),
+  ]);
+
+  const failedLabels: string[] = [];
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      if (isBackendAuthorizationError(result.reason)) {
+        redirect('/login');
+      }
+      failedLabels.push(endpointLabels[index]);
     }
-    error = 'Não foi possível carregar as automações. Verifique a conexão com o servidor.';
-    try {
-      clinic = await getClinicaAtual();
-    } catch {
-      clinic = FALLBACK_CLINIC;
-    }
+  });
+
+  if (results[0].status === 'fulfilled') followUps = results[0].value;
+  if (results[1].status === 'fulfilled') lembretes = results[1].value;
+  if (results[2].status === 'fulfilled') festivas = results[2].value;
+  if (results[3].status === 'fulfilled') fila = results[3].value;
+  if (results[4].status === 'fulfilled') clinic = results[4].value;
+
+  if (failedLabels.length > 0) {
+    error = `Nao foi possivel carregar: ${failedLabels.join(', ')}.`;
   }
 
   return (
@@ -63,7 +79,7 @@ export default async function AutomacaoIaPage() {
         initialLembretes={lembretes}
         initialFestivas={festivas}
         initialFila={fila}
-        clinic={clinic ?? FALLBACK_CLINIC}
+        clinic={clinic}
         initialError={error}
       />
     </div>

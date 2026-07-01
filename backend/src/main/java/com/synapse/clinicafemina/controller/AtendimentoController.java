@@ -7,9 +7,11 @@ import com.synapse.clinicafemina.dto.AtendimentoResumoDTO;
 import com.synapse.clinicafemina.dto.ConvenioReviewRequest;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
+import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada;
 import com.synapse.clinicafemina.service.AtendimentoService;
+import com.synapse.clinicafemina.service.AtendimentoTagService;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.ConvenioReviewService;
 import com.synapse.clinicafemina.service.MensagemService;
@@ -36,6 +38,7 @@ import java.util.List;
 public class AtendimentoController {
 
     private final AtendimentoService atendimentoService;
+    private final AtendimentoTagService atendimentoTagService;
     private final MensagemService mensagemService;
     private final ConvenioReviewService convenioReviewService;
     private final ClinicaConfigService clinicaConfigService;
@@ -63,6 +66,25 @@ public class AtendimentoController {
     @GetMapping("/{id}")
     public AtendimentoDetalheDTO buscar(@PathVariable Long id) {
         return atendimentoService.buscarPorId(id, clinicaId());
+    }
+
+    @GetMapping("/{id}/tags")
+    public List<TagResponse> listarTags(@PathVariable Long id) {
+        return atendimentoTagService.listar(id, clinicaId());
+    }
+
+    @PostMapping("/{id}/tags/{tagId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
+    public List<TagResponse> adicionarTag(@PathVariable Long id, @PathVariable Long tagId) {
+        return atendimentoTagService.adicionar(id, tagId, clinicaId());
+    }
+
+    @DeleteMapping("/{id}/tags/{tagId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
+    public void removerTag(@PathVariable Long id, @PathVariable Long tagId) {
+        atendimentoTagService.remover(id, tagId, clinicaId());
     }
 
     @GetMapping("/{id}/mensagens")

@@ -10,6 +10,7 @@ import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.TagRepository;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TagService {
 
     private static final String DEFAULT_COLOR = "#0d9488";
+    private static final Pattern HEX_COLOR = Pattern.compile("^#[0-9a-fA-F]{6}$");
 
     private final TagRepository repository;
 
@@ -100,7 +102,11 @@ public class TagService {
         if (value == null || value.isBlank()) {
             return DEFAULT_COLOR;
         }
-        return value.trim();
+        String normalized = value.trim();
+        if (!HEX_COLOR.matcher(normalized).matches()) {
+            throw new BadRequestException("Cor deve estar no formato hexadecimal #RRGGBB.");
+        }
+        return normalized;
     }
 
     private String required(String value, String message) {

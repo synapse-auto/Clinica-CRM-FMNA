@@ -7,6 +7,7 @@ import type {
   MensagemAtendimento,
   NotificacaoAtendimento,
 } from '@/types/atendimento';
+import type { MensagemRapida, TagOperacional } from '@/types/operacional';
 
 export async function listAtendimentos(params: {
   filtro: AtendimentoFilter;
@@ -35,6 +36,32 @@ export async function getMensagens(id: number): Promise<MensagemAtendimento[]> {
 
 export function getAtendentes(): Promise<AtendenteOption[]> {
   return requestJson('/api/atendimentos/atendentes');
+}
+
+export async function getMensagensRapidasAtivas(): Promise<MensagemRapida[]> {
+  const mensagens = await requestJson<MensagemRapida[]>('/api/mensagens-rapidas');
+  return mensagens
+    .filter((mensagem) => mensagem.ativo)
+    .sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
+}
+
+export async function getTagsOperacionaisAtivas(): Promise<TagOperacional[]> {
+  const tags = await requestJson<TagOperacional[]>('/api/tags');
+  return tags
+    .filter((tag) => tag.ativo)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+export function getAtendimentoTags(id: number): Promise<TagOperacional[]> {
+  return requestJson(`/api/atendimentos/${id}/tags`);
+}
+
+export function adicionarTagAtendimento(id: number, tagId: number): Promise<TagOperacional[]> {
+  return requestJson(`/api/atendimentos/${id}/tags/${tagId}`, { method: 'POST' });
+}
+
+export function removerTagAtendimento(id: number, tagId: number): Promise<void> {
+  return requestVoid(`/api/atendimentos/${id}/tags/${tagId}`, { method: 'DELETE' });
 }
 
 export function enviarMensagem(id: number, conteudo: string): Promise<MensagemAtendimento> {

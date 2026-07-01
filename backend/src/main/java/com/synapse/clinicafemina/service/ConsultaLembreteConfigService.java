@@ -8,7 +8,6 @@ import com.synapse.clinicafemina.dto.lembrete.ConsultaLembreteConfigResponse;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.ConsultaLembreteConfigRepository;
 import java.util.List;
-import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,9 +57,18 @@ public class ConsultaLembreteConfigService {
         config.setNome(request.nome());
         config.setDescricao(request.descricao());
         config.setAtivo(request.ativo() == null ? Boolean.TRUE : request.ativo());
-        config.setCanal(normalizarPadrao(request.canal(), "WHATSAPP"));
+        config.setCanal(AutomacaoValidation.opcaoPadrao(
+                request.canal(),
+                "WHATSAPP",
+                AutomacaoValidation.CANAIS,
+                "Canal"
+        ));
         config.setAntecedenciaQuantidade(request.antecedenciaQuantidade());
-        config.setAntecedenciaUnidade(normalizar(request.antecedenciaUnidade()));
+        config.setAntecedenciaUnidade(AutomacaoValidation.opcao(
+                request.antecedenciaUnidade(),
+                AutomacaoValidation.ANTECEDENCIA_UNIDADES,
+                "Unidade da antecedencia"
+        ));
         config.setHorarioEnvio(request.horarioEnvio());
         config.setPermiteConfirmacao(request.permiteConfirmacao() == null ? Boolean.TRUE : request.permiteConfirmacao());
         config.setPermiteCancelamento(request.permiteCancelamento() == null ? Boolean.TRUE : request.permiteCancelamento());
@@ -90,14 +98,4 @@ public class ConsultaLembreteConfigService {
         );
     }
 
-    private String normalizarPadrao(String valor, String padrao) {
-        if (valor == null || valor.isBlank()) {
-            return padrao;
-        }
-        return normalizar(valor);
-    }
-
-    private String normalizar(String valor) {
-        return valor.trim().toUpperCase(Locale.ROOT);
-    }
 }

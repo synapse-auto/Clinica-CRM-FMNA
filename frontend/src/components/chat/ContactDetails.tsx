@@ -1,30 +1,42 @@
 'use client';
 
-import { CalendarCheck, Mail, Phone, User } from 'lucide-react';
+import { useState } from 'react';
+import { CalendarCheck, Mail, Phone, Plus, User, X } from 'lucide-react';
 import type {
   AtendenteOption,
   AtendimentoDetalhe,
 } from '@/types/atendimento';
+import type { TagOperacional } from '@/types/operacional';
 
 type Props = {
   detail: AtendimentoDetalhe | null;
   atendentes: AtendenteOption[];
+  tags: TagOperacional[];
+  availableTags: TagOperacional[];
   canManage: boolean;
   busy: boolean;
   onAssume: () => Promise<void>;
   onTransfer: (usuarioId: number) => Promise<void>;
   onReview: (result: 'APROVADO' | 'RECUSADO' | 'PENDENTE') => Promise<void>;
+  onAddTag: (tagId: number) => Promise<void>;
+  onRemoveTag: (tagId: number) => Promise<void>;
 };
 
 export function ContactDetails({
   detail,
   atendentes,
+  tags,
+  availableTags,
   canManage,
   busy,
   onAssume,
   onTransfer,
   onReview,
+  onAddTag,
+  onRemoveTag,
 }: Props) {
+  const [addingTag, setAddingTag] = useState(false);
+
   if (!detail) {
     return (
       <aside className="flex h-full w-[300px] items-center justify-center border-l border-clinic-border bg-clinic-surface p-5 text-center text-[11px] text-clinic-muted">
@@ -35,6 +47,8 @@ export function ContactDetails({
 
   const paciente = detail.paciente;
   const initials = paciente.nome.split(/\s+/).slice(0, 2).map((part) => part[0]).join('');
+  const linkedTagIds = new Set(tags.map((tag) => tag.id));
+  const tagsToAdd = availableTags.filter((tag) => !linkedTagIds.has(tag.id));
 
   return (
     <aside className="flex h-full w-[300px] shrink-0 flex-col overflow-y-auto border-l border-clinic-border bg-clinic-surface custom-scrollbar">
@@ -107,6 +121,72 @@ export function ContactDetails({
                 ))}
               </select>
             </label>
+          ) : null}
+        </Section>
+
+        <Section title="Tags">
+          {tags.length === 0 ? (
+            <p className="text-[10px] text-clinic-muted">Sem tags neste atendimento.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map((tag) => (
+                <span
+                  key={tag.id}
+                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[9px] font-bold text-clinic-text"
+                >
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: tag.cor }} />
+                  <span className="truncate">{tag.nome}</span>
+                  {canManage ? (
+                    <button
+                      type="button"
+                      aria-label={`Remover tag ${tag.nome}`}
+                      disabled={busy}
+                      onClick={() => void onRemoveTag(tag.id)}
+                      className="text-clinic-muted hover:text-clinic-danger disabled:opacity-50"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  ) : null}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {canManage ? (
+            <div className="space-y-2">
+              <button
+                type="button"
+                disabled={busy || tagsToAdd.length === 0}
+                onClick={() => setAddingTag((current) => !current)}
+                className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-clinic-border text-[10px] font-extrabold text-clinic-text hover:bg-clinic-hover disabled:opacity-50"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Adicionar tag
+              </button>
+              {addingTag && tagsToAdd.length > 0 ? (
+                <label className="block text-[9px] font-bold text-clinic-muted">
+                  Selecionar tag
+                  <select
+                    value=""
+                    aria-label="Selecionar tag para adicionar"
+                    disabled={busy}
+                    onChange={(event) => {
+                      if (!event.target.value) return;
+                      void onAddTag(Number(event.target.value));
+                      setAddingTag(false);
+                    }}
+                    className="mt-1 h-9 w-full rounded-lg border border-clinic-border bg-clinic-input px-2 text-[10px] text-clinic-text"
+                  >
+                    <option value="">Selecione...</option>
+                    {tagsToAdd.map((tag) => (
+                      <option key={tag.id} value={tag.id}>
+                        {tag.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
           ) : null}
         </Section>
       </div>

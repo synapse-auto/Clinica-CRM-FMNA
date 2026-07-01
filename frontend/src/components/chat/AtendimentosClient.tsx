@@ -3,16 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AuthUser } from '@/lib/auth/types';
 import {
+  adicionarTagAtendimento,
   assumirAtendimento,
   enviarAnexo,
   enviarMensagem,
   getAtendimento,
+  getAtendimentoTags,
+  getMensagensRapidasAtivas,
   getMensagens,
   getNotificacoes,
   getNotificacoesResumo,
+  getTagsOperacionaisAtivas,
   listAtendimentos,
   marcarAtendimentoComoLido,
   marcarNotificacoesComoLidas,
+  removerTagAtendimento,
   revisarConvenio,
   transferirAtendimento,
 } from '@/services/atendimentos';
@@ -23,6 +28,7 @@ import type {
   AtendimentoResumo,
   MensagemAtendimento,
 } from '@/types/atendimento';
+import type { MensagemRapida, TagOperacional } from '@/types/operacional';
 import { ChatList } from './ChatList';
 import { ChatWindow } from './ChatWindow';
 import { ContactDetails } from './ContactDetails';
@@ -38,6 +44,9 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
   const [activeId, setActiveId] = useState<number | null>(initialConversations[0]?.id ?? null);
   const [detail, setDetail] = useState<AtendimentoDetalhe | null>(null);
   const [messages, setMessages] = useState<MensagemAtendimento[]>([]);
+  const [quickMessages, setQuickMessages] = useState<MensagemRapida[]>([]);
+  const [availableTags, setAvailableTags] = useState<TagOperacional[]>([]);
+  const [activeTags, setActiveTags] = useState<TagOperacional[]>([]);
   const [filter, setFilter] = useState<AtendimentoFilter>('TODOS');
   const [type, setType] = useState<'TODOS' | 'IA' | 'HUMANO'>('TODOS');
   const [search, setSearch] = useState('');
@@ -63,16 +72,34 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
 
   const refreshActive = useCallback(async (id: number) => {
     try {
-      const [nextDetail, nextMessages] = await Promise.all([
+      const [nextDetail, nextMessages, nextTags] = await Promise.all([
         getAtendimento(id),
         getMensagens(id),
+        getAtendimentoTags(id),
       ]);
       setDetail(nextDetail);
       setMessages(nextMessages);
+      setActiveTags(nextTags);
       setError(null);
     } catch (cause) {
       setError(errorMessage(cause));
     }
+  }, []);
+
+  useEffect(() => {
+    async function loadOperationalData() {
+      try {
+        const [nextQuickMessages, nextTags] = await Promise.all([
+          getMensagensRapidasAtivas(),
+          getTagsOperacionaisAtivas(),
+        ]);
+        setQuickMessages(nextQuickMessages);
+        setAvailableTags(nextTags);
+      } catch (cause) {
+        setError(errorMessage(cause));
+      }
+    }
+    void loadOperationalData();
   }, []);
 
   useEffect(() => {
@@ -84,6 +111,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
     if (!activeId) {
       setDetail(null);
       setMessages([]);
+      setActiveTags([]);
       return;
     }
     void marcarAtendimentoComoLido(activeId)
@@ -175,6 +203,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       <ChatWindow
         detail={detail}
         messages={messages}
+        quickMessages={quickMessages}
         busy={busy}
         error={error}
         onSend={(content) => activeId
@@ -187,6 +216,8 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       <ContactDetails
         detail={detail}
         atendentes={atendentes}
+        tags={activeTags}
+        availableTags={availableTags}
         canManage={user.perfil !== 'MEDICO'}
         busy={busy}
         onAssume={() => activeId
@@ -197,6 +228,12 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
           : Promise.resolve()}
         onReview={(result) => activeId
           ? runAction(() => revisarConvenio(activeId, result))
+          : Promise.resolve()}
+        onAddTag={(tagId) => activeId
+          ? runAction(() => adicionarTagAtendimento(activeId, tagId))
+          : Promise.resolve()}
+        onRemoveTag={(tagId) => activeId
+          ? runAction(() => removerTagAtendimento(activeId, tagId))
           : Promise.resolve()}
       />
     </div>

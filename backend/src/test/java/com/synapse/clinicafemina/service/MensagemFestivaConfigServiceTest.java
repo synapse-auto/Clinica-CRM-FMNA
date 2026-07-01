@@ -4,6 +4,7 @@ import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.MensagemFestivaConfig;
 import com.synapse.clinicafemina.dto.followup.ConfigStatusRequest;
 import com.synapse.clinicafemina.dto.lembrete.MensagemFestivaConfigRequest;
+import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.repository.MensagemFestivaConfigRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,7 +17,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -73,5 +76,26 @@ class MensagemFestivaConfigServiceTest {
         service.alterarStatus(clinica, 12L, new ConfigStatusRequest(false));
 
         assertFalse(config.getAtivo());
+    }
+
+    @Test
+    void should_reject_invalid_festive_message_channel_before_database_constraint() {
+        MensagemFestivaConfigRequest request = new MensagemFestivaConfigRequest(
+                "NATAL",
+                "Natal",
+                "12-25",
+                true,
+                "PUSH",
+                "Feliz Natal!",
+                null
+        );
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> service.criar(clinica, request)
+        );
+
+        assertEquals("Canal deve ser um destes valores: WHATSAPP, EMAIL, SMS, TELEFONE, INTERNO.", exception.getMessage());
+        verify(repository, never()).save(any());
     }
 }

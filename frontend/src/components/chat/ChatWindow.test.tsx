@@ -1,7 +1,31 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 import { ChatWindow } from './ChatWindow';
-import type { MensagemAtendimento } from '@/types/atendimento';
+import type { AtendimentoDetalhe, MensagemAtendimento } from '@/types/atendimento';
+
+const detail: AtendimentoDetalhe = {
+  id: 30,
+  status: 'ATIVO',
+  tratadoPorIa: false,
+  dataInicio: '2026-07-01T12:00:00Z',
+  dataEncerramento: null,
+  naoLidas: 0,
+  paciente: {
+    id: 10,
+    nome: 'Paciente Teste',
+    telefone: '44 99999-9999',
+    email: null,
+    status: 'EM_ATENDIMENTO',
+    ultimaInteracaoEm: null,
+    requerRevisao: false,
+    convenioStatus: null,
+    convenioRevisadoEm: null,
+    convenioRevisadoPorId: null,
+    convenioRevisadoPorNome: null,
+  },
+  atendentePrincipal: null,
+};
 
 describe('ChatWindow', () => {
   it('should_not_render_quick_action_buttons_above_message_input', () => {
@@ -9,6 +33,7 @@ describe('ChatWindow', () => {
       <ChatWindow
         detail={null}
         messages={[]}
+        quickMessages={[]}
         busy={false}
         error={null}
         onSend={async () => undefined}
@@ -20,6 +45,56 @@ describe('ChatWindow', () => {
     expect(screen.queryByRole('button', { name: 'Pedir documento' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Enviar localização' })).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText('Digite uma mensagem...')).toBeInTheDocument();
+  });
+
+  it('should_insert_quick_message_content_without_sending_automatically', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[]}
+        quickMessages={[
+          {
+            id: 1,
+            categoriaId: null,
+            categoriaRotulo: null,
+            categoriaCor: null,
+            titulo: 'Confirmar consulta',
+            atalho: '/confirmar',
+            conteudo: 'Sua consulta esta confirmada.',
+            ativo: true,
+            criadoEm: null,
+            atualizadoEm: null,
+          },
+          {
+            id: 2,
+            categoriaId: null,
+            categoriaRotulo: null,
+            categoriaCor: null,
+            titulo: 'Inativa',
+            atalho: '/inativa',
+            conteudo: 'Nao usar.',
+            ativo: false,
+            criadoEm: null,
+            atualizadoEm: null,
+          },
+        ]}
+        busy={false}
+        error={null}
+        onSend={onSend}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Mensagens rápidas' }));
+    await user.type(screen.getByLabelText('Buscar mensagens rápidas'), 'confirmar');
+    await user.click(screen.getByRole('button', { name: /Confirmar consulta/ }));
+
+    expect(screen.getByPlaceholderText('Digite uma mensagem...')).toHaveValue('Sua consulta esta confirmada.');
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.queryByText('Inativa')).not.toBeInTheDocument();
   });
 
   it('should_render_image_using_bff_endpoint', () => {
@@ -48,6 +123,7 @@ describe('ChatWindow', () => {
       <ChatWindow
         detail={null}
         messages={[mockImageMessage]}
+        quickMessages={[]}
         busy={false}
         error={null}
         onSend={async () => undefined}
@@ -86,6 +162,7 @@ describe('ChatWindow', () => {
       <ChatWindow
         detail={null}
         messages={[mockAudioMessage]}
+        quickMessages={[]}
         busy={false}
         error={null}
         onSend={async () => undefined}
@@ -124,6 +201,7 @@ describe('ChatWindow', () => {
       <ChatWindow
         detail={null}
         messages={[mockDocMessage]}
+        quickMessages={[]}
         busy={false}
         error={null}
         onSend={async () => undefined}
@@ -162,6 +240,7 @@ describe('ChatWindow', () => {
       <ChatWindow
         detail={null}
         messages={[mockImageMessage]}
+        quickMessages={[]}
         busy={false}
         error={null}
         onSend={async () => undefined}
