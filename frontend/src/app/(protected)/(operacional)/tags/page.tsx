@@ -1,19 +1,29 @@
-import { Tag } from 'lucide-react';
-import { EmptyState } from '@/components/demo/EmptyState';
-import { PageHeader } from '@/components/demo/PageHeader';
+import { redirect } from 'next/navigation';
+import { TagsClient } from '@/components/operacional/TagsClient';
+import { requireSession } from '@/lib/auth/session';
+import { getTags, isBackendAuthorizationError } from '@/services/backend';
+import type { TagOperacional } from '@/types/operacional';
 
-export default function TagsPage() {
+export default async function TagsPage() {
+  const user = await requireSession();
+  let tags: TagOperacional[] = [];
+  let error: string | null = null;
+
+  try {
+    tags = await getTags();
+  } catch (caughtError) {
+    if (isBackendAuthorizationError(caughtError)) {
+      redirect('/login');
+    }
+    error = 'Não foi possível carregar as tags. Verifique a conexão com o servidor.';
+  }
+
   return (
     <div className="h-full overflow-auto bg-clinic-canvas p-4 custom-scrollbar">
-      <PageHeader
-        title="Tags"
-        description="Gerencie as etiquetas para organizar seus leads"
-      />
-
-      <EmptyState
-        icon={Tag}
-        title="Tags em configuração"
-        description="O gerenciamento de tags será habilitado em uma próxima etapa. Nenhuma etiqueta está disponível no momento."
+      <TagsClient
+        initialTags={tags}
+        initialError={error}
+        canManage={user.perfil === 'GESTOR'}
       />
     </div>
   );

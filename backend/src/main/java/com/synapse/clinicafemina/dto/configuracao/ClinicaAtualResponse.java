@@ -9,6 +9,8 @@ public record ClinicaAtualResponse(
         String corPrimaria,
         String logoUrl,
         boolean usaCirurgiasNaAgenda,
-        boolean followUpAutomatico
+        boolean followUpAutomatico,
+        boolean usaN8n,
+        boolean n8nWebhookConfigurado
 ) {
 }

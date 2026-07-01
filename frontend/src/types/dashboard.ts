@@ -39,4 +39,6 @@ export type ClinicaAtualResponse = {
   logoUrl?: string | null;
   usaCirurgiasNaAgenda: boolean;
   followUpAutomatico: boolean;
+  usaN8n?: boolean;
+  n8nWebhookConfigurado?: boolean;
 };

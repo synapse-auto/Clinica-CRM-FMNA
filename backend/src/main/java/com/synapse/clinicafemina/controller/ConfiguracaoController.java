@@ -27,7 +27,9 @@ public class ConfiguracaoController {
                 clinica.getCorPrimaria(),
                 clinica.getLogoUrl(),
                 Boolean.TRUE.equals(clinica.getUsaCirurgiasNaAgenda()),
-                Boolean.TRUE.equals(clinica.getFollowUpAutomatico())
+                Boolean.TRUE.equals(clinica.getFollowUpAutomatico()),
+                Boolean.TRUE.equals(clinica.getUsaN8n()),
+                clinica.getN8nWebhookUrl() != null && !clinica.getN8nWebhookUrl().isBlank()
         );
     }
 }

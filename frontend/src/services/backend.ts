@@ -19,6 +19,12 @@ import type {
   AtendimentoResumo,
 } from '@/types/atendimento';
 import type { EquipeResponse } from '@/types/equipe';
+import type {
+  CategoriaMensagemRapida,
+  HorarioAtendente,
+  MensagemRapida,
+  TagOperacional,
+} from '@/types/operacional';
 import type { PacienteResumo } from '@/types/paciente';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/constants';
 
@@ -35,6 +41,8 @@ const DEFAULT_CLINICA: ClinicaAtualResponse = {
   logoUrl: null,
   usaCirurgiasNaAgenda: true,
   followUpAutomatico: false,
+  usaN8n: false,
+  n8nWebhookConfigurado: false,
 };
 
 export async function getDashboardData(
@@ -100,6 +108,22 @@ export async function getPacientes(): Promise<PacienteResumo[]> {
 
 export async function getEquipe(): Promise<EquipeResponse> {
   return getJson<EquipeResponse>('/api/equipe');
+}
+
+export async function getTags(): Promise<TagOperacional[]> {
+  return getJson<TagOperacional[]>('/api/tags');
+}
+
+export async function getMensagensRapidas(): Promise<MensagemRapida[]> {
+  return getJson<MensagemRapida[]>('/api/mensagens-rapidas');
+}
+
+export async function getCategoriasMensagensRapidas(): Promise<CategoriaMensagemRapida[]> {
+  return getJson<CategoriaMensagemRapida[]>('/api/mensagens-rapidas/categorias');
+}
+
+export async function getHorarios(): Promise<HorarioAtendente[]> {
+  return getJson<HorarioAtendente[]>('/api/horarios');
 }
 
 export async function forwardBackendRequest(
