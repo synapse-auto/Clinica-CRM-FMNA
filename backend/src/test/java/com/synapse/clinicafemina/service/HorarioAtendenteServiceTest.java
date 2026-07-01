@@ -73,11 +73,12 @@ class HorarioAtendenteServiceTest {
         verify(repository).save(captor.capture());
         HorarioAtendente saved = captor.getValue();
         assertEquals(usuario, saved.getUsuario());
-        assertEquals(1, saved.getDiaSemana());
+        assertEquals(Short.valueOf((short) 1), saved.getDiaSemana());
         assertEquals(LocalTime.of(8, 0), saved.getHoraInicio());
         assertEquals(LocalTime.of(12, 0), saved.getHoraFim());
         assertEquals(true, saved.getAtivo());
         assertEquals(31L, response.id());
+        assertEquals(1, response.diaSemana());
     }
 
     @Test
@@ -91,6 +92,25 @@ class HorarioAtendenteServiceTest {
         );
 
         assertThrows(BadRequestException.class, () -> service.criar(clinica, request));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void should_reject_schedule_when_week_day_is_out_of_range() {
+        HorarioAtendenteRequest request = new HorarioAtendenteRequest(
+                3L,
+                7,
+                LocalTime.of(8, 0),
+                LocalTime.of(12, 0),
+                true
+        );
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> service.criar(clinica, request)
+        );
+
+        assertEquals("Dia da semana deve estar entre 0 e 6.", exception.getMessage());
         verify(repository, never()).save(any());
     }
 
@@ -121,7 +141,7 @@ class HorarioAtendenteServiceTest {
         HorarioAtendente horario = new HorarioAtendente();
         horario.setId(id);
         horario.setUsuario(usuario);
-        horario.setDiaSemana(1);
+        horario.setDiaSemana(Short.valueOf((short) 1));
         horario.setHoraInicio(LocalTime.of(8, 0));
         horario.setHoraFim(LocalTime.of(12, 0));
         horario.setAtivo(true);

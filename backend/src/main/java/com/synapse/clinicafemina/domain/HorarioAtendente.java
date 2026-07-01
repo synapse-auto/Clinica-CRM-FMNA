@@ -31,7 +31,7 @@ public class HorarioAtendente {
     private Usuario usuario;
 
     @Column(name = "dia_semana", nullable = false)
-    private Integer diaSemana;
+    private Short diaSemana;
 
     @Column(name = "hora_inicio", nullable = false)
     private LocalTime horaInicio;

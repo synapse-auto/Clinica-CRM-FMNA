@@ -34,19 +34,21 @@ public class HorarioAtendenteService {
     @Transactional
     public HorarioAtendenteResponse criar(Clinica clinica, HorarioAtendenteRequest request) {
         validarIntervalo(request);
+        Short diaSemana = validarDiaSemana(request.diaSemana());
         Usuario usuario = buscarUsuario(clinica, request.usuarioId());
         HorarioAtendente horario = new HorarioAtendente();
         horario.setUsuario(usuario);
-        aplicarRequest(horario, request);
+        aplicarRequest(horario, request, diaSemana);
         return toResponse(repository.save(horario));
     }
 
     @Transactional
     public HorarioAtendenteResponse atualizar(Clinica clinica, Long id, HorarioAtendenteRequest request) {
         validarIntervalo(request);
+        Short diaSemana = validarDiaSemana(request.diaSemana());
         HorarioAtendente horario = buscarPorClinica(clinica, id);
         horario.setUsuario(buscarUsuario(clinica, request.usuarioId()));
-        aplicarRequest(horario, request);
+        aplicarRequest(horario, request, diaSemana);
         return toResponse(repository.save(horario));
     }
 
@@ -74,8 +76,8 @@ public class HorarioAtendenteService {
                 .orElseThrow(() -> new BadRequestException("Atendente inválido para esta clínica."));
     }
 
-    private void aplicarRequest(HorarioAtendente horario, HorarioAtendenteRequest request) {
-        horario.setDiaSemana(request.diaSemana());
+    private void aplicarRequest(HorarioAtendente horario, HorarioAtendenteRequest request, Short diaSemana) {
+        horario.setDiaSemana(diaSemana);
         horario.setHoraInicio(request.horaInicio());
         horario.setHoraFim(request.horaFim());
         horario.setAtivo(request.ativo() == null ? Boolean.TRUE : request.ativo());
@@ -90,13 +92,20 @@ public class HorarioAtendenteService {
         }
     }
 
+    private Short validarDiaSemana(Integer diaSemana) {
+        if (diaSemana == null || diaSemana < 0 || diaSemana > 6) {
+            throw new BadRequestException("Dia da semana deve estar entre 0 e 6.");
+        }
+        return diaSemana.shortValue();
+    }
+
     private HorarioAtendenteResponse toResponse(HorarioAtendente horario) {
         Usuario usuario = horario.getUsuario();
         return new HorarioAtendenteResponse(
                 horario.getId(),
                 usuario.getId(),
                 usuario.getNome(),
-                horario.getDiaSemana(),
+                horario.getDiaSemana().intValue(),
                 horario.getHoraInicio(),
                 horario.getHoraFim(),
                 Boolean.TRUE.equals(horario.getAtivo()),
