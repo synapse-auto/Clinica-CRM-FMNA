@@ -8,6 +8,7 @@ import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.FollowUpTemporaryService;
 import jakarta.validation.Valid;
 import java.time.OffsetDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -34,14 +35,14 @@ public class FollowUpTemporaryController {
 
     @GetMapping("/follow-ups-temporary")
     @PreAuthorize("hasAnyRole('GESTOR', 'MEDICO', 'RECEPCIONISTA')")
-    public Page<FollowUpTemporaryResponse> listar(
+    public List<FollowUpTemporaryResponse> listar(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long pacienteId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
             Pageable pageable) {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
-        return service.listar(clinica, status, pacienteId, from, to, pageable);
+        return service.listar(clinica, status, pacienteId, from, to, pageable).getContent();
     }
 
     @GetMapping("/pacientes/{pacienteId}/follow-ups-temporary")

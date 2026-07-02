@@ -70,14 +70,22 @@ export async function getMensagemFestivaConfigs(): Promise<MensagemFestivaConfig
 }
 
 export async function getFollowUpsTemporary(): Promise<FollowUpTemporary[]> {
-  const response = await getJson<{ content?: FollowUpTemporary[] } | FollowUpTemporary[]>(
-    '/api/follow-ups-temporary',
-  );
+  try {
+    const response = await getJson<{ content?: FollowUpTemporary[] } | FollowUpTemporary[]>(
+      '/api/follow-ups-temporary',
+    );
 
-  if (Array.isArray(response)) {
-    return response;
+    if (Array.isArray(response)) {
+      return response;
+    }
+    return response.content ?? [];
+  } catch (error) {
+    if (isBackendAuthorizationError(error)) throw error;
+    if (!isNextDynamicServerUsage(error)) {
+      console.warn('[automacao] Fila temporaria de follow-ups indisponivel.', safeErrorMessage(error));
+    }
+    return [];
   }
-  return response.content ?? [];
 }
 
 export async function getAgendamentos(
@@ -197,4 +205,12 @@ export class BackendAuthorizationError extends Error {
 
 export function isBackendAuthorizationError(error: unknown): error is BackendAuthorizationError {
   return error instanceof BackendAuthorizationError;
+}
+
+function safeErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'erro desconhecido';
+}
+
+function isNextDynamicServerUsage(error: unknown) {
+  return error instanceof Error && error.message.includes('Dynamic server usage');
 }
