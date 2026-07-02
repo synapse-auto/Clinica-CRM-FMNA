@@ -13,16 +13,19 @@ import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.service.N8nEventService;
+import com.synapse.clinicafemina.service.N8nEventPayload;
 import com.synapse.clinicafemina.service.AtendimentoNotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.core.env.Environment;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -34,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -119,8 +123,69 @@ class WhatsappInboundMapperTest {
         assertEquals(ExternalProviderType.WHATSAPP, pacienteCaptor.getAllValues().getFirst().getExternalSource());
         assertEquals("5511999990000", pacienteCaptor.getAllValues().getFirst().getExternalId());
         verify(n8nEventService).criarPayload(eq(clinica), eq("novo_lead"), any(), any(), any(), any());
-        verify(n8nEventService).criarPayload(eq(clinica), eq("nova_mensagem"), any(), any(), any(), any());
+        verify(n8nEventService).criarPayloadMensagemRecebida(eq(clinica), any(), any(), any());
         verify(notificationService).notificarNovaMensagem(any(), any());
+    }
+
+    @Test
+    void should_emit_n8n_message_received_after_persisting_inbound_message() {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setNaoLidas(0);
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(40L);
+            mensagem.setCriadoEm(OffsetDateTime.parse("2026-06-15T12:00:00Z"));
+            return mensagem;
+        });
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        N8nEventPayload payload = new N8nEventPayload(
+                2L,
+                "ultramedical",
+                null,
+                "mensagem_recebida",
+                20L,
+                30L,
+                null,
+                null,
+                40L,
+                "TEXTO",
+                "ENTRADA",
+                "WHATSAPP",
+                OffsetDateTime.parse("2026-06-15T12:00:00Z"),
+                true,
+                "https://n8n.example/webhook"
+        );
+        when(n8nEventService.criarPayloadMensagemRecebida(eq(clinica), eq(paciente), eq(atendimento), any(Mensagem.class)))
+                .thenReturn(payload);
+
+        mapper.processarMensagemTexto(validValuePayload("phone-ultra"));
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        InOrder ordem = inOrder(mensagemRepository, n8nEventService);
+        ordem.verify(mensagemRepository).save(mensagemCaptor.capture());
+        ordem.verify(n8nEventService)
+                .criarPayloadMensagemRecebida(eq(clinica), eq(paciente), eq(atendimento), eq(mensagemCaptor.getValue()));
+        verify(n8nEventService).emitir(payload);
     }
 
     @Test

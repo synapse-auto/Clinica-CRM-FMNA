@@ -244,7 +244,7 @@ public class WhatsappInboundMapper {
             log.warn("RabbitMQ indisponível para evento de mensagem. atendimento={}, tipoErro={}",
                     atendimento.getId(), exception.getClass().getSimpleName());
         }
-        emitirN8n(clinica, "nova_mensagem", paciente, atendimento);
+        emitirN8nMensagemRecebida(clinica, paciente, atendimento, mensagem);
     }
  
     private void emitirN8n(Clinica clinica, String evento, Paciente paciente, Atendimento atendimento) {
@@ -255,6 +255,20 @@ public class WhatsappInboundMapper {
                 atendimento.getId(),
                 null,
                 paciente.getTelefoneNormalizado()
+        ));
+    }
+
+    private void emitirN8nMensagemRecebida(
+            Clinica clinica,
+            Paciente paciente,
+            Atendimento atendimento,
+            Mensagem mensagem
+    ) {
+        n8nEventService.emitir(n8nEventService.criarPayloadMensagemRecebida(
+                clinica,
+                paciente,
+                atendimento,
+                mensagem
         ));
     }
  
