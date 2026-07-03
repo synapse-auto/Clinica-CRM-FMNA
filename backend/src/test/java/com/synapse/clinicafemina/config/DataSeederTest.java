@@ -53,14 +53,14 @@ class DataSeederTest {
                     "nome": "Atendente Inicial",
                     "email": "atendente@local.test",
                     "perfil": "RECEPCIONISTA",
-                    "password": "SenhaInicial!2026",
+                    "password": "SenhaInicial2026",
                     "mustChangePassword": true
                   },
                   {
                     "nome": "Admin Interno",
                     "email": "admin@local.test",
                     "perfil": "GESTOR",
-                    "password": "OutraSenha!2026",
+                    "password": "OutraSenha2026",
                     "mustChangePassword": true,
                     "adminInterno": true
                   }
@@ -82,7 +82,7 @@ class DataSeederTest {
         assertTrue(users.get(0).getMustChangePassword());
         assertFalse(users.get(0).getAdminInterno());
         assertTrue(users.get(1).getAdminInterno());
-        assertNotEquals("SenhaInicial!2026", users.get(0).getSenhaHash());
+        assertNotEquals("SenhaInicial2026", users.get(0).getSenhaHash());
         assertEquals("$2a$12$hash", users.get(0).getSenhaHash());
     }
 
@@ -96,7 +96,7 @@ class DataSeederTest {
                   "nome": "Gestor",
                   "email": "gestor@local.test",
                   "perfil": "GESTOR",
-                  "password": "NovaSenha!2026",
+                  "password": "NovaSenha2026",
                   "mustChangePassword": true
                 }]
                 """);
@@ -122,7 +122,7 @@ class DataSeederTest {
                   "nome": "Gestor",
                   "email": "gestor@local.test",
                   "perfil": "GESTOR",
-                  "password": "NovaSenha!2026",
+                  "password": "NovaSenha2026",
                   "mustChangePassword": true,
                   "resetPassword": true
                 }]
@@ -130,7 +130,7 @@ class DataSeederTest {
 
         when(clinicaRepository.findBySlug("fmna")).thenReturn(Optional.of(clinica));
         when(usuarioRepository.findByEmail("gestor@local.test")).thenReturn(Optional.of(existing));
-        when(passwordEncoder.encode("NovaSenha!2026")).thenReturn("$2a$12$new");
+        when(passwordEncoder.encode("NovaSenha2026")).thenReturn("$2a$12$new");
 
         seeder.run();
 
@@ -173,7 +173,7 @@ class DataSeederTest {
                   "nome": "Admin Interno",
                   "email": "[admin@local.test](mailto:admin@local.test)",
                   "perfil": "GESTOR",
-                  "password": "SenhaInicial!2026",
+                  "password": "SenhaInicial2026",
                   "adminInterno": true
                 }]
                 """);

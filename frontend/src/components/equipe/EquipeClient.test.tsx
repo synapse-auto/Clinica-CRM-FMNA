@@ -100,7 +100,7 @@ describe('EquipeClient', () => {
     await user.type(screen.getByLabelText('Email'), 'recepcao.nova@clinica.local');
     await user.selectOptions(screen.getByLabelText('Perfil'), 'RECEPCIONISTA');
     await user.type(screen.getByLabelText('Telefone'), '44988887777');
-    await user.type(screen.getByLabelText('Senha temporária'), '12345678');
+    await user.type(screen.getByLabelText('Senha temporária'), 'Atendente1');
     await user.click(screen.getByRole('button', { name: 'Criar usuário' }));
 
     await waitFor(() => expect(screen.getByText('Recepcao Nova')).toBeInTheDocument());
@@ -112,7 +112,7 @@ describe('EquipeClient', () => {
         email: 'recepcao.nova@clinica.local',
         perfil: 'RECEPCIONISTA',
         telefone: '44988887777',
-        senhaTemporaria: '12345678',
+        senhaTemporaria: 'Atendente1',
       }),
     }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -132,7 +132,7 @@ describe('EquipeClient', () => {
     await user.type(screen.getByLabelText('Nome'), 'Recepcao Nova');
     await user.type(screen.getByLabelText('Email'), 'recepcao.nova@clinica.local');
     await user.selectOptions(screen.getByLabelText('Perfil'), 'RECEPCIONISTA');
-    await user.type(screen.getByLabelText('Senha temporária'), '12345678');
+    await user.type(screen.getByLabelText('Senha temporária'), 'Atendente1');
     await user.click(screen.getByRole('button', { name: 'Criar usuário' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Email já cadastrado.');

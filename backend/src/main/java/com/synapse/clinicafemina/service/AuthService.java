@@ -46,9 +46,7 @@ public class AuthService {
             throw new BadRequestException("As senhas não coincidem.");
         }
         if (!PasswordPolicy.isStrong(request.novaSenha())) {
-            throw new BadRequestException(
-                    "A senha deve ter pelo menos 8 caracteres."
-            );
+            throw new BadRequestException(PasswordPolicy.MESSAGE);
         }
         if (passwordEncoder.matches(request.novaSenha(), usuario.getSenhaHash())) {
             throw new BadRequestException("A nova senha deve ser diferente da senha atual.");

@@ -119,7 +119,7 @@ class EquipeSecurityIntegrationTest {
                                   "email":"%s",
                                   "perfil":"RECEPCIONISTA",
                                   "telefone":"44988887777",
-                                  "senhaTemporaria":"12345678"
+                                  "senhaTemporaria":"Atendente1"
                                 }
                                 """.formatted(novoEmail)))
                 .andExpect(status().isCreated())
@@ -129,7 +129,7 @@ class EquipeSecurityIntegrationTest {
 
         Usuario usuarioCriado = usuarioRepository.findByEmail(novoEmail).orElseThrow();
         assertTrue(usuarioCriado.getMustChangePassword());
-        assertTrue(passwordEncoder.matches("12345678", usuarioCriado.getSenhaHash()));
+        assertTrue(passwordEncoder.matches("Atendente1", usuarioCriado.getSenhaHash()));
         assertFalse(usuarioCriado.getAdminInterno());
 
         mockMvc.perform(get("/api/equipe")
@@ -152,7 +152,7 @@ class EquipeSecurityIntegrationTest {
                                   "nome":"Medico Novo",
                                   "email":"%s",
                                   "perfil":"MEDICO",
-                                  "senhaTemporaria":"12345678"
+                                  "senhaTemporaria":"Medico1"
                                 }
                                 """.formatted(novoEmail)))
                 .andExpect(status().isCreated())
@@ -175,7 +175,7 @@ class EquipeSecurityIntegrationTest {
                   "nome":"Usuario Bloqueado",
                   "email":"bloqueado-%s@clinica.local",
                   "perfil":"RECEPCIONISTA",
-                  "senhaTemporaria":"12345678"
+                  "senhaTemporaria":"Atendente1"
                 }
                 """.formatted(UUID.randomUUID());
 

@@ -199,8 +199,8 @@ describe('auth BFF routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         senhaAtual: 'senha-inicial',
-        novaSenha: 'NovaSenhaSegura!2026',
-        confirmacaoNovaSenha: 'NovaSenhaSegura!2026',
+        novaSenha: 'Lucas123',
+        confirmacaoNovaSenha: 'Lucas123',
       }),
     }));
     const body = await response.json();

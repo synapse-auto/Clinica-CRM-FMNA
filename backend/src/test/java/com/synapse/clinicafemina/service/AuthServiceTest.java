@@ -87,12 +87,12 @@ class AuthServiceTest {
     void should_change_password_with_bcrypt_and_clear_first_access_state() {
         ChangePasswordRequest request = new ChangePasswordRequest(
                 "SenhaInicial!2026",
-                "NovaSenhaSegura!2026",
-                "NovaSenhaSegura!2026"
+                "Lucas123",
+                "Lucas123"
         );
         when(passwordEncoder.matches("SenhaInicial!2026", "$2a$12$old")).thenReturn(true);
-        when(passwordEncoder.matches("NovaSenhaSegura!2026", "$2a$12$old")).thenReturn(false);
-        when(passwordEncoder.encode("NovaSenhaSegura!2026")).thenReturn("$2a$12$new");
+        when(passwordEncoder.matches("Lucas123", "$2a$12$old")).thenReturn(false);
+        when(passwordEncoder.encode("Lucas123")).thenReturn("$2a$12$new");
         when(jwtService.generateToken(anyMap(), any())).thenReturn("new-jwt");
 
         LoginResponse response = service.changePassword(usuario, request);
@@ -107,8 +107,8 @@ class AuthServiceTest {
     void should_reject_password_change_when_confirmation_differs() {
         ChangePasswordRequest request = new ChangePasswordRequest(
                 "SenhaInicial!2026",
-                "NovaSenhaSegura!2026",
-                "OutraSenhaSegura!2026"
+                "Lucas123",
+                "Atendente1"
         );
         when(passwordEncoder.matches("SenhaInicial!2026", "$2a$12$old")).thenReturn(true);
 
@@ -119,8 +119,8 @@ class AuthServiceTest {
     void should_reject_weak_new_password() {
         ChangePasswordRequest request = new ChangePasswordRequest(
                 "SenhaInicial!2026",
-                "curta",
-                "curta"
+                "abcdef",
+                "abcdef"
         );
         when(passwordEncoder.matches("SenhaInicial!2026", "$2a$12$old")).thenReturn(true);
 
@@ -128,15 +128,27 @@ class AuthServiceTest {
     }
 
     @Test
-    void should_accept_eight_character_simple_password() {
+    void should_reject_numeric_only_password() {
         ChangePasswordRequest request = new ChangePasswordRequest(
                 "SenhaInicial!2026",
                 "12345678",
                 "12345678"
         );
         when(passwordEncoder.matches("SenhaInicial!2026", "$2a$12$old")).thenReturn(true);
-        when(passwordEncoder.matches("12345678", "$2a$12$old")).thenReturn(false);
-        when(passwordEncoder.encode("12345678")).thenReturn("$2a$12$new");
+
+        assertThrows(BadRequestException.class, () -> service.changePassword(usuario, request));
+    }
+
+    @Test
+    void should_accept_six_or_more_alphanumeric_password_with_letter_and_number() {
+        ChangePasswordRequest request = new ChangePasswordRequest(
+                "SenhaInicial!2026",
+                "Ultra123",
+                "Ultra123"
+        );
+        when(passwordEncoder.matches("SenhaInicial!2026", "$2a$12$old")).thenReturn(true);
+        when(passwordEncoder.matches("Ultra123", "$2a$12$old")).thenReturn(false);
+        when(passwordEncoder.encode("Ultra123")).thenReturn("$2a$12$new");
         when(jwtService.generateToken(anyMap(), any())).thenReturn("new-jwt");
 
         LoginResponse response = service.changePassword(usuario, request);

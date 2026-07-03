@@ -265,7 +265,7 @@ class AuthSecurityIntegrationTest {
     @Test
     void should_change_initial_password_and_allow_crm_access() throws Exception {
         String token = login(trocaObrigatoriaEmail, senha, true);
-        String novaSenha = "NovaSenhaSegura!2026";
+        String novaSenha = "Lucas123";
 
         String response = mockMvc.perform(patch("/api/auth/change-password")
                         .header("Authorization", "Bearer " + token)
@@ -312,11 +312,29 @@ class AuthSecurityIntegrationTest {
                         .content("""
                                 {
                                   "senhaAtual":"%s",
-                                  "novaSenha":"NovaSenhaSegura!2026",
-                                  "confirmacaoNovaSenha":"SenhaDiferente!2026"
+                                  "novaSenha":"Lucas123",
+                                  "confirmacaoNovaSenha":"Atendente1"
                                 }
                                 """.formatted(senha)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_reject_password_change_with_special_character() throws Exception {
+        String token = login(trocaObrigatoriaEmail, senha, true);
+
+        mockMvc.perform(patch("/api/auth/change-password")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "senhaAtual":"%s",
+                                  "novaSenha":"abc@123",
+                                  "confirmacaoNovaSenha":"abc@123"
+                                }
+                                """.formatted(senha)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("A senha deve ter no mínimo 6 caracteres, contendo letras e números."));
     }
 
     @Test

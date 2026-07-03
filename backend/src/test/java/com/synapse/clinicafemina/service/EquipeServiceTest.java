@@ -76,10 +76,10 @@ class EquipeServiceTest {
                 " Recepcao.Nova@clinica.local ",
                 "RECEPCIONISTA",
                 "44999999999",
-                "12345678"
+                "Atendente1"
         );
         when(usuarioRepository.findByEmail("recepcao.nova@clinica.local")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode("12345678")).thenReturn("$2a$12$hash");
+        when(passwordEncoder.encode("Atendente1")).thenReturn("$2a$12$hash");
         when(usuarioRepository.save(any(Usuario.class))).thenAnswer(invocation -> {
             Usuario saved = invocation.getArgument(0);
             saved.setId(10L);
@@ -111,10 +111,10 @@ class EquipeServiceTest {
                 "medico.novo@clinica.local",
                 "MEDICO",
                 null,
-                "senha123"
+                "Medico1"
         );
         when(usuarioRepository.findByEmail("medico.novo@clinica.local")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode("senha123")).thenReturn("$2a$12$hash");
+        when(passwordEncoder.encode("Medico1")).thenReturn("$2a$12$hash");
         when(usuarioRepository.save(any(Usuario.class))).thenAnswer(invocation -> {
             Usuario saved = invocation.getArgument(0);
             saved.setId(11L);
@@ -137,7 +137,21 @@ class EquipeServiceTest {
                 "fraco@clinica.local",
                 "GESTOR",
                 null,
-                "1234567"
+                "123456"
+        );
+
+        assertThrows(BadRequestException.class, () -> service.criarUsuario(clinica, request));
+        verify(usuarioRepository, never()).save(any());
+    }
+
+    @Test
+    void should_reject_temporary_password_with_special_character() {
+        EquipeUsuarioCreateRequest request = new EquipeUsuarioCreateRequest(
+                "Usuario Especial",
+                "especial@clinica.local",
+                "GESTOR",
+                null,
+                "abc@123"
         );
 
         assertThrows(BadRequestException.class, () -> service.criarUsuario(clinica, request));
@@ -151,7 +165,7 @@ class EquipeServiceTest {
                 "duplicado@clinica.local",
                 "GESTOR",
                 null,
-                "12345678"
+                "Gestor2026"
         );
         when(usuarioRepository.findByEmail("duplicado@clinica.local"))
                 .thenReturn(Optional.of(usuario(new Gestor(), 1L, "Existente", "duplicado@clinica.local", "GESTOR")));
@@ -167,7 +181,7 @@ class EquipeServiceTest {
                 "perfil@clinica.local",
                 "ADMIN",
                 null,
-                "12345678"
+                "Gestor2026"
         );
 
         assertThrows(BadRequestException.class, () -> service.criarUsuario(clinica, request));

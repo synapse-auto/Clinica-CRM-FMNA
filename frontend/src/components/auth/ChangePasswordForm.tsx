@@ -9,6 +9,9 @@ type ChangePasswordResponse = {
   message?: string;
 };
 
+const PASSWORD_RULE_MESSAGE = 'A senha deve ter no mínimo 6 caracteres, contendo letras e números.';
+const CRM_PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
+
 export function ChangePasswordForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +32,7 @@ export function ChangePasswordForm() {
       return;
     }
     if (!isStrongPassword(payload.novaSenha)) {
-      setError('A senha deve ter pelo menos 8 caracteres.');
+      setError(PASSWORD_RULE_MESSAGE);
       return;
     }
 
@@ -77,15 +80,17 @@ export function ChangePasswordForm() {
         label="Nova senha"
         name="novaSenha"
         autoComplete="new-password"
+        minLength={6}
       />
       <PasswordField
         label="Confirmar nova senha"
         name="confirmacaoNovaSenha"
         autoComplete="new-password"
+        minLength={6}
       />
 
       <p className="text-[10px] leading-4 text-clinic-muted">
-        A senha deve ter pelo menos 8 caracteres.
+        {PASSWORD_RULE_MESSAGE}
       </p>
 
       <button
@@ -110,10 +115,12 @@ function PasswordField({
   label,
   name,
   autoComplete,
+  minLength,
 }: {
   label: string;
   name: string;
   autoComplete: string;
+  minLength?: number;
 }) {
   return (
     <label className="block">
@@ -125,7 +132,7 @@ function PasswordField({
           type="password"
           autoComplete={autoComplete}
           required
-          minLength={8}
+          minLength={minLength}
           maxLength={72}
           className="h-11 w-full rounded-lg border border-clinic-border bg-clinic-input pl-10 pr-3 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15"
         />
@@ -135,5 +142,5 @@ function PasswordField({
 }
 
 function isStrongPassword(password: string) {
-  return password.length >= 8;
+  return CRM_PASSWORD_PATTERN.test(password);
 }

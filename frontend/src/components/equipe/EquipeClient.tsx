@@ -309,7 +309,10 @@ function CreateUserDialog({
 
           <label className="block">
             <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Senha temporária</span>
-            <input name="senhaTemporaria" type="password" minLength={8} required className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15" />
+            <input name="senhaTemporaria" aria-label="Senha temporária" type="password" minLength={6} maxLength={72} required className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15" />
+            <span className="mt-1 block text-[9px] text-clinic-muted">
+              Mínimo 6 caracteres, com letras e números.
+            </span>
           </label>
 
           <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">

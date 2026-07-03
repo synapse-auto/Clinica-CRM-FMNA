@@ -66,7 +66,7 @@ public class EquipeService {
         String senhaTemporaria = normalizeRequired(request.senhaTemporaria(), "Senha temporária é obrigatória.");
 
         if (!PasswordPolicy.isStrong(senhaTemporaria)) {
-            throw new BadRequestException("A senha temporária deve ter pelo menos 8 caracteres.");
+            throw new BadRequestException("A senha temporária deve ter no mínimo 6 caracteres, contendo letras e números.");
         }
         if (usuarioRepository.findByEmail(email).isPresent()) {
             throw new BadRequestException("Email já cadastrado.");
