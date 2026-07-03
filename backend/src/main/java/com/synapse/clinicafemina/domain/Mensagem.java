@@ -43,7 +43,7 @@ public class Mensagem {
     @Column(name = "data_hora", nullable = false)
     private OffsetDateTime dataHora;
 
-    @Column(name = "whatsapp_message_id", length = 100, unique = true)
+    @Column(name = "whatsapp_message_id", length = 255, unique = true)
     private String whatsappMessageId;
 
     @Column(name = "whatsapp_status", length = 20)

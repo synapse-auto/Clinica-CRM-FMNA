@@ -35,6 +35,9 @@ import java.util.Optional;
 public class MensagemService {
 
     private static final long TAMANHO_MAXIMO = 16L * 1024 * 1024;
+    private static final int TAMANHO_MAXIMO_WHATSAPP_MESSAGE_ID = 255;
+    private static final int TAMANHO_MAXIMO_PREVIA = 60;
+    private static final String SUFIXO_PREVIA_TRUNCADA = "...";
 
     public record RespostaIaResultado(MensagemDTO mensagem, boolean duplicada) {
     }
@@ -302,6 +305,10 @@ public class MensagemService {
         if (request.mensagem().length() > 4096) {
             throw new BadRequestException("Mensagem da IA excede 4096 caracteres");
         }
+        if (request.whatsappMessageId() != null
+                && request.whatsappMessageId().trim().length() > TAMANHO_MAXIMO_WHATSAPP_MESSAGE_ID) {
+            throw new BadRequestException("whatsappMessageId excede 255 caracteres");
+        }
     }
 
     private void validarClinicaUltraMedical(Atendimento atendimento) {
@@ -436,7 +443,11 @@ public class MensagemService {
     }
 
     private String limitarPrevia(String conteudo) {
-        return conteudo.length() > 60 ? conteudo.substring(0, 60) + "…" : conteudo;
+        if (conteudo.length() <= TAMANHO_MAXIMO_PREVIA) {
+            return conteudo;
+        }
+        int tamanhoTexto = TAMANHO_MAXIMO_PREVIA - SUFIXO_PREVIA_TRUNCADA.length();
+        return conteudo.substring(0, tamanhoTexto) + SUFIXO_PREVIA_TRUNCADA;
     }
 
     private MensagemDTO toDTO(Mensagem mensagem) {

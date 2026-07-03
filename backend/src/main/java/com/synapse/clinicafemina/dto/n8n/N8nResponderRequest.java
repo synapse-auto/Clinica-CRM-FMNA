@@ -11,6 +11,7 @@ public record N8nResponderRequest(
         @NotBlank String tipoMedia,
         @NotBlank String origem,
         Boolean enviarWhatsapp,
+        @Size(max = 255, message = "whatsappMessageId deve ter no maximo 255 caracteres")
         String whatsappMessageId,
         OffsetDateTime enviadoEm
 ) {

@@ -40,6 +40,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class MensagemServiceTest {
 
+    private static final String META_WAMID_LONGO =
+            "wamid.HBgMNTU1NDkxMDgyNDk4FQIAEhgWM0VCMDA1MThDODExOUJERTJEQzlEOQA=";
+
     @Mock
     private MensagemRepository mensagemRepository;
 
@@ -140,7 +143,7 @@ class MensagemServiceTest {
                         "TEXTO",
                         "N8N",
                         false,
-                        "wamid.n8n-1",
+                        META_WAMID_LONGO,
                         enviadoEm
                 )
         );
@@ -150,7 +153,7 @@ class MensagemServiceTest {
         Mensagem mensagemFinal = mensagemCaptor.getAllValues().getLast();
         assertEquals("IA", mensagemFinal.getRemetente());
         assertEquals("REGISTRADA", mensagemFinal.getWhatsappStatus());
-        assertEquals("wamid.n8n-1", mensagemFinal.getWhatsappMessageId());
+        assertEquals(META_WAMID_LONGO, mensagemFinal.getWhatsappMessageId());
         assertEquals(enviadoEm, mensagemFinal.getDataHora());
         verify(whatsappOutboundClient, never()).validarConfiguracao();
         verify(whatsappOutboundClient, never()).enviarTexto(any(), any());
@@ -168,11 +171,11 @@ class MensagemServiceTest {
         existente.setConteudo("Resposta ja registrada");
         existente.setConteudoPrevia("Resposta ja registrada");
         existente.setWhatsappStatus("REGISTRADA");
-        existente.setWhatsappMessageId("wamid.n8n-1");
+        existente.setWhatsappMessageId(META_WAMID_LONGO);
         existente.setDataHora(enviadoEm);
 
         when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
-        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(9L, "wamid.n8n-1"))
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(9L, META_WAMID_LONGO))
                 .thenReturn(Optional.of(existente));
 
         MensagemService.RespostaIaResultado resultado = service.responderIa(
@@ -183,7 +186,7 @@ class MensagemServiceTest {
                         "TEXTO",
                         "N8N",
                         false,
-                        "wamid.n8n-1",
+                        META_WAMID_LONGO,
                         enviadoEm
                 )
         );
@@ -192,6 +195,30 @@ class MensagemServiceTest {
         assertEquals(88L, resultado.mensagem().id());
         verify(mensagemRepository, never()).save(any(Mensagem.class));
         verify(whatsappOutboundClient, never()).enviarTexto(any(), any());
+    }
+
+    @Test
+    void should_keep_ai_response_preview_within_column_limit_when_message_is_long() {
+        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.responderIa(
+                30L,
+                new N8nResponderRequest(
+                        20L,
+                        "Resposta automatica com texto maior que sessenta caracteres para validar previa.",
+                        "TEXTO",
+                        "N8N",
+                        false,
+                        META_WAMID_LONGO,
+                        OffsetDateTime.parse("2026-07-03T12:00:00Z")
+                )
+        );
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository, atLeastOnce()).save(mensagemCaptor.capture());
+        Mensagem mensagemFinal = mensagemCaptor.getAllValues().getLast();
+        assertEquals(60, mensagemFinal.getConteudoPrevia().length());
     }
 
     @Test

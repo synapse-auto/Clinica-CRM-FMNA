@@ -28,6 +28,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = "app.n8n.callback-secret=test-secret")
 class N8nAtendimentoControllerTest {
 
+    private static final String META_WAMID_LONGO =
+            "wamid.HBgMNTU1NDkxMDgyNDk4FQIAEhgWM0VCMDA1MThDODExOUJERTJEQzlEOQA=";
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -86,14 +89,38 @@ class N8nAtendimentoControllerTest {
                                   "tipoMedia": "TEXTO",
                                   "origem": "N8N",
                                   "enviarWhatsapp": false,
-                                  "whatsappMessageId": "wamid.n8n-1",
+                                  "whatsappMessageId": "%s",
                                   "enviadoEm": "2026-07-03T12:00:00Z"
                                 }
-                                """))
+                                """.formatted(META_WAMID_LONGO)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(88))
                 .andExpect(jsonPath("$.remetente").value("IA"))
                 .andExpect(jsonPath("$.whatsappStatus").value("REGISTRADA"));
+    }
+
+    @Test
+    void should_reject_n8n_response_when_whatsapp_message_id_exceeds_limit() throws Exception {
+        String whatsappMessageId = "w".repeat(256);
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/responder")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "pacienteId": 20,
+                                  "mensagem": "Resposta ja registrada",
+                                  "tipoMedia": "TEXTO",
+                                  "origem": "N8N",
+                                  "enviarWhatsapp": false,
+                                  "whatsappMessageId": "%s",
+                                  "enviadoEm": "2026-07-03T12:00:00Z"
+                                }
+                                """.formatted(whatsappMessageId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details.whatsappMessageId").exists());
+
+        verify(mensagemService, never()).responderIa(any(), any());
     }
 
     @Test
