@@ -10,6 +10,8 @@ import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
+import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
+import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
@@ -23,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 
+import java.time.OffsetDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -72,6 +75,7 @@ class MensagemServiceTest {
 
         Clinica clinica = new Clinica();
         clinica.setId(9L);
+        clinica.setSlug("ultramedical");
 
         Paciente paciente = new Paciente();
         paciente.setId(20L);
@@ -87,6 +91,120 @@ class MensagemServiceTest {
         remetente = new Recepcionista();
         remetente.setId(99L);
         remetente.setClinica(clinica);
+    }
+
+    @Test
+    void should_persist_ai_response_and_send_whatsapp_without_human_sender() {
+        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            if (mensagem.getId() == null) {
+                mensagem.setId(77L);
+            }
+            return mensagem;
+        });
+        when(whatsappOutboundClient.enviarTexto("5544999990000", "Resposta gerada pela IA"))
+                .thenReturn("wamid-ai-1");
+
+        MensagemService.RespostaIaResultado resultado = service.responderIa(
+                30L,
+                new N8nResponderRequest(20L, "Resposta gerada pela IA", "TEXTO", "N8N", true)
+        );
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository, atLeastOnce()).save(mensagemCaptor.capture());
+        Mensagem mensagemFinal = mensagemCaptor.getAllValues().getLast();
+        assertEquals("SAIDA", mensagemFinal.getDirecao());
+        assertEquals("IA", mensagemFinal.getRemetente());
+        org.junit.jupiter.api.Assertions.assertNull(mensagemFinal.getRemetenteUsuario());
+        assertEquals("TEXTO", mensagemFinal.getTipoMedia());
+        assertEquals("Resposta gerada pela IA", mensagemFinal.getConteudo());
+        assertEquals("ENVIADA", mensagemFinal.getWhatsappStatus());
+        assertEquals("wamid-ai-1", mensagemFinal.getWhatsappMessageId());
+        org.junit.jupiter.api.Assertions.assertFalse(resultado.duplicada());
+        verify(usuarioRepository, never()).findAtivoByIdAndClinicaId(any(), any());
+        verify(atendimentoRepository, atLeastOnce()).save(atendimento);
+    }
+
+    @Test
+    void should_register_ai_response_without_sending_whatsapp_when_requested() {
+        OffsetDateTime enviadoEm = OffsetDateTime.parse("2026-07-03T12:00:00Z");
+        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.responderIa(
+                30L,
+                new N8nResponderRequest(
+                        20L,
+                        "Resposta ja enviada pelo N8N",
+                        "TEXTO",
+                        "N8N",
+                        false,
+                        "wamid.n8n-1",
+                        enviadoEm
+                )
+        );
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository, atLeastOnce()).save(mensagemCaptor.capture());
+        Mensagem mensagemFinal = mensagemCaptor.getAllValues().getLast();
+        assertEquals("IA", mensagemFinal.getRemetente());
+        assertEquals("REGISTRADA", mensagemFinal.getWhatsappStatus());
+        assertEquals("wamid.n8n-1", mensagemFinal.getWhatsappMessageId());
+        assertEquals(enviadoEm, mensagemFinal.getDataHora());
+        verify(whatsappOutboundClient, never()).validarConfiguracao();
+        verify(whatsappOutboundClient, never()).enviarTexto(any(), any());
+    }
+
+    @Test
+    void should_return_existing_ai_response_when_whatsapp_message_id_is_retried() {
+        OffsetDateTime enviadoEm = OffsetDateTime.parse("2026-07-03T12:00:00Z");
+        Mensagem existente = new Mensagem();
+        existente.setId(88L);
+        existente.setAtendimento(atendimento);
+        existente.setDirecao("SAIDA");
+        existente.setRemetente("IA");
+        existente.setTipoMedia("TEXTO");
+        existente.setConteudo("Resposta ja registrada");
+        existente.setConteudoPrevia("Resposta ja registrada");
+        existente.setWhatsappStatus("REGISTRADA");
+        existente.setWhatsappMessageId("wamid.n8n-1");
+        existente.setDataHora(enviadoEm);
+
+        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(9L, "wamid.n8n-1"))
+                .thenReturn(Optional.of(existente));
+
+        MensagemService.RespostaIaResultado resultado = service.responderIa(
+                30L,
+                new N8nResponderRequest(
+                        20L,
+                        "Resposta ja registrada",
+                        "TEXTO",
+                        "N8N",
+                        false,
+                        "wamid.n8n-1",
+                        enviadoEm
+                )
+        );
+
+        org.junit.jupiter.api.Assertions.assertTrue(resultado.duplicada());
+        assertEquals(88L, resultado.mensagem().id());
+        verify(mensagemRepository, never()).save(any(Mensagem.class));
+        verify(whatsappOutboundClient, never()).enviarTexto(any(), any());
+    }
+
+    @Test
+    void should_reject_ai_response_for_patient_not_linked_to_attendance() {
+        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                BadRequestException.class,
+                () -> service.responderIa(
+                        30L,
+                        new N8nResponderRequest(999L, "Resposta", "TEXTO", "N8N", true)
+                )
+        );
     }
 
     @Test

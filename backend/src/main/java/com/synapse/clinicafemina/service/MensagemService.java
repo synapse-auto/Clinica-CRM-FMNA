@@ -7,6 +7,7 @@ import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.dto.MensagemDTO;
+import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
@@ -26,6 +27,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.OffsetDateTime;
 import java.util.Locale;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -33,6 +35,9 @@ import java.util.Locale;
 public class MensagemService {
 
     private static final long TAMANHO_MAXIMO = 16L * 1024 * 1024;
+
+    public record RespostaIaResultado(MensagemDTO mensagem, boolean duplicada) {
+    }
 
     private final MensagemRepository mensagemRepository;
     private final MidiaMensagemRepository midiaRepository;
@@ -78,6 +83,51 @@ public class MensagemService {
             registrarFalha(mensagem, exception, false);
         }
         return toDTO(mensagemRepository.save(mensagem));
+    }
+
+    @Transactional
+    public RespostaIaResultado responderIa(Long atendimentoId, N8nResponderRequest request) {
+        validarRespostaN8n(request);
+        Atendimento atendimento = buscarAtendimentoAtivoParaN8n(atendimentoId);
+        validarClinicaUltraMedical(atendimento);
+        validarPacienteDoAtendimento(atendimento, request.pacienteId());
+        Optional<Mensagem> existente = buscarMensagemN8nExistente(atendimento, request.whatsappMessageId());
+        if (existente.isPresent()) {
+            return new RespostaIaResultado(toDTO(existente.get()), true);
+        }
+
+        String conteudo = request.mensagem().trim();
+        Mensagem mensagem = criarMensagemSaida(
+                atendimento,
+                null,
+                "IA",
+                "TEXTO",
+                conteudo,
+                limitarPrevia(conteudo)
+        );
+        mensagem.setDataHora(request.enviadoEm() != null ? request.enviadoEm() : OffsetDateTime.now());
+        if (request.whatsappMessageId() != null && !request.whatsappMessageId().isBlank()) {
+            mensagem.setWhatsappMessageId(request.whatsappMessageId().trim());
+        }
+        mensagem = mensagemRepository.save(mensagem);
+        atualizarUltimaMensagem(atendimento, mensagem);
+
+        if (!deveEnviarWhatsapp(request)) {
+            mensagem.setWhatsappStatus("REGISTRADA");
+            return new RespostaIaResultado(toDTO(mensagemRepository.save(mensagem)), false);
+        }
+
+        try {
+            whatsappOutboundClient.validarConfiguracao();
+            String wamid = whatsappOutboundClient.enviarTexto(
+                    atendimento.getPaciente().getTelefoneNormalizado(), conteudo
+            );
+            mensagem.setWhatsappMessageId(wamid);
+            mensagem.setWhatsappStatus("ENVIADA");
+        } catch (Exception exception) {
+            registrarFalha(mensagem, exception, false);
+        }
+        return new RespostaIaResultado(toDTO(mensagemRepository.save(mensagem)), false);
     }
 
     @Transactional
@@ -191,6 +241,15 @@ public class MensagemService {
         return atendimento;
     }
 
+    private Atendimento buscarAtendimentoAtivoParaN8n(Long atendimentoId) {
+        Atendimento atendimento = atendimentoRepository.findById(atendimentoId)
+                .orElseThrow(() -> new NotFoundException("Atendimento nao encontrado"));
+        if (!"ATIVO".equals(atendimento.getStatus())) {
+            throw new IllegalStateException("So e possivel responder atendimentos ativos");
+        }
+        return atendimento;
+    }
+
     private Usuario buscarRemetente(Long usuarioId, Long clinicaId) {
         return usuarioRepository.findAtivoByIdAndClinicaId(usuarioId, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Usuário remetente não encontrado"));
@@ -203,10 +262,21 @@ public class MensagemService {
             String conteudo,
             String previa
     ) {
+        return criarMensagemSaida(atendimento, remetente, "ATENDENTE", tipoMedia, conteudo, previa);
+    }
+
+    private Mensagem criarMensagemSaida(
+            Atendimento atendimento,
+            Usuario remetente,
+            String remetenteNome,
+            String tipoMedia,
+            String conteudo,
+            String previa
+    ) {
         Mensagem mensagem = new Mensagem();
         mensagem.setAtendimento(atendimento);
         mensagem.setDirecao("SAIDA");
-        mensagem.setRemetente("ATENDENTE");
+        mensagem.setRemetente(remetenteNome);
         mensagem.setRemetenteUsuario(remetente);
         mensagem.setTipoMedia(tipoMedia);
         mensagem.setConteudo(conteudo);
@@ -214,6 +284,53 @@ public class MensagemService {
         mensagem.setWhatsappStatus("PENDENTE");
         mensagem.setDataHora(OffsetDateTime.now());
         return mensagem;
+    }
+
+    private void validarRespostaN8n(N8nResponderRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Requisicao invalida");
+        }
+        if (!"N8N".equalsIgnoreCase(request.origem())) {
+            throw new BadRequestException("Origem invalida para resposta da IA");
+        }
+        if (!"TEXTO".equalsIgnoreCase(request.tipoMedia())) {
+            throw new BadRequestException("Resposta N8N aceita apenas tipoMedia TEXTO");
+        }
+        if (request.mensagem() == null || request.mensagem().isBlank()) {
+            throw new BadRequestException("Mensagem da IA nao pode ser vazia");
+        }
+        if (request.mensagem().length() > 4096) {
+            throw new BadRequestException("Mensagem da IA excede 4096 caracteres");
+        }
+    }
+
+    private void validarClinicaUltraMedical(Atendimento atendimento) {
+        String slug = atendimento.getClinica() == null ? null : atendimento.getClinica().getSlug();
+        if (!"ultramedical".equalsIgnoreCase(slug)) {
+            throw new BadRequestException("Atendimento nao pertence a clinica UltraMedical");
+        }
+    }
+
+    private void validarPacienteDoAtendimento(Atendimento atendimento, Long pacienteId) {
+        Long pacienteAtendimentoId = atendimento.getPaciente() == null ? null : atendimento.getPaciente().getId();
+        if (pacienteId == null || !pacienteId.equals(pacienteAtendimentoId)) {
+            throw new BadRequestException("Paciente nao pertence ao atendimento informado");
+        }
+    }
+
+    private Optional<Mensagem> buscarMensagemN8nExistente(Atendimento atendimento, String whatsappMessageId) {
+        if (whatsappMessageId == null || whatsappMessageId.isBlank()) {
+            return Optional.empty();
+        }
+        Long clinicaId = atendimento.getClinica() == null ? null : atendimento.getClinica().getId();
+        if (clinicaId == null) {
+            return Optional.empty();
+        }
+        return mensagemRepository.findByClinicaIdAndWhatsappMessageId(clinicaId, whatsappMessageId.trim());
+    }
+
+    private boolean deveEnviarWhatsapp(N8nResponderRequest request) {
+        return !Boolean.FALSE.equals(request.enviarWhatsapp());
     }
 
     private MidiaMensagem criarMidia(

@@ -6,14 +6,19 @@ import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Gestor;
 import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.domain.Usuario;
+import com.synapse.clinicafemina.dto.MensagemDTO;
+import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
+import com.synapse.clinicafemina.service.MensagemService;
 import jakarta.persistence.EntityManager;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,6 +27,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -40,6 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.security.jwt.secret=test-only-secret-key-with-at-least-32-bytes",
         "app.security.jwt.expiration-ms=86400000",
         "app.initial-users.enabled=false",
+        "app.n8n.callback-secret=test-secret",
         "CORS_ALLOWED_ORIGINS=https://clinica-crm-fmna.vercel.app"
 })
 @Transactional
@@ -62,6 +71,9 @@ class AuthSecurityIntegrationTest {
 
     @Autowired
     private EntityManager entityManager;
+
+    @MockBean
+    private MensagemService mensagemService;
 
     private String gestorEmail;
     private String recepcionistaEmail;
@@ -156,6 +168,43 @@ class AuthSecurityIntegrationTest {
                         .param("inicio", "2026-06-22T00:00:00-03:00")
                         .param("fim", "2026-06-27T00:00:00-03:00"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_allow_n8n_response_endpoint_with_secret_without_jwt() throws Exception {
+        when(mensagemService.responderIa(eq(30L), any(N8nResponderRequest.class)))
+                .thenReturn(new MensagemService.RespostaIaResultado(
+                        new MensagemDTO(
+                                77L,
+                                "SAIDA",
+                                "IA",
+                                "TEXTO",
+                                "Resposta gerada pela IA",
+                                "Resposta gerada pela IA",
+                                "ENVIADA",
+                                null,
+                                OffsetDateTime.parse("2026-07-03T12:00:00Z"),
+                                null,
+                                null,
+                                null
+                        ),
+                        false
+                ));
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/responder")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "pacienteId":20,
+                                  "mensagem":"Resposta gerada pela IA",
+                                  "tipoMedia":"TEXTO",
+                                  "origem":"N8N",
+                                  "enviarWhatsapp":true
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.remetente").value("IA"));
     }
 
     @Test
