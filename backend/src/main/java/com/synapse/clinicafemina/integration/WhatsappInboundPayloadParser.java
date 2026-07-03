@@ -2,6 +2,7 @@ package com.synapse.clinicafemina.integration;
 
 import org.springframework.stereotype.Component;
 
+import java.util.Locale;
 import java.util.Map;
 
 @Component
@@ -23,7 +24,13 @@ public class WhatsappInboundPayloadParser {
 
         Map<String, Object> media = (Map<String, Object>) mensagem.get(tipo);
         if (media == null || media.get("id") == null) {
-            throw new IllegalArgumentException("Payload de mídia incompleto");
+            return new DadosMensagem(
+                    "OUTRO",
+                    conteudoGenerico(tipo),
+                    null,
+                    "application/octet-stream",
+                    null
+            );
         }
         String tipoMedia = mapearTipoMedia(tipo);
         String nome = String.valueOf(media.getOrDefault("filename", tipoMedia.toLowerCase()));
@@ -51,8 +58,15 @@ public class WhatsappInboundPayloadParser {
             case "image" -> "IMAGEM";
             case "audio" -> "AUDIO";
             case "document" -> "DOCUMENTO";
-            default -> throw new IllegalArgumentException("Tipo de mensagem não suportado: " + tipo);
+            default -> "OUTRO";
         };
+    }
+
+    private String conteudoGenerico(String tipo) {
+        if (tipo == null || tipo.isBlank() || "null".equals(tipo)) {
+            return "[MENSAGEM]";
+        }
+        return "[" + tipo.toUpperCase(Locale.ROOT) + "]";
     }
 
     private String mimePadrao(String tipoMedia) {

@@ -232,4 +232,37 @@ class N8nEventServiceTest {
         assertDoesNotThrow(() -> service.emitir(payload));
         server.verify();
     }
+
+    @Test
+    void should_not_break_original_meta_forward_when_n8n_returns_error() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        N8nEventService service = new N8nEventService(builder.build());
+        Clinica clinica = new Clinica();
+        clinica.setId(1L);
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook/secret");
+        byte[] rawBody = """
+                {
+                  "object": "whatsapp_business_account",
+                  "entry": []
+                }
+                """.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        server.expect(once(), requestTo("https://n8n.example/webhook/secret"))
+                .andExpect(method(POST))
+                .andExpect(header("X-CRM-Event", "mensagem_recebida"))
+                .andExpect(header("X-CRM-Atendimento-Id", "123"))
+                .andExpect(header("X-CRM-Paciente-Id", "456"))
+                .andExpect(header("X-CRM-Mensagem-Id", "789"))
+                .andRespond(withStatus(SERVICE_UNAVAILABLE));
+
+        assertDoesNotThrow(() -> service.enviarPayloadMetaOriginal(
+                clinica,
+                rawBody,
+                new N8nEventService.MetaWebhookContext("mensagem_recebida", 123L, 456L, 789L, "AUDIO")
+        ));
+        server.verify();
+    }
 }

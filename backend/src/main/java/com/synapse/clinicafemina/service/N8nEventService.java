@@ -14,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 @Slf4j
 @Service
@@ -25,8 +26,17 @@ public class N8nEventService {
             String evento,
             Long atendimentoId,
             Long pacienteId,
-            Long mensagemId
+            Long mensagemId,
+            String tipoMedia
     ) {
+        public MetaWebhookContext(
+                String evento,
+                Long atendimentoId,
+                Long pacienteId,
+                Long mensagemId
+        ) {
+            this(evento, atendimentoId, pacienteId, mensagemId, null);
+        }
     }
 
     @Autowired
@@ -72,35 +82,76 @@ public class N8nEventService {
             MetaWebhookContext context
     ) {
         if (!Boolean.TRUE.equals(clinica.getUsaN8n())) {
+            log.info(
+                    "Payload Meta para N8N ignorado porque a clinica nao usa N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}",
+                    clinica.getId(),
+                    context == null ? "desconhecido" : context.evento(),
+                    context == null ? null : context.atendimentoId(),
+                    context == null ? null : context.pacienteId(),
+                    context == null ? null : context.mensagemId(),
+                    context == null ? null : context.tipoMedia());
             return;
         }
         if (clinica.getN8nWebhookUrl() == null || clinica.getN8nWebhookUrl().isBlank()) {
-            log.warn("Payload Meta para N8N ignorado por webhook ausente: clinica={}, evento={}",
-                    clinica.getId(), context == null ? "desconhecido" : context.evento());
+            log.warn(
+                    "Payload Meta para N8N ignorado por webhook ausente: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}",
+                    clinica.getId(),
+                    context == null ? "desconhecido" : context.evento(),
+                    context == null ? null : context.atendimentoId(),
+                    context == null ? null : context.pacienteId(),
+                    context == null ? null : context.mensagemId(),
+                    context == null ? null : context.tipoMedia());
             return;
         }
         if (payloadOriginal == null || payloadOriginal.length == 0) {
-            log.warn("Payload Meta para N8N ignorado por body ausente: clinica={}, evento={}",
-                    clinica.getId(), context == null ? "desconhecido" : context.evento());
+            log.warn(
+                    "Payload Meta para N8N ignorado por body ausente: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}",
+                    clinica.getId(),
+                    context == null ? "desconhecido" : context.evento(),
+                    context == null ? null : context.atendimentoId(),
+                    context == null ? null : context.pacienteId(),
+                    context == null ? null : context.mensagemId(),
+                    context == null ? null : context.tipoMedia());
             return;
         }
 
         try {
-            restClient.post()
+            var response = restClient.post()
                     .uri(clinica.getN8nWebhookUrl())
                     .contentType(MediaType.APPLICATION_JSON)
                     .headers(headers -> preencherHeadersMeta(headers, clinica, context))
                     .body(payloadOriginal)
                     .retrieve()
                     .toBodilessEntity();
-            log.info("Payload Meta original emitido ao N8N: clinica={}, evento={}, mensagem={}",
+            log.info(
+                    "Payload Meta original emitido ao N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, statusHttp={}",
                     clinica.getId(),
                     context == null ? "desconhecido" : context.evento(),
-                    context == null ? null : context.mensagemId());
+                    context == null ? null : context.atendimentoId(),
+                    context == null ? null : context.pacienteId(),
+                    context == null ? null : context.mensagemId(),
+                    context == null ? null : context.tipoMedia(),
+                    response.getStatusCode().value());
+        } catch (RestClientResponseException e) {
+            log.warn(
+                    "Falha ao emitir payload Meta original ao N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, statusHttp={}, tipoErro={}",
+                    clinica.getId(),
+                    context == null ? "desconhecido" : context.evento(),
+                    context == null ? null : context.atendimentoId(),
+                    context == null ? null : context.pacienteId(),
+                    context == null ? null : context.mensagemId(),
+                    context == null ? null : context.tipoMedia(),
+                    e.getStatusCode().value(),
+                    e.getClass().getSimpleName());
         } catch (Exception e) {
-            log.warn("Falha ao emitir payload Meta original ao N8N: clinica={}, evento={}, tipoErro={}",
+            log.warn(
+                    "Falha ao emitir payload Meta original ao N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, tipoErro={}",
                     clinica.getId(),
                     context == null ? "desconhecido" : context.evento(),
+                    context == null ? null : context.atendimentoId(),
+                    context == null ? null : context.pacienteId(),
+                    context == null ? null : context.mensagemId(),
+                    context == null ? null : context.tipoMedia(),
                     e.getClass().getSimpleName());
         }
     }

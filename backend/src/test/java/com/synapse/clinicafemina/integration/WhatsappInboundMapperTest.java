@@ -39,6 +39,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -177,6 +178,171 @@ class WhatsappInboundMapperTest {
     }
 
     @Test
+    void should_emit_n8n_for_each_inbound_message_in_same_meta_payload() {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        byte[] rawBody = fullMetaPayloadWithTwoMessages("phone-ultra").getBytes(StandardCharsets.UTF_8);
+
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setNaoLidas(0);
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-2")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId("wamid-1".equals(mensagem.getWhatsappMessageId()) ? 40L : 41L);
+            return mensagem;
+        });
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(valuePayloadWithTwoMessages("phone-ultra"), rawBody);
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
+                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
+        verify(mensagemRepository, times(2)).save(mensagemCaptor.capture());
+        verify(n8nEventService, times(2))
+                .enviarPayloadMetaOriginal(eq(clinica), eq(rawBody), contextCaptor.capture());
+
+        assertEquals(List.of("wamid-1", "wamid-2"), mensagemCaptor.getAllValues().stream()
+                .map(Mensagem::getWhatsappMessageId)
+                .toList());
+        assertEquals(List.of(40L, 41L), contextCaptor.getAllValues().stream()
+                .map(N8nEventService.MetaWebhookContext::mensagemId)
+                .toList());
+    }
+
+    @Test
+    void should_emit_n8n_for_audio_even_when_media_download_fails() {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        byte[] rawBody = fullMetaPayload("phone-ultra").getBytes(StandardCharsets.UTF_8);
+
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setNaoLidas(0);
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-audio")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(40L);
+            return mensagem;
+        });
+        when(whatsappOutboundClient.baixarMidia("media-audio")).thenThrow(new IllegalStateException("meta indisponivel"));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(Map.of(
+                "metadata", Map.of("phone_number_id", "phone-ultra"),
+                "contacts", List.of(Map.of(
+                        "wa_id", "5511999990000",
+                        "profile", Map.of("name", "Paciente Teste")
+                )),
+                "messages", List.of(Map.of(
+                        "id", "wamid-audio",
+                        "timestamp", "1781455200",
+                        "type", "audio",
+                        "audio", Map.of(
+                                "id", "media-audio",
+                                "mime_type", "audio/ogg"
+                        )
+                ))
+        ), rawBody);
+
+        ArgumentCaptor<MidiaMensagem> midiaCaptor = ArgumentCaptor.forClass(MidiaMensagem.class);
+        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
+                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
+        verify(midiaMensagemRepository).save(midiaCaptor.capture());
+        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), eq(rawBody), contextCaptor.capture());
+        assertEquals("AUDIO", midiaCaptor.getValue().getTipoMedia());
+        assertEquals(0L, midiaCaptor.getValue().getTamanhoBytes());
+        assertEquals(40L, contextCaptor.getValue().mensagemId());
+    }
+
+    @Test
+    void should_persist_unknown_meta_message_type_and_emit_original_payload_to_n8n() {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        byte[] rawBody = fullMetaPayload("phone-ultra").getBytes(StandardCharsets.UTF_8);
+
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setNaoLidas(0);
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-sticker")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(40L);
+            return mensagem;
+        });
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(Map.of(
+                "metadata", Map.of("phone_number_id", "phone-ultra"),
+                "contacts", List.of(Map.of(
+                        "wa_id", "5511999990000",
+                        "profile", Map.of("name", "Paciente Teste")
+                )),
+                "messages", List.of(Map.of(
+                        "id", "wamid-sticker",
+                        "timestamp", "1781455200",
+                        "type", "sticker",
+                        "sticker", Map.of("id", "media-sticker")
+                ))
+        ), rawBody);
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
+                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
+        verify(mensagemRepository).save(mensagemCaptor.capture());
+        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), eq(rawBody), contextCaptor.capture());
+        assertEquals("OUTRO", mensagemCaptor.getValue().getTipoMedia());
+        assertEquals(40L, contextCaptor.getValue().mensagemId());
+    }
+
+    @Test
     void should_resolve_clinic_by_phone_number_id_when_processing_status_update() {
         Atendimento atendimento = new Atendimento();
         atendimento.setClinica(clinica);
@@ -198,6 +364,7 @@ class WhatsappInboundMapperTest {
         assertTrue(result.isPresent());
         assertEquals("READ", result.get().getWhatsappStatus());
         verify(mensagemRepository).save(mensagem);
+        verify(n8nEventService, never()).enviarPayloadMetaOriginal(any(), any(), any());
     }
 
     @Test
@@ -344,6 +511,32 @@ class WhatsappInboundMapperTest {
         );
     }
 
+    private Map<String, Object> valuePayloadWithTwoMessages(String phoneNumberId) {
+        return Map.of(
+                "metadata", Map.of("phone_number_id", phoneNumberId),
+                "contacts", List.of(Map.of(
+                        "wa_id", "5511999990000",
+                        "profile", Map.of("name", "Paciente Teste")
+                )),
+                "messages", List.of(
+                        Map.of(
+                                "id", "wamid-1",
+                                "from", "5511999990000",
+                                "timestamp", "1781455200",
+                                "type", "text",
+                                "text", Map.of("body", "Ola")
+                        ),
+                        Map.of(
+                                "id", "wamid-2",
+                                "from", "5511999990000",
+                                "timestamp", "1781455260",
+                                "type", "text",
+                                "text", Map.of("body", "Segunda mensagem")
+                        )
+                )
+        );
+    }
+
     private String fullMetaPayload(String phoneNumberId) {
         return """
                 {
@@ -367,6 +560,49 @@ class WhatsappInboundMapperTest {
                                 "id": "wamid-1",
                                 "timestamp": "1781455200",
                                 "text": {"body": "Ola"}
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.formatted(phoneNumberId);
+    }
+
+    private String fullMetaPayloadWithTwoMessages(String phoneNumberId) {
+        return """
+                {
+                  "object": "whatsapp_business_account",
+                  "entry": [
+                    {
+                      "id": "waba-1",
+                      "changes": [
+                        {
+                          "field": "messages",
+                          "value": {
+                            "metadata": {"phone_number_id": "%s"},
+                            "contacts": [
+                              {
+                                "wa_id": "5511999990000",
+                                "profile": {"name": "Paciente Teste"}
+                              }
+                            ],
+                            "messages": [
+                              {
+                                "id": "wamid-1",
+                                "from": "5511999990000",
+                                "timestamp": "1781455200",
+                                "type": "text",
+                                "text": {"body": "Ola"}
+                              },
+                              {
+                                "id": "wamid-2",
+                                "from": "5511999990000",
+                                "timestamp": "1781455260",
+                                "type": "text",
+                                "text": {"body": "Segunda mensagem"}
                               }
                             ]
                           }

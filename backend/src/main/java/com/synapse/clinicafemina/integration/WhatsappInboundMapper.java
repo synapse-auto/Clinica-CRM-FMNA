@@ -70,17 +70,22 @@ public class WhatsappInboundMapper {
 
     @Transactional
     public void processarMensagemTexto(Map<String, Object> value, byte[] payloadMetaOriginal) {
-        Optional<EntradaResolvida> entrada = resolverEntrada(value);
-        if (entrada.isEmpty()) return;
- 
-        EntradaResolvida resolvida = entrada.get();
+        resolverEntradas(value).forEach(entrada -> processarEntrada(entrada, payloadMetaOriginal));
+    }
+
+    private void processarEntrada(EntradaResolvida resolvida, byte[] payloadMetaOriginal) {
         Clinica clinica = resolvida.clinica();
         Map<String, Object> contato = resolvida.contato();
         Map<String, Object> payloadMensagem = resolvida.mensagem();
-        String whatsappMessageId = String.valueOf(payloadMensagem.get("id"));
+        String whatsappMessageId = normalizarMessageId(payloadMensagem);
+        if (whatsappMessageId == null) {
+            return;
+        }
         if (mensagemRepository.findByClinicaIdAndWhatsappMessageId(
                 clinica.getId(), whatsappMessageId
         ).isPresent()) {
+            log.info("Mensagem inbound duplicada ignorada: clinicaId={}, whatsappMessageId={}",
+                    clinica.getId(), maskId(whatsappMessageId));
             return;
         }
  
@@ -140,15 +145,48 @@ public class WhatsappInboundMapper {
     }
  
     @SuppressWarnings("unchecked")
-    private Optional<EntradaResolvida> resolverEntrada(Map<String, Object> value) {
+    private List<EntradaResolvida> resolverEntradas(Map<String, Object> value) {
         List<Map<String, Object>> contatos = (List<Map<String, Object>>) value.get("contacts");
         List<Map<String, Object>> mensagens = (List<Map<String, Object>>) value.get("messages");
         if (contatos == null || contatos.isEmpty() || mensagens == null || mensagens.isEmpty()) {
             log.warn("Payload WhatsApp sem contato ou mensagem");
-            return Optional.empty();
+            return List.of();
         }
-        return resolverClinicaPorPayload(value)
-                .map(clinica -> new EntradaResolvida(clinica, contatos.getFirst(), mensagens.getFirst()));
+        Optional<Clinica> clinica = resolverClinicaPorPayload(value);
+        if (clinica.isEmpty()) {
+            return List.of();
+        }
+        return mensagens.stream()
+                .map(mensagem -> new EntradaResolvida(
+                        clinica.get(),
+                        contatoParaMensagem(contatos, mensagem),
+                        mensagem
+                ))
+                .toList();
+    }
+
+    private Map<String, Object> contatoParaMensagem(
+            List<Map<String, Object>> contatos,
+            Map<String, Object> mensagem
+    ) {
+        Object remetente = mensagem.get("from");
+        if (remetente != null) {
+            String from = String.valueOf(remetente);
+            return contatos.stream()
+                    .filter(contato -> from.equals(String.valueOf(contato.get("wa_id"))))
+                    .findFirst()
+                    .orElse(contatos.getFirst());
+        }
+        return contatos.getFirst();
+    }
+
+    private String normalizarMessageId(Map<String, Object> payloadMensagem) {
+        Object valor = payloadMensagem.get("id");
+        if (valor == null || String.valueOf(valor).isBlank() || "null".equals(String.valueOf(valor))) {
+            log.warn("Mensagem inbound ignorada por whatsapp message id ausente.");
+            return null;
+        }
+        return String.valueOf(valor);
     }
  
     private Mensagem criarMensagem(
@@ -279,7 +317,8 @@ public class WhatsappInboundMapper {
                             "mensagem_recebida",
                             atendimento.getId(),
                             paciente.getId(),
-                            mensagem.getId()
+                            mensagem.getId(),
+                            mensagem.getTipoMedia()
                     )
             );
             return;
