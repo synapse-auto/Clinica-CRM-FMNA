@@ -12,10 +12,14 @@ import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.FollowUpConfigRepository;
 import com.synapse.clinicafemina.repository.FollowUpTemporaryRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
+import jakarta.persistence.criteria.Predicate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,8 +41,9 @@ public class FollowUpTemporaryService {
     @Transactional(readOnly = true)
     public Page<FollowUpTemporaryResponse> listar(Clinica clinica, String status, Long pacienteId,
                                                   OffsetDateTime from, OffsetDateTime to, Pageable pageable) {
-        return followUpTemporaryRepository.findByClinica(
-                        clinica.getId(), validarStatusOpcional(status), pacienteId, from, to, pageable)
+        return followUpTemporaryRepository.findAll(
+                        filtros(clinica.getId(), validarStatusOpcional(status), pacienteId, from, to),
+                        pageable)
                 .map(this::toResponse);
     }
 
@@ -166,5 +171,30 @@ public class FollowUpTemporaryService {
                 AutomacaoValidation.STATUS_FOLLOW_UP,
                 "Status"
         );
+    }
+
+    private Specification<FollowUpTemporary> filtros(Long clinicaId, String status, Long pacienteId,
+                                                     OffsetDateTime from, OffsetDateTime to) {
+        return (root, query, criteriaBuilder) -> {
+            if (query != null && query.getResultType() != Long.class && query.getResultType() != long.class) {
+                query.orderBy(criteriaBuilder.asc(root.get("scheduledAt")));
+            }
+
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(criteriaBuilder.equal(root.get("clinica").get("id"), clinicaId));
+            if (status != null) {
+                predicates.add(criteriaBuilder.equal(root.get("status"), status));
+            }
+            if (pacienteId != null) {
+                predicates.add(criteriaBuilder.equal(root.get("paciente").get("id"), pacienteId));
+            }
+            if (from != null) {
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("scheduledAt"), from));
+            }
+            if (to != null) {
+                predicates.add(criteriaBuilder.lessThan(root.get("scheduledAt"), to));
+            }
+            return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
+        };
     }
 }

@@ -21,11 +21,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -176,6 +178,19 @@ class FollowUpTemporaryServiceTest {
         var result = service.listarPorPaciente(clinica, 20L, PageRequest.of(0, 10));
 
         assertEquals(1, result.getTotalElements());
+    }
+
+    @Test
+    void should_list_empty_temporary_queue_with_dynamic_filters_without_nullable_query() {
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(followUpTemporaryRepository.findAll(
+                org.mockito.ArgumentMatchers.<Specification<FollowUpTemporary>>any(),
+                eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        var result = service.listar(clinica, null, null, null, null, pageable);
+
+        assertEquals(0, result.getTotalElements());
     }
 
     @Test

@@ -30,7 +30,9 @@ public interface MensagemRepository extends JpaRepository<Mensagem, Long> {
     /** Localiza mensagem por ID externo do WhatsApp dentro da clínica resolvida no webhook. */
     @Query("""
             SELECT m FROM Mensagem m
-            WHERE m.atendimento.clinica.id = :clinicaId
+            JOIN FETCH m.atendimento a
+            LEFT JOIN FETCH a.atendentePrincipal
+            WHERE a.clinica.id = :clinicaId
               AND m.whatsappMessageId = :whatsappMessageId
             """)
     Optional<Mensagem> findByClinicaIdAndWhatsappMessageId(@Param("clinicaId") Long clinicaId,
