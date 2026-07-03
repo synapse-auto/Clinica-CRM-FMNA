@@ -65,6 +65,11 @@ public class WhatsappInboundMapper {
  
     @Transactional
     public void processarMensagemTexto(Map<String, Object> value) {
+        processarMensagemTexto(value, null);
+    }
+
+    @Transactional
+    public void processarMensagemTexto(Map<String, Object> value, byte[] payloadMetaOriginal) {
         Optional<EntradaResolvida> entrada = resolverEntrada(value);
         if (entrada.isEmpty()) return;
  
@@ -101,7 +106,7 @@ public class WhatsappInboundMapper {
         }
  
         atualizarConversa(atendimento, paciente, mensagem);
-        emitirEventos(clinica, pacienteResolvido, atendimento, paciente, mensagem);
+        emitirEventos(clinica, pacienteResolvido, atendimento, paciente, mensagem, payloadMetaOriginal);
         notificationService.notificarNovaMensagem(atendimento, mensagem);
         log.info("Mensagem inbound processada com sucesso: atendimento={}", atendimento.getId());
     }
@@ -212,9 +217,10 @@ public class WhatsappInboundMapper {
             PacienteResolvido pacienteResolvido,
             Atendimento atendimento,
             Paciente paciente,
-            Mensagem mensagem
+            Mensagem mensagem,
+            byte[] payloadMetaOriginal
     ) {
-        if (pacienteResolvido.criado()) {
+        if (pacienteResolvido.criado() && payloadMetaOriginal == null) {
             emitirN8n(clinica, "novo_lead", paciente, atendimento);
         }
         Long atendenteId = atendimento.getAtendentePrincipal() == null
@@ -244,7 +250,7 @@ public class WhatsappInboundMapper {
             log.warn("RabbitMQ indisponível para evento de mensagem. atendimento={}, tipoErro={}",
                     atendimento.getId(), exception.getClass().getSimpleName());
         }
-        emitirN8nMensagemRecebida(clinica, paciente, atendimento, mensagem);
+        emitirN8nMensagemRecebida(clinica, paciente, atendimento, mensagem, payloadMetaOriginal);
     }
  
     private void emitirN8n(Clinica clinica, String evento, Paciente paciente, Atendimento atendimento) {
@@ -262,8 +268,22 @@ public class WhatsappInboundMapper {
             Clinica clinica,
             Paciente paciente,
             Atendimento atendimento,
-            Mensagem mensagem
+            Mensagem mensagem,
+            byte[] payloadMetaOriginal
     ) {
+        if (payloadMetaOriginal != null && payloadMetaOriginal.length > 0) {
+            n8nEventService.enviarPayloadMetaOriginal(
+                    clinica,
+                    payloadMetaOriginal,
+                    new N8nEventService.MetaWebhookContext(
+                            "mensagem_recebida",
+                            atendimento.getId(),
+                            paciente.getId(),
+                            mensagem.getId()
+                    )
+            );
+            return;
+        }
         n8nEventService.emitir(n8nEventService.criarPayloadMensagemRecebida(
                 clinica,
                 paciente,

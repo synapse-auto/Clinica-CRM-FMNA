@@ -13,7 +13,6 @@ import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.service.N8nEventService;
-import com.synapse.clinicafemina.service.N8nEventPayload;
 import com.synapse.clinicafemina.service.AtendimentoNotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.core.env.Environment;
 
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -132,6 +132,7 @@ class WhatsappInboundMapperTest {
         clinica.setSlug("ultramedical");
         clinica.setUsaN8n(true);
         clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        byte[] rawBody = fullMetaPayload("phone-ultra").getBytes(StandardCharsets.UTF_8);
 
         Paciente paciente = new Paciente();
         paciente.setId(20L);
@@ -158,34 +159,21 @@ class WhatsappInboundMapperTest {
         });
         when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        N8nEventPayload payload = new N8nEventPayload(
-                2L,
-                "ultramedical",
-                null,
-                "mensagem_recebida",
-                20L,
-                30L,
-                null,
-                null,
-                40L,
-                "TEXTO",
-                "ENTRADA",
-                "WHATSAPP",
-                OffsetDateTime.parse("2026-06-15T12:00:00Z"),
-                true,
-                "https://n8n.example/webhook"
-        );
-        when(n8nEventService.criarPayloadMensagemRecebida(eq(clinica), eq(paciente), eq(atendimento), any(Mensagem.class)))
-                .thenReturn(payload);
 
-        mapper.processarMensagemTexto(validValuePayload("phone-ultra"));
+        mapper.processarMensagemTexto(validValuePayload("phone-ultra"), rawBody);
 
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
+                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
         InOrder ordem = inOrder(mensagemRepository, n8nEventService);
         ordem.verify(mensagemRepository).save(mensagemCaptor.capture());
         ordem.verify(n8nEventService)
-                .criarPayloadMensagemRecebida(eq(clinica), eq(paciente), eq(atendimento), eq(mensagemCaptor.getValue()));
-        verify(n8nEventService).emitir(payload);
+                .enviarPayloadMetaOriginal(eq(clinica), eq(rawBody), contextCaptor.capture());
+        assertEquals("mensagem_recebida", contextCaptor.getValue().evento());
+        assertEquals(30L, contextCaptor.getValue().atendimentoId());
+        assertEquals(20L, contextCaptor.getValue().pacienteId());
+        assertEquals(40L, contextCaptor.getValue().mensagemId());
+        verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
     }
 
     @Test
@@ -354,5 +342,39 @@ class WhatsappInboundMapperTest {
                         "text", Map.of("body", "Olá")
                 ))
         );
+    }
+
+    private String fullMetaPayload(String phoneNumberId) {
+        return """
+                {
+                  "object": "whatsapp_business_account",
+                  "entry": [
+                    {
+                      "id": "waba-1",
+                      "changes": [
+                        {
+                          "field": "messages",
+                          "value": {
+                            "metadata": {"phone_number_id": "%s"},
+                            "contacts": [
+                              {
+                                "wa_id": "5511999990000",
+                                "profile": {"name": "Paciente Teste"}
+                              }
+                            ],
+                            "messages": [
+                              {
+                                "id": "wamid-1",
+                                "timestamp": "1781455200",
+                                "text": {"body": "Ola"}
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.formatted(phoneNumberId);
     }
 }

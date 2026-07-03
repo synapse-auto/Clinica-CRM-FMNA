@@ -28,7 +28,7 @@ public class WhatsappInboundListener {
             Map<String, Object> payload = objectMapper.readValue(
                     rawBody, new TypeReference<Map<String, Object>>() {}
             );
-            despachar(payload);
+            despachar(payload, rawBody);
         } catch (IOException exception) {
             log.error("Erro ao interpretar payload WhatsApp. tipoErro={}",
                     exception.getClass().getSimpleName());
@@ -36,7 +36,7 @@ public class WhatsappInboundListener {
     }
  
     @SuppressWarnings("unchecked")
-    private void despachar(Map<String, Object> payload) {
+    private void despachar(Map<String, Object> payload, byte[] rawBody) {
         List<Map<String, Object>> entries = (List<Map<String, Object>>) payload.get("entry");
         if (entries == null) {
             log.warn("Payload recebido não possui campo 'entry'.");
@@ -50,12 +50,12 @@ public class WhatsappInboundListener {
                     .filter(change -> "messages".equals(change.get("field")))
                     .map(change -> (Map<String, Object>) change.get("value"))
                     .filter(java.util.Objects::nonNull)
-                    .forEach(this::processarValue);
+                    .forEach(value -> processarValue(value, rawBody));
         }
     }
  
     @SuppressWarnings("unchecked")
-    private void processarValue(Map<String, Object> value) {
+    private void processarValue(Map<String, Object> value, byte[] rawBody) {
         List<?> mensagens = (List<?>) value.get("messages");
         int numMensagens = mensagens != null ? mensagens.size() : 0;
  
@@ -65,7 +65,7 @@ public class WhatsappInboundListener {
         log.info("Processando payload de eventos do WhatsApp: mensagens={}, status_updates={}", numMensagens, numStatus);
  
         if (numMensagens > 0) {
-            executarSeguro(() -> inboundMapper.processarMensagemTexto(value), "mensagem inbound");
+            executarSeguro(() -> inboundMapper.processarMensagemTexto(value, rawBody), "mensagem inbound");
         }
  
         if (statuses == null) return;

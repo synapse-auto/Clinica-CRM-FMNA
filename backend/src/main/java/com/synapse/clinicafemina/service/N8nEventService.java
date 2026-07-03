@@ -9,6 +9,7 @@ import java.time.OffsetDateTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,14 @@ import org.springframework.web.client.RestClient;
 public class N8nEventService {
 
     private final RestClient restClient;
+
+    public record MetaWebhookContext(
+            String evento,
+            Long atendimentoId,
+            Long pacienteId,
+            Long mensagemId
+    ) {
+    }
 
     @Autowired
     public N8nEventService(
@@ -54,6 +63,45 @@ public class N8nEventService {
         } catch (Exception e) {
             log.warn("Falha ao emitir evento N8N: clinica={}, evento={}, tipoErro={}",
                     payload.clinicaId(), payload.evento(), e.getClass().getSimpleName());
+        }
+    }
+
+    public void enviarPayloadMetaOriginal(
+            Clinica clinica,
+            byte[] payloadOriginal,
+            MetaWebhookContext context
+    ) {
+        if (!Boolean.TRUE.equals(clinica.getUsaN8n())) {
+            return;
+        }
+        if (clinica.getN8nWebhookUrl() == null || clinica.getN8nWebhookUrl().isBlank()) {
+            log.warn("Payload Meta para N8N ignorado por webhook ausente: clinica={}, evento={}",
+                    clinica.getId(), context == null ? "desconhecido" : context.evento());
+            return;
+        }
+        if (payloadOriginal == null || payloadOriginal.length == 0) {
+            log.warn("Payload Meta para N8N ignorado por body ausente: clinica={}, evento={}",
+                    clinica.getId(), context == null ? "desconhecido" : context.evento());
+            return;
+        }
+
+        try {
+            restClient.post()
+                    .uri(clinica.getN8nWebhookUrl())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .headers(headers -> preencherHeadersMeta(headers, clinica, context))
+                    .body(payloadOriginal)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.info("Payload Meta original emitido ao N8N: clinica={}, evento={}, mensagem={}",
+                    clinica.getId(),
+                    context == null ? "desconhecido" : context.evento(),
+                    context == null ? null : context.mensagemId());
+        } catch (Exception e) {
+            log.warn("Falha ao emitir payload Meta original ao N8N: clinica={}, evento={}, tipoErro={}",
+                    clinica.getId(),
+                    context == null ? "desconhecido" : context.evento(),
+                    e.getClass().getSimpleName());
         }
     }
 
@@ -105,6 +153,24 @@ public class N8nEventService {
         requestFactory.setConnectTimeout((int) Duration.ofSeconds(safeTimeout).toMillis());
         requestFactory.setReadTimeout((int) Duration.ofSeconds(safeTimeout).toMillis());
         return builder.requestFactory(requestFactory);
+    }
+
+    private void preencherHeadersMeta(HttpHeaders headers, Clinica clinica, MetaWebhookContext context) {
+        adicionarHeader(headers, "X-CRM-Event", context == null ? null : context.evento());
+        adicionarHeader(headers, "X-CRM-Clinic-Slug", clinica.getSlug());
+        adicionarHeader(headers, "X-CRM-Atendimento-Id", context == null ? null : context.atendimentoId());
+        adicionarHeader(headers, "X-CRM-Paciente-Id", context == null ? null : context.pacienteId());
+        adicionarHeader(headers, "X-CRM-Mensagem-Id", context == null ? null : context.mensagemId());
+    }
+
+    private void adicionarHeader(HttpHeaders headers, String nome, Object valor) {
+        if (valor == null) {
+            return;
+        }
+        String texto = String.valueOf(valor);
+        if (!texto.isBlank()) {
+            headers.set(nome, texto);
+        }
     }
 
     private OffsetDateTime criadoEmEvento(Mensagem mensagem) {
