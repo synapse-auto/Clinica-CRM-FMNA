@@ -198,9 +198,6 @@ public class WhatsappInboundMapper {
         if (payloadMetaOriginal == null || payloadMetaOriginal.length == 0) {
             return null;
         }
-        if (quantidadeMensagens(value) <= 1) {
-            return payloadMetaOriginal;
-        }
         try {
             return objectMapper.writeValueAsBytes(payloadMetaUnitario(value, contatos, mensagem));
         } catch (JsonProcessingException exception) {
@@ -208,15 +205,6 @@ public class WhatsappInboundMapper {
                     maskId(normalizarMessageId(mensagem)), exception.getClass().getSimpleName());
             return null;
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private int quantidadeMensagens(Map<String, Object> value) {
-        Object mensagens = value.get("messages");
-        if (mensagens instanceof List<?> lista) {
-            return lista.size();
-        }
-        return 0;
     }
 
     private Map<String, Object> payloadMetaUnitario(

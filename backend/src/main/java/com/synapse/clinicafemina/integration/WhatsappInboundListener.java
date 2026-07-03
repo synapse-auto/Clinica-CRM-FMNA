@@ -43,15 +43,35 @@ public class WhatsappInboundListener {
             return;
         }
  
+        int totalChanges = 0;
+        int totalValues = 0;
+        int totalMensagens = 0;
+        int totalStatus = 0;
         for (Map<String, Object> entry : entries) {
             List<Map<String, Object>> changes = (List<Map<String, Object>>) entry.get("changes");
             if (changes == null) continue;
-            changes.stream()
-                    .filter(change -> "messages".equals(change.get("field")))
-                    .map(change -> (Map<String, Object>) change.get("value"))
-                    .filter(java.util.Objects::nonNull)
-                    .forEach(value -> processarValue(value, rawBody));
+            totalChanges += changes.size();
+            for (Map<String, Object> change : changes) {
+                if (!"messages".equals(change.get("field"))) {
+                    continue;
+                }
+                Map<String, Object> value = (Map<String, Object>) change.get("value");
+                if (value == null) {
+                    continue;
+                }
+                totalValues++;
+                totalMensagens += tamanhoLista(value.get("messages"));
+                totalStatus += tamanhoLista(value.get("statuses"));
+                processarValue(value, rawBody);
+            }
         }
+        log.info(
+                "WhatsApp inbound batch processado: entries={}, changes={}, values={}, messages={}, status_updates={}",
+                entries.size(),
+                totalChanges,
+                totalValues,
+                totalMensagens,
+                totalStatus);
     }
  
     @SuppressWarnings("unchecked")
@@ -89,5 +109,12 @@ public class WhatsappInboundListener {
             log.error("Erro ao processar {}. tipoErro={}",
                     contexto, exception.getClass().getSimpleName());
         }
+    }
+
+    private int tamanhoLista(Object valor) {
+        if (valor instanceof List<?> lista) {
+            return lista.size();
+        }
+        return 0;
     }
 }

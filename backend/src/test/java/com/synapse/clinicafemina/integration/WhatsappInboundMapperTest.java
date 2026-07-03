@@ -167,16 +167,19 @@ class WhatsappInboundMapperTest {
         mapper.processarMensagemTexto(validValuePayload("phone-ultra"), rawBody);
 
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
         ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
                 ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
         InOrder ordem = inOrder(mensagemRepository, n8nEventService);
         ordem.verify(mensagemRepository).save(mensagemCaptor.capture());
         ordem.verify(n8nEventService)
-                .enviarPayloadMetaOriginal(eq(clinica), eq(rawBody), contextCaptor.capture());
+                .enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
         assertEquals("mensagem_recebida", contextCaptor.getValue().evento());
         assertEquals(30L, contextCaptor.getValue().atendimentoId());
         assertEquals(20L, contextCaptor.getValue().pacienteId());
         assertEquals(40L, contextCaptor.getValue().mensagemId());
+        assertEquals("wamid-1", contextCaptor.getValue().whatsappMessageId());
+        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
         verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
     }
 
@@ -248,6 +251,105 @@ class WhatsappInboundMapperTest {
         assertTrue(bodies.get(2).contains("\"wamid-3\""));
         assertFalse(bodies.get(2).contains("\"wamid-1\""));
         assertFalse(bodies.get(2).contains("\"wamid-2\""));
+        assertEquals(List.of("wamid-1", "wamid-2", "wamid-3"), contextCaptor.getAllValues().stream()
+                .map(N8nEventService.MetaWebhookContext::whatsappMessageId)
+                .toList());
+    }
+
+    @Test
+    void should_emit_unit_payload_when_original_meta_payload_has_multiple_changes_with_single_messages() {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        byte[] rawBody = fullMetaPayloadWithTwoChanges("phone-ultra").getBytes(StandardCharsets.UTF_8);
+
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setNaoLidas(0);
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-2")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(41L);
+            return mensagem;
+        });
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(valuePayloadSingleMessage("phone-ultra", "wamid-2", "Segunda mensagem"), rawBody);
+
+        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
+                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
+        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
+
+        String body = new String(payloadCaptor.getValue(), StandardCharsets.UTF_8);
+        assertTrue(body.contains("\"wamid-2\""));
+        assertFalse(body.contains("\"wamid-1\""));
+        assertEquals("wamid-2", contextCaptor.getValue().whatsappMessageId());
+    }
+
+    @Test
+    void should_process_same_text_messages_when_wamids_are_different() {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        byte[] rawBody = fullMetaPayloadWithThreeSameTextMessages("phone-ultra").getBytes(StandardCharsets.UTF_8);
+
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setNaoLidas(0);
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-2")).thenReturn(Optional.empty());
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-3")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(switch (mensagem.getWhatsappMessageId()) {
+                case "wamid-1" -> 40L;
+                case "wamid-2" -> 41L;
+                case "wamid-3" -> 42L;
+                default -> throw new IllegalArgumentException("wamid inesperado");
+            });
+            return mensagem;
+        });
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(valuePayloadWithThreeSameTextMessages("phone-ultra"), rawBody);
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
+                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
+        verify(mensagemRepository, times(3)).save(mensagemCaptor.capture());
+        verify(n8nEventService, times(3)).enviarPayloadMetaOriginal(eq(clinica), any(), contextCaptor.capture());
+        assertEquals(List.of("wamid-1", "wamid-2", "wamid-3"), mensagemCaptor.getAllValues().stream()
+                .map(Mensagem::getWhatsappMessageId)
+                .toList());
         assertEquals(List.of("wamid-1", "wamid-2", "wamid-3"), contextCaptor.getAllValues().stream()
                 .map(N8nEventService.MetaWebhookContext::whatsappMessageId)
                 .toList());
@@ -357,13 +459,16 @@ class WhatsappInboundMapperTest {
         ), rawBody);
 
         ArgumentCaptor<MidiaMensagem> midiaCaptor = ArgumentCaptor.forClass(MidiaMensagem.class);
+        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
         ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
                 ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
         verify(midiaMensagemRepository).save(midiaCaptor.capture());
-        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), eq(rawBody), contextCaptor.capture());
+        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
         assertEquals("AUDIO", midiaCaptor.getValue().getTipoMedia());
         assertEquals(0L, midiaCaptor.getValue().getTamanhoBytes());
         assertEquals(40L, contextCaptor.getValue().mensagemId());
+        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-audio\""));
+        assertFalse(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
     }
 
     @Test
@@ -413,12 +518,15 @@ class WhatsappInboundMapperTest {
         ), rawBody);
 
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
         ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
                 ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
         verify(mensagemRepository).save(mensagemCaptor.capture());
-        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), eq(rawBody), contextCaptor.capture());
+        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
         assertEquals("OUTRO", mensagemCaptor.getValue().getTipoMedia());
         assertEquals(40L, contextCaptor.getValue().mensagemId());
+        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-sticker\""));
+        assertFalse(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
     }
 
     @Test
@@ -475,9 +583,12 @@ class WhatsappInboundMapperTest {
         mapper.processarMensagemTexto(audioPayload, rawBody);
         mapper.processarMensagemTexto(audioPayload, rawBody);
 
+        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
         verify(mensagemRepository, times(1)).save(any(Mensagem.class));
         verify(midiaMensagemRepository, times(1)).save(any(MidiaMensagem.class));
-        verify(n8nEventService, times(1)).enviarPayloadMetaOriginal(eq(clinica), eq(rawBody), any());
+        verify(n8nEventService, times(1)).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), any());
+        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-audio\""));
+        assertFalse(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
     }
 
     @Test
@@ -530,8 +641,11 @@ class WhatsappInboundMapperTest {
         mapper.processarMensagemTexto(stickerPayload, rawBody);
         mapper.processarMensagemTexto(stickerPayload, rawBody);
 
+        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
         verify(mensagemRepository, times(1)).save(any(Mensagem.class));
-        verify(n8nEventService, times(1)).enviarPayloadMetaOriginal(eq(clinica), eq(rawBody), any());
+        verify(n8nEventService, times(1)).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), any());
+        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-sticker\""));
+        assertFalse(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
     }
 
     @Test
@@ -572,6 +686,11 @@ class WhatsappInboundMapperTest {
 
     @Test
     void should_persist_received_document_metadata() {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        byte[] rawBody = fullMetaPayload("phone-ultra").getBytes(StandardCharsets.UTF_8);
+
         when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-doc")).thenReturn(Optional.empty());
         Paciente paciente = new Paciente();
@@ -614,13 +733,20 @@ class WhatsappInboundMapperTest {
                                 "mime_type", "application/pdf"
                         )
                 ))
-        ));
+        ), rawBody);
 
         ArgumentCaptor<MidiaMensagem> midiaCaptor = ArgumentCaptor.forClass(MidiaMensagem.class);
+        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
+                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
         verify(midiaMensagemRepository).save(midiaCaptor.capture());
+        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
         assertArrayEquals(documentBytes, midiaCaptor.getValue().getS3Chave());
         assertEquals("database", midiaCaptor.getValue().getS3Bucket());
         assertEquals(documentBytes.length, midiaCaptor.getValue().getTamanhoBytes());
+        assertEquals("DOCUMENTO", contextCaptor.getValue().tipoMedia());
+        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-doc\""));
+        assertFalse(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
         verify(notificationService).notificarNovaMensagem(eq(atendimento), any());
     }
 
@@ -736,6 +862,56 @@ class WhatsappInboundMapperTest {
         );
     }
 
+    private Map<String, Object> valuePayloadSingleMessage(String phoneNumberId, String wamid, String text) {
+        return Map.of(
+                "metadata", Map.of("phone_number_id", phoneNumberId),
+                "contacts", List.of(Map.of(
+                        "wa_id", "5511999990000",
+                        "profile", Map.of("name", "Paciente Teste")
+                )),
+                "messages", List.of(Map.of(
+                        "id", wamid,
+                        "from", "5511999990000",
+                        "timestamp", "1781455260",
+                        "type", "text",
+                        "text", Map.of("body", text)
+                ))
+        );
+    }
+
+    private Map<String, Object> valuePayloadWithThreeSameTextMessages(String phoneNumberId) {
+        return Map.of(
+                "metadata", Map.of("phone_number_id", phoneNumberId),
+                "contacts", List.of(Map.of(
+                        "wa_id", "5511999990000",
+                        "profile", Map.of("name", "Paciente Teste")
+                )),
+                "messages", List.of(
+                        Map.of(
+                                "id", "wamid-1",
+                                "from", "5511999990000",
+                                "timestamp", "1781455200",
+                                "type", "text",
+                                "text", Map.of("body", "Mesmo texto")
+                        ),
+                        Map.of(
+                                "id", "wamid-2",
+                                "from", "5511999990000",
+                                "timestamp", "1781455260",
+                                "type", "text",
+                                "text", Map.of("body", "Mesmo texto")
+                        ),
+                        Map.of(
+                                "id", "wamid-3",
+                                "from", "5511999990000",
+                                "timestamp", "1781455320",
+                                "type", "text",
+                                "text", Map.of("body", "Mesmo texto")
+                        )
+                )
+        );
+    }
+
     private String fullMetaPayload(String phoneNumberId) {
         return """
                 {
@@ -809,6 +985,113 @@ class WhatsappInboundMapperTest {
                                 "timestamp": "1781455320",
                                 "type": "text",
                                 "text": {"body": "Terceira mensagem"}
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.formatted(phoneNumberId);
+    }
+
+    private String fullMetaPayloadWithTwoChanges(String phoneNumberId) {
+        return """
+                {
+                  "object": "whatsapp_business_account",
+                  "entry": [
+                    {
+                      "id": "waba-1",
+                      "changes": [
+                        {
+                          "field": "messages",
+                          "value": {
+                            "metadata": {"phone_number_id": "%s"},
+                            "contacts": [
+                              {
+                                "wa_id": "5511999990000",
+                                "profile": {"name": "Paciente Teste"}
+                              }
+                            ],
+                            "messages": [
+                              {
+                                "id": "wamid-1",
+                                "from": "5511999990000",
+                                "timestamp": "1781455200",
+                                "type": "text",
+                                "text": {"body": "Primeira mensagem"}
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "field": "messages",
+                          "value": {
+                            "metadata": {"phone_number_id": "%s"},
+                            "contacts": [
+                              {
+                                "wa_id": "5511999990000",
+                                "profile": {"name": "Paciente Teste"}
+                              }
+                            ],
+                            "messages": [
+                              {
+                                "id": "wamid-2",
+                                "from": "5511999990000",
+                                "timestamp": "1781455260",
+                                "type": "text",
+                                "text": {"body": "Segunda mensagem"}
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.formatted(phoneNumberId, phoneNumberId);
+    }
+
+    private String fullMetaPayloadWithThreeSameTextMessages(String phoneNumberId) {
+        return """
+                {
+                  "object": "whatsapp_business_account",
+                  "entry": [
+                    {
+                      "id": "waba-1",
+                      "changes": [
+                        {
+                          "field": "messages",
+                          "value": {
+                            "metadata": {"phone_number_id": "%s"},
+                            "contacts": [
+                              {
+                                "wa_id": "5511999990000",
+                                "profile": {"name": "Paciente Teste"}
+                              }
+                            ],
+                            "messages": [
+                              {
+                                "id": "wamid-1",
+                                "from": "5511999990000",
+                                "timestamp": "1781455200",
+                                "type": "text",
+                                "text": {"body": "Mesmo texto"}
+                              },
+                              {
+                                "id": "wamid-2",
+                                "from": "5511999990000",
+                                "timestamp": "1781455260",
+                                "type": "text",
+                                "text": {"body": "Mesmo texto"}
+                              },
+                              {
+                                "id": "wamid-3",
+                                "from": "5511999990000",
+                                "timestamp": "1781455320",
+                                "type": "text",
+                                "text": {"body": "Mesmo texto"}
                               }
                             ]
                           }
