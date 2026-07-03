@@ -73,6 +73,7 @@ class N8nEventServiceTest {
                 .andExpect(header("X-CRM-Atendimento-Id", "123"))
                 .andExpect(header("X-CRM-Paciente-Id", "456"))
                 .andExpect(header("X-CRM-Mensagem-Id", "789"))
+                .andExpect(header("X-CRM-Whatsapp-Message-Id", "wamid-1"))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(content().json("""
                         {
@@ -105,7 +106,14 @@ class N8nEventServiceTest {
         service.enviarPayloadMetaOriginal(
                 clinica,
                 rawBody,
-                new N8nEventService.MetaWebhookContext("mensagem_recebida", 123L, 456L, 789L)
+                new N8nEventService.MetaWebhookContext(
+                        "mensagem_recebida",
+                        123L,
+                        456L,
+                        789L,
+                        "TEXTO",
+                        "wamid-1"
+                )
         );
 
         server.verify();
@@ -256,12 +264,20 @@ class N8nEventServiceTest {
                 .andExpect(header("X-CRM-Atendimento-Id", "123"))
                 .andExpect(header("X-CRM-Paciente-Id", "456"))
                 .andExpect(header("X-CRM-Mensagem-Id", "789"))
+                .andExpect(header("X-CRM-Whatsapp-Message-Id", "wamid-audio"))
                 .andRespond(withStatus(SERVICE_UNAVAILABLE));
 
         assertDoesNotThrow(() -> service.enviarPayloadMetaOriginal(
                 clinica,
                 rawBody,
-                new N8nEventService.MetaWebhookContext("mensagem_recebida", 123L, 456L, 789L, "AUDIO")
+                new N8nEventService.MetaWebhookContext(
+                        "mensagem_recebida",
+                        123L,
+                        456L,
+                        789L,
+                        "AUDIO",
+                        "wamid-audio"
+                )
         ));
         server.verify();
     }

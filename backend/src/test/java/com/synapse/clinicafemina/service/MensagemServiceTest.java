@@ -198,6 +198,44 @@ class MensagemServiceTest {
     }
 
     @Test
+    void should_register_each_ai_response_callback_when_whatsapp_message_id_is_absent() {
+        OffsetDateTime enviadoEm = OffsetDateTime.parse("2026-07-03T12:00:00Z");
+        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        MensagemService.RespostaIaResultado primeira = service.responderIa(
+                30L,
+                new N8nResponderRequest(
+                        20L,
+                        "Resposta sem chave externa",
+                        "TEXTO",
+                        "N8N",
+                        false,
+                        null,
+                        enviadoEm
+                )
+        );
+        MensagemService.RespostaIaResultado segunda = service.responderIa(
+                30L,
+                new N8nResponderRequest(
+                        20L,
+                        "Resposta sem chave externa",
+                        "TEXTO",
+                        "N8N",
+                        false,
+                        null,
+                        enviadoEm
+                )
+        );
+
+        org.junit.jupiter.api.Assertions.assertFalse(primeira.duplicada());
+        org.junit.jupiter.api.Assertions.assertFalse(segunda.duplicada());
+        verify(mensagemRepository, never()).findByClinicaIdAndWhatsappMessageId(any(), any());
+        verify(mensagemRepository, atLeastOnce()).save(any(Mensagem.class));
+        verify(whatsappOutboundClient, never()).enviarTexto(any(), any());
+    }
+
+    @Test
     void should_keep_ai_response_preview_within_column_limit_when_message_is_long() {
         when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));

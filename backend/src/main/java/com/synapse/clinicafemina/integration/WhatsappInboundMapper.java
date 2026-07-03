@@ -1,5 +1,7 @@
 package com.synapse.clinicafemina.integration;
  
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.config.RabbitMQConfig;
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Clinica;
@@ -27,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -47,6 +50,7 @@ public class WhatsappInboundMapper {
     private final RabbitTemplate rabbitTemplate;
     private final N8nEventService n8nEventService;
     private final AtendimentoNotificationService notificationService;
+    private final ObjectMapper objectMapper;
     private final WhatsappInboundPayloadParser payloadParser;
     private final Environment environment;
     private final WhatsappOutboundClient whatsappOutboundClient;
@@ -70,10 +74,10 @@ public class WhatsappInboundMapper {
 
     @Transactional
     public void processarMensagemTexto(Map<String, Object> value, byte[] payloadMetaOriginal) {
-        resolverEntradas(value).forEach(entrada -> processarEntrada(entrada, payloadMetaOriginal));
+        resolverEntradas(value, payloadMetaOriginal).forEach(this::processarEntrada);
     }
 
-    private void processarEntrada(EntradaResolvida resolvida, byte[] payloadMetaOriginal) {
+    private void processarEntrada(EntradaResolvida resolvida) {
         Clinica clinica = resolvida.clinica();
         Map<String, Object> contato = resolvida.contato();
         Map<String, Object> payloadMensagem = resolvida.mensagem();
@@ -81,11 +85,24 @@ public class WhatsappInboundMapper {
         if (whatsappMessageId == null) {
             return;
         }
-        if (mensagemRepository.findByClinicaIdAndWhatsappMessageId(
+        Optional<Mensagem> mensagemExistente = mensagemRepository.findByClinicaIdAndWhatsappMessageId(
                 clinica.getId(), whatsappMessageId
-        ).isPresent()) {
-            log.info("Mensagem inbound duplicada ignorada: clinicaId={}, whatsappMessageId={}",
-                    clinica.getId(), maskId(whatsappMessageId));
+        );
+        if (mensagemExistente.isPresent()) {
+            Mensagem existente = mensagemExistente.get();
+            Atendimento atendimentoExistente = existente.getAtendimento();
+            Long atendimentoId = atendimentoExistente == null ? null : atendimentoExistente.getId();
+            Long pacienteId = atendimentoExistente == null || atendimentoExistente.getPaciente() == null
+                    ? null
+                    : atendimentoExistente.getPaciente().getId();
+            log.info(
+                    "Mensagem inbound duplicada ignorada: clinicaId={}, mensagemId={}, atendimentoId={}, pacienteId={}, tipoMedia={}, whatsappMessageId={}",
+                    clinica.getId(),
+                    existente.getId(),
+                    atendimentoId,
+                    pacienteId,
+                    existente.getTipoMedia(),
+                    maskId(whatsappMessageId));
             return;
         }
  
@@ -104,14 +121,20 @@ public class WhatsappInboundMapper {
         Mensagem mensagem = mensagemRepository.save(criarMensagem(
                 atendimento, payloadMensagem, whatsappMessageId, dados
         ));
-        log.info("Mensagem persistida no banco de dados. id={}, whatsappMessageId={}", mensagem.getId(), whatsappMessageId);
+        log.info(
+                "Mensagem inbound nova persistida: mensagemId={}, atendimentoId={}, pacienteId={}, tipoMedia={}, whatsappMessageId={}",
+                mensagem.getId(),
+                atendimento.getId(),
+                paciente.getId(),
+                mensagem.getTipoMedia(),
+                maskId(whatsappMessageId));
  
         if (dados.mediaId() != null) {
             midiaRepository.save(criarMidia(mensagem, dados));
         }
  
         atualizarConversa(atendimento, paciente, mensagem);
-        emitirEventos(clinica, pacienteResolvido, atendimento, paciente, mensagem, payloadMetaOriginal);
+        emitirEventos(clinica, pacienteResolvido, atendimento, paciente, mensagem, resolvida.payloadMetaN8n());
         notificationService.notificarNovaMensagem(atendimento, mensagem);
         log.info("Mensagem inbound processada com sucesso: atendimento={}", atendimento.getId());
     }
@@ -145,7 +168,7 @@ public class WhatsappInboundMapper {
     }
  
     @SuppressWarnings("unchecked")
-    private List<EntradaResolvida> resolverEntradas(Map<String, Object> value) {
+    private List<EntradaResolvida> resolverEntradas(Map<String, Object> value, byte[] payloadMetaOriginal) {
         List<Map<String, Object>> contatos = (List<Map<String, Object>>) value.get("contacts");
         List<Map<String, Object>> mensagens = (List<Map<String, Object>>) value.get("messages");
         if (contatos == null || contatos.isEmpty() || mensagens == null || mensagens.isEmpty()) {
@@ -160,9 +183,89 @@ public class WhatsappInboundMapper {
                 .map(mensagem -> new EntradaResolvida(
                         clinica.get(),
                         contatoParaMensagem(contatos, mensagem),
-                        mensagem
+                        mensagem,
+                        payloadMetaParaMensagem(value, contatos, mensagem, payloadMetaOriginal)
                 ))
                 .toList();
+    }
+
+    private byte[] payloadMetaParaMensagem(
+            Map<String, Object> value,
+            List<Map<String, Object>> contatos,
+            Map<String, Object> mensagem,
+            byte[] payloadMetaOriginal
+    ) {
+        if (payloadMetaOriginal == null || payloadMetaOriginal.length == 0) {
+            return null;
+        }
+        if (quantidadeMensagens(value) <= 1) {
+            return payloadMetaOriginal;
+        }
+        try {
+            return objectMapper.writeValueAsBytes(payloadMetaUnitario(value, contatos, mensagem));
+        } catch (JsonProcessingException exception) {
+            log.warn("Falha ao montar payload Meta unitario para N8N. whatsappMessageId={}, tipoErro={}",
+                    maskId(normalizarMessageId(mensagem)), exception.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private int quantidadeMensagens(Map<String, Object> value) {
+        Object mensagens = value.get("messages");
+        if (mensagens instanceof List<?> lista) {
+            return lista.size();
+        }
+        return 0;
+    }
+
+    private Map<String, Object> payloadMetaUnitario(
+            Map<String, Object> value,
+            List<Map<String, Object>> contatos,
+            Map<String, Object> mensagem
+    ) {
+        Map<String, Object> valueUnitario = new LinkedHashMap<>();
+        copiarSeExistir(value, valueUnitario, "messaging_product");
+        copiarSeExistir(value, valueUnitario, "metadata");
+        List<Map<String, Object>> contatosDaMensagem = contatoFiltrado(contatos, mensagem);
+        if (!contatosDaMensagem.isEmpty()) {
+            valueUnitario.put("contacts", contatosDaMensagem);
+        }
+        valueUnitario.put("messages", List.of(mensagem));
+
+        Map<String, Object> change = new LinkedHashMap<>();
+        change.put("field", "messages");
+        change.put("value", valueUnitario);
+
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("changes", List.of(change));
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("object", "whatsapp_business_account");
+        payload.put("entry", List.of(entry));
+        return payload;
+    }
+
+    private List<Map<String, Object>> contatoFiltrado(
+            List<Map<String, Object>> contatos,
+            Map<String, Object> mensagem
+    ) {
+        Object remetente = mensagem.get("from");
+        if (remetente == null) {
+            return contatos;
+        }
+        String from = String.valueOf(remetente);
+        return contatos.stream()
+                .filter(contato -> from.equals(String.valueOf(contato.get("wa_id"))))
+                .findFirst()
+                .map(List::of)
+                .orElse(contatos);
+    }
+
+    private void copiarSeExistir(Map<String, Object> origem, Map<String, Object> destino, String chave) {
+        if (origem.containsKey(chave)) {
+            destino.put(chave, origem.get(chave));
+        }
     }
 
     private Map<String, Object> contatoParaMensagem(
@@ -318,7 +421,8 @@ public class WhatsappInboundMapper {
                             atendimento.getId(),
                             paciente.getId(),
                             mensagem.getId(),
-                            mensagem.getTipoMedia()
+                            mensagem.getTipoMedia(),
+                            mensagem.getWhatsappMessageId()
                     )
             );
             return;
@@ -475,7 +579,8 @@ public class WhatsappInboundMapper {
     private record EntradaResolvida(
             Clinica clinica,
             Map<String, Object> contato,
-            Map<String, Object> mensagem
+            Map<String, Object> mensagem,
+            byte[] payloadMetaN8n
     ) {
     }
  
