@@ -1,12 +1,19 @@
 package com.synapse.clinicafemina.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Mensagem;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -15,7 +22,9 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.http.HttpMethod.POST;
 import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
 import static org.springframework.test.web.client.ExpectedCount.once;
@@ -117,6 +126,69 @@ class N8nEventServiceTest {
         );
 
         server.verify();
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void should_forward_long_text_payload_and_log_sizes_without_content(CapturedOutput output) throws Exception {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        N8nEventService service = new N8nEventService(builder.build());
+        Clinica clinica = new Clinica();
+        clinica.setId(1L);
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook/secret");
+        String textoLongo = """
+                nasci em 28/01/1999 cpf 00000000000 telefone 5500000000000
+                quero ultrassonografia transvaginal com observacoes adicionais
+                """.strip();
+        byte[] rawBody = new ObjectMapper().writeValueAsBytes(Map.of(
+                "object", "whatsapp_business_account",
+                "entry", List.of(Map.of(
+                        "changes", List.of(Map.of(
+                                "field", "messages",
+                                "value", Map.of(
+                                        "metadata", Map.of("phone_number_id", "phone-ultra"),
+                                        "contacts", List.of(Map.of("wa_id", "5511999990000")),
+                                        "messages", List.of(Map.of(
+                                                "id", "wamid-long",
+                                                "timestamp", "1781455200",
+                                                "type", "text",
+                                                "text", Map.of("body", textoLongo)
+                                        ))
+                                )
+                        ))
+                ))
+        ));
+
+        server.expect(once(), requestTo("https://n8n.example/webhook/secret"))
+                .andExpect(method(POST))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().bytes(rawBody))
+                .andRespond(withSuccess());
+
+        service.enviarPayloadMetaOriginal(
+                clinica,
+                rawBody,
+                new N8nEventService.MetaWebhookContext(
+                        "mensagem_recebida",
+                        123L,
+                        456L,
+                        789L,
+                        "TEXTO",
+                        "wamid-long"
+                )
+        );
+
+        server.verify();
+        String logs = output.getOut() + output.getErr();
+        assertTrue(logs.contains("payloadBytes=" + rawBody.length));
+        assertFalse(logs.contains(textoLongo));
+        assertFalse(logs.contains("00000000000"));
+        assertFalse(logs.contains("5500000000000"));
+        assertFalse(logs.contains("https://n8n.example"));
+        assertEquals(textoLongo.length(), textoLongo.getBytes(StandardCharsets.UTF_8).length);
     }
 
     @Test

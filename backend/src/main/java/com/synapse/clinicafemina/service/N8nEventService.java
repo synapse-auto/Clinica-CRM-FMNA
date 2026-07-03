@@ -94,38 +94,41 @@ public class N8nEventService {
     ) {
         if (!Boolean.TRUE.equals(clinica.getUsaN8n())) {
             log.info(
-                    "Payload Meta para N8N ignorado porque a clinica nao usa N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}",
+                    "Payload Meta para N8N ignorado porque a clinica nao usa N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, payloadBytes={}",
                     clinica.getId(),
                     context == null ? "desconhecido" : context.evento(),
                     context == null ? null : context.atendimentoId(),
                     context == null ? null : context.pacienteId(),
                     context == null ? null : context.mensagemId(),
                     context == null ? null : context.tipoMedia(),
-                    maskId(context == null ? null : context.whatsappMessageId()));
+                    maskId(context == null ? null : context.whatsappMessageId()),
+                    payloadBytes(payloadOriginal));
             return;
         }
         if (clinica.getN8nWebhookUrl() == null || clinica.getN8nWebhookUrl().isBlank()) {
             log.warn(
-                    "Payload Meta para N8N ignorado por webhook ausente: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}",
+                    "Payload Meta para N8N ignorado por webhook ausente: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, payloadBytes={}",
                     clinica.getId(),
                     context == null ? "desconhecido" : context.evento(),
                     context == null ? null : context.atendimentoId(),
                     context == null ? null : context.pacienteId(),
                     context == null ? null : context.mensagemId(),
                     context == null ? null : context.tipoMedia(),
-                    maskId(context == null ? null : context.whatsappMessageId()));
+                    maskId(context == null ? null : context.whatsappMessageId()),
+                    payloadBytes(payloadOriginal));
             return;
         }
         if (payloadOriginal == null || payloadOriginal.length == 0) {
             log.warn(
-                    "Payload Meta para N8N ignorado por body ausente: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}",
+                    "Payload Meta para N8N ignorado por body ausente: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, payloadBytes={}",
                     clinica.getId(),
                     context == null ? "desconhecido" : context.evento(),
                     context == null ? null : context.atendimentoId(),
                     context == null ? null : context.pacienteId(),
                     context == null ? null : context.mensagemId(),
                     context == null ? null : context.tipoMedia(),
-                    maskId(context == null ? null : context.whatsappMessageId()));
+                    maskId(context == null ? null : context.whatsappMessageId()),
+                    payloadBytes(payloadOriginal));
             return;
         }
 
@@ -138,7 +141,7 @@ public class N8nEventService {
                     .retrieve()
                     .toBodilessEntity();
             log.info(
-                    "Payload Meta original emitido ao N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, statusHttp={}",
+                    "Payload Meta original emitido ao N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, payloadBytes={}, statusHttp={}",
                     clinica.getId(),
                     context == null ? "desconhecido" : context.evento(),
                     context == null ? null : context.atendimentoId(),
@@ -146,10 +149,11 @@ public class N8nEventService {
                     context == null ? null : context.mensagemId(),
                     context == null ? null : context.tipoMedia(),
                     maskId(context == null ? null : context.whatsappMessageId()),
+                    payloadBytes(payloadOriginal),
                     response.getStatusCode().value());
         } catch (RestClientResponseException e) {
             log.warn(
-                    "Falha ao emitir payload Meta original ao N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, statusHttp={}, tipoErro={}",
+                    "Falha ao emitir payload Meta original ao N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, payloadBytes={}, statusHttp={}, tipoErro={}",
                     clinica.getId(),
                     context == null ? "desconhecido" : context.evento(),
                     context == null ? null : context.atendimentoId(),
@@ -157,11 +161,12 @@ public class N8nEventService {
                     context == null ? null : context.mensagemId(),
                     context == null ? null : context.tipoMedia(),
                     maskId(context == null ? null : context.whatsappMessageId()),
+                    payloadBytes(payloadOriginal),
                     e.getStatusCode().value(),
                     e.getClass().getSimpleName());
         } catch (Exception e) {
             log.warn(
-                    "Falha ao emitir payload Meta original ao N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, tipoErro={}",
+                    "Falha ao emitir payload Meta original ao N8N: clinica={}, evento={}, atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, payloadBytes={}, tipoErro={}",
                     clinica.getId(),
                     context == null ? "desconhecido" : context.evento(),
                     context == null ? null : context.atendimentoId(),
@@ -169,6 +174,7 @@ public class N8nEventService {
                     context == null ? null : context.mensagemId(),
                     context == null ? null : context.tipoMedia(),
                     maskId(context == null ? null : context.whatsappMessageId()),
+                    payloadBytes(payloadOriginal),
                     e.getClass().getSimpleName());
         }
     }
@@ -258,5 +264,9 @@ public class N8nEventService {
             return "****";
         }
         return "****" + trimmed.substring(trimmed.length() - 4);
+    }
+
+    private int payloadBytes(byte[] payloadOriginal) {
+        return payloadOriginal == null ? 0 : payloadOriginal.length;
     }
 }

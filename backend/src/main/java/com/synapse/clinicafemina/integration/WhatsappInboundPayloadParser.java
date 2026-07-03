@@ -50,7 +50,7 @@ public class WhatsappInboundPayloadParser {
     }
 
     public String limitarPrevia(String conteudo) {
-        return conteudo.length() > 60 ? conteudo.substring(0, 60) + "…" : conteudo;
+        return conteudo.length() > 60 ? conteudo.substring(0, 57) + "..." : conteudo;
     }
 
     private String mapearTipoMedia(String tipo) {

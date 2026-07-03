@@ -122,12 +122,15 @@ public class WhatsappInboundMapper {
                 atendimento, payloadMensagem, whatsappMessageId, dados
         ));
         log.info(
-                "Mensagem inbound nova persistida: mensagemId={}, atendimentoId={}, pacienteId={}, tipoMedia={}, whatsappMessageId={}",
+                "Mensagem inbound nova persistida: mensagemId={}, atendimentoId={}, pacienteId={}, tipoMedia={}, whatsappMessageId={}, textoRecebidoChars={}, textoPersistidoChars={}, previaChars={}",
                 mensagem.getId(),
                 atendimento.getId(),
                 paciente.getId(),
                 mensagem.getTipoMedia(),
-                maskId(whatsappMessageId));
+                maskId(whatsappMessageId),
+                tamanhoTexto(dados.conteudo()),
+                tamanhoTexto(mensagem.getConteudo()),
+                tamanhoTexto(mensagem.getConteudoPrevia()));
  
         if (dados.mediaId() != null) {
             midiaRepository.save(criarMidia(mensagem, dados));
@@ -562,6 +565,10 @@ public class WhatsappInboundMapper {
             return "****";
         }
         return "****" + trimmed.substring(trimmed.length() - 4);
+    }
+
+    private int tamanhoTexto(String texto) {
+        return texto == null ? 0 : texto.length();
     }
  
     private record EntradaResolvida(

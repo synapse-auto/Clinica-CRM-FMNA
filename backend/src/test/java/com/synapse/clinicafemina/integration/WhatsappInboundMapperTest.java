@@ -1,5 +1,6 @@
 package com.synapse.clinicafemina.integration;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Clinica;
@@ -299,6 +300,64 @@ class WhatsappInboundMapperTest {
         assertTrue(body.contains("\"wamid-2\""));
         assertFalse(body.contains("\"wamid-1\""));
         assertEquals("wamid-2", contextCaptor.getValue().whatsappMessageId());
+    }
+
+    @Test
+    void should_persist_long_text_complete_and_emit_unit_payload_with_complete_body() throws Exception {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        String textoLongo = """
+                nasci em 28/01/1999 cpf 00000000000 telefone 5500000000000
+                quero ultrassonografia transvaginal com observacoes adicionais
+                """.strip();
+        byte[] rawBody = fullMetaPayload("phone-ultra").getBytes(StandardCharsets.UTF_8);
+
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setNaoLidas(0);
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-long")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(40L);
+            return mensagem;
+        });
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(valuePayloadSingleMessage("phone-ultra", "wamid-long", textoLongo), rawBody);
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
+                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
+        verify(mensagemRepository).save(mensagemCaptor.capture());
+        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
+
+        Mensagem mensagem = mensagemCaptor.getValue();
+        assertEquals(textoLongo, mensagem.getConteudo());
+        assertTrue(mensagem.getConteudoPrevia().length() <= 60);
+        assertEquals("TEXTO", mensagem.getTipoMedia());
+        assertEquals("TEXTO", contextCaptor.getValue().tipoMedia());
+        assertEquals("wamid-long", contextCaptor.getValue().whatsappMessageId());
+
+        JsonNode payloadN8n = new ObjectMapper().readTree(payloadCaptor.getValue());
+        JsonNode messages = payloadN8n.at("/entry/0/changes/0/value/messages");
+        assertEquals(1, messages.size());
+        assertEquals(textoLongo, messages.get(0).at("/text/body").asText());
     }
 
     @Test
