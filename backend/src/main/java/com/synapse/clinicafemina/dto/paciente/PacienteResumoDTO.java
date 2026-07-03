@@ -1,6 +1,8 @@
 package com.synapse.clinicafemina.dto.paciente;
 
+import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 /**
  * DTO de listagem de pacientes — retorna apenas dados não-sensíveis.
@@ -14,6 +16,7 @@ public record PacienteResumoDTO(
         String externalSource,
         String externalId,
         OffsetDateTime criadoEm,
-        OffsetDateTime ultimaInteracaoEm
+        OffsetDateTime ultimaInteracaoEm,
+        List<TagResponse> tags
 ) {
 }

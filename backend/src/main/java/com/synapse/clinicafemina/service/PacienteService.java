@@ -1,9 +1,12 @@
 package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.domain.Clinica;
+import com.synapse.clinicafemina.domain.Tag;
+import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import com.synapse.clinicafemina.dto.paciente.PacienteResumoDTO;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.PacienteRepository;
+import com.synapse.clinicafemina.repository.PacienteTagRepository;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -17,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PacienteService {
 
     private final PacienteRepository pacienteRepository;
+    private final PacienteTagRepository pacienteTagRepository;
 
     /**
      * Retorna pacientes ativos da clínica usando apenas colunas não criptografadas.
@@ -41,6 +45,7 @@ public class PacienteService {
     }
 
     private PacienteResumoDTO toResumo(PacienteRepository.PacienteResumoProjection paciente) {
+        Long clinicaId = paciente.getClinicaId();
         return new PacienteResumoDTO(
                 paciente.getId(),
                 paciente.getNomeBusca(),
@@ -49,7 +54,33 @@ public class PacienteService {
                 paciente.getExternalSource(),
                 paciente.getExternalId(),
                 toOffsetDateTime(paciente.getCriadoEm()),
-                toOffsetDateTime(paciente.getUltimaInteracaoEm())
+                toOffsetDateTime(paciente.getUltimaInteracaoEm()),
+                tagsDoPaciente(paciente.getId(), clinicaId)
+        );
+    }
+
+    private List<TagResponse> tagsDoPaciente(Long pacienteId, Long clinicaId) {
+        if (clinicaId == null) {
+            return List.of();
+        }
+        List<Tag> tags = pacienteTagRepository.findTagsByPacienteIdAndClinicaId(pacienteId, clinicaId);
+        if (tags == null) {
+            return List.of();
+        }
+        return tags.stream()
+                .map(this::toTagResponse)
+                .toList();
+    }
+
+    private TagResponse toTagResponse(Tag tag) {
+        return new TagResponse(
+                tag.getId(),
+                tag.getNome(),
+                tag.getCor(),
+                tag.getDescricao(),
+                Boolean.TRUE.equals(tag.getAtivo()),
+                tag.getCriadoEm(),
+                tag.getAtualizadoEm()
         );
     }
 

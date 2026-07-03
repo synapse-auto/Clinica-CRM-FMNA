@@ -16,6 +16,8 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
     interface PacienteResumoProjection {
         Long getId();
 
+        Long getClinicaId();
+
         String getNomeBusca();
 
         String getTelefoneNormalizado();
@@ -62,6 +64,7 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
     @Query(value = """
             SELECT
                 id AS id,
+                clinica_id AS "clinicaId",
                 COALESCE(NULLIF(nome_busca, ''), CONCAT('Paciente ', id)) AS "nomeBusca",
                 telefone_normalizado AS "telefoneNormalizado",
                 status AS status,
@@ -79,6 +82,7 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
     @Query(value = """
             SELECT
                 id AS id,
+                clinica_id AS "clinicaId",
                 COALESCE(NULLIF(nome_busca, ''), CONCAT('Paciente ', id)) AS "nomeBusca",
                 telefone_normalizado AS "telefoneNormalizado",
                 status AS status,

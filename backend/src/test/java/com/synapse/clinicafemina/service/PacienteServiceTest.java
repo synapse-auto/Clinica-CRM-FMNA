@@ -1,9 +1,11 @@
 package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.domain.Clinica;
+import com.synapse.clinicafemina.domain.Tag;
 import com.synapse.clinicafemina.dto.paciente.PacienteResumoDTO;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.PacienteRepository;
+import com.synapse.clinicafemina.repository.PacienteTagRepository;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -28,12 +30,15 @@ class PacienteServiceTest {
     @Mock
     private PacienteRepository pacienteRepository;
 
+    @Mock
+    private PacienteTagRepository pacienteTagRepository;
+
     private PacienteService service;
     private Clinica clinica;
 
     @BeforeEach
     void setUp() {
-        service = new PacienteService(pacienteRepository);
+        service = new PacienteService(pacienteRepository, pacienteTagRepository);
         clinica = new Clinica();
         clinica.setId(1L);
         clinica.setNome("Clínica Femina");
@@ -94,6 +99,27 @@ class PacienteServiceTest {
 
         assertEquals("MEDWARE", result.get(0).externalSource());
         assertEquals("MW-1001", result.get(0).externalId());
+    }
+
+    @Test
+    void listar_incluiTagsDoPacienteNaClinicaAtual() {
+        PacienteRepository.PacienteResumoProjection paciente = resumoProjection(6L, "nina costa", "5511955554444");
+        Tag tag = new Tag();
+        tag.setId(15L);
+        tag.setNome("VIP");
+        tag.setCor("#0d9488");
+        tag.setAtivo(true);
+        tag.setCriadoEm(OffsetDateTime.parse("2026-06-15T12:00:00Z"));
+        tag.setAtualizadoEm(OffsetDateTime.parse("2026-06-15T12:00:00Z"));
+        when(pacienteRepository.findResumosDisponiveisByClinicaId(clinica.getId()))
+                .thenReturn(List.of(paciente));
+        when(pacienteTagRepository.findTagsByPacienteIdAndClinicaId(6L, clinica.getId()))
+                .thenReturn(List.of(tag));
+
+        List<PacienteResumoDTO> result = service.listar(clinica);
+
+        assertEquals(1, result.get(0).tags().size());
+        assertEquals("VIP", result.get(0).tags().get(0).nome());
     }
 
     @Test
@@ -167,6 +193,11 @@ class PacienteServiceTest {
             @Override
             public Long getId() {
                 return id;
+            }
+
+            @Override
+            public Long getClinicaId() {
+                return clinica.getId();
             }
 
             @Override

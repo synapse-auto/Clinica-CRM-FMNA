@@ -1,3 +1,5 @@
+import type { TagOperacional } from './operacional';
+
 export type PacienteResumo = {
   id: number;
   nome: string;
@@ -7,4 +9,5 @@ export type PacienteResumo = {
   externalId: string | null;
   criadoEm: string;
   ultimaInteracaoEm: string | null;
+  tags: TagOperacional[];
 };
