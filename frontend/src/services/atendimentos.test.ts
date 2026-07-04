@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   adicionarTagAtendimento,
+  ativarIaAtendimento,
   enviarAnexo,
   enviarMensagem,
   getMensagensRapidasAtivas,
@@ -120,6 +121,18 @@ describe('atendimentos service', () => {
       2,
       '/api/atendimentos/12/tags/9',
       expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('should_return_atendimento_to_ai_mode_through_bff', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 12, tratadoPorIa: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await ativarIaAtendimento(12);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/atendimentos/12/modo-ia',
+      expect.objectContaining({ method: 'PATCH' }),
     );
   });
 });

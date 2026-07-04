@@ -122,12 +122,15 @@ public class WhatsappInboundMapper {
                 atendimento, payloadMensagem, whatsappMessageId, dados
         ));
         log.info(
-                "Mensagem inbound nova persistida: mensagemId={}, atendimentoId={}, pacienteId={}, tipoMedia={}, whatsappMessageId={}, textoRecebidoChars={}, textoPersistidoChars={}, previaChars={}",
+                "Mensagem inbound nova persistida: mensagemId={}, atendimentoId={}, pacienteId={}, tipoMedia={}, whatsappMessageId={}, atendimentoOrigem={}, atendimentoModo={}, iaAtiva={}, textoRecebidoChars={}, textoPersistidoChars={}, previaChars={}",
                 mensagem.getId(),
                 atendimento.getId(),
                 paciente.getId(),
                 mensagem.getTipoMedia(),
                 maskId(whatsappMessageId),
+                origemAtendimento(atendimento),
+                modoAtendimento(atendimento),
+                iaAtiva(atendimento),
                 tamanhoTexto(dados.conteudo()),
                 tamanhoTexto(mensagem.getConteudo()),
                 tamanhoTexto(mensagem.getConteudoPrevia()));
@@ -403,6 +406,19 @@ public class WhatsappInboundMapper {
             Mensagem mensagem,
             byte[] payloadMetaOriginal
     ) {
+        if (!iaAtiva(atendimento)) {
+            log.info(
+                    "Payload Meta para N8N bloqueado por atendimento humano: atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, atendimentoOrigem={}, atendimentoModo={}, iaAtiva={}",
+                    atendimento.getId(),
+                    paciente.getId(),
+                    mensagem.getId(),
+                    mensagem.getTipoMedia(),
+                    maskId(mensagem.getWhatsappMessageId()),
+                    origemAtendimento(atendimento),
+                    modoAtendimento(atendimento),
+                    false);
+            return;
+        }
         if (payloadMetaOriginal != null && payloadMetaOriginal.length > 0) {
             n8nEventService.enviarPayloadMetaOriginal(
                     clinica,
@@ -413,7 +429,10 @@ public class WhatsappInboundMapper {
                             paciente.getId(),
                             mensagem.getId(),
                             mensagem.getTipoMedia(),
-                            mensagem.getWhatsappMessageId()
+                            mensagem.getWhatsappMessageId(),
+                            origemAtendimento(atendimento),
+                            modoAtendimento(atendimento),
+                            true
                     )
             );
             return;
@@ -565,6 +584,18 @@ public class WhatsappInboundMapper {
             return "****";
         }
         return "****" + trimmed.substring(trimmed.length() - 4);
+    }
+
+    private boolean iaAtiva(Atendimento atendimento) {
+        return Boolean.TRUE.equals(atendimento.getTratadoPorIa());
+    }
+
+    private String origemAtendimento(Atendimento atendimento) {
+        return iaAtiva(atendimento) ? "IA" : "HUMANO";
+    }
+
+    private String modoAtendimento(Atendimento atendimento) {
+        return origemAtendimento(atendimento);
     }
 
     private int tamanhoTexto(String texto) {

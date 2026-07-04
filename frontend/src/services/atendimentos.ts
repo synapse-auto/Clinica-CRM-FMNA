@@ -98,6 +98,10 @@ export function assumirAtendimento(id: number): Promise<AtendimentoDetalhe> {
   return requestJson(`/api/atendimentos/${id}/assumir`, { method: 'POST' });
 }
 
+export function ativarIaAtendimento(id: number): Promise<AtendimentoDetalhe> {
+  return requestJson(`/api/atendimentos/${id}/modo-ia`, { method: 'PATCH' });
+}
+
 export function revisarConvenio(
   id: number,
   resultado: 'APROVADO' | 'RECUSADO' | 'PENDENTE',

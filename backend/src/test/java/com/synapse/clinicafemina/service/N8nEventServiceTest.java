@@ -83,6 +83,9 @@ class N8nEventServiceTest {
                 .andExpect(header("X-CRM-Paciente-Id", "456"))
                 .andExpect(header("X-CRM-Mensagem-Id", "789"))
                 .andExpect(header("X-CRM-Whatsapp-Message-Id", "wamid-1"))
+                .andExpect(header("X-CRM-Atendimento-Origem", "IA"))
+                .andExpect(header("X-CRM-Atendimento-Modo", "IA"))
+                .andExpect(header("X-CRM-Ia-Ativa", "true"))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(content().json("""
                         {
@@ -121,7 +124,10 @@ class N8nEventServiceTest {
                         456L,
                         789L,
                         "TEXTO",
-                        "wamid-1"
+                        "wamid-1",
+                        "IA",
+                        "IA",
+                        true
                 )
         );
 
@@ -337,6 +343,9 @@ class N8nEventServiceTest {
                 .andExpect(header("X-CRM-Paciente-Id", "456"))
                 .andExpect(header("X-CRM-Mensagem-Id", "789"))
                 .andExpect(header("X-CRM-Whatsapp-Message-Id", "wamid-audio"))
+                .andExpect(header("X-CRM-Atendimento-Origem", "IA"))
+                .andExpect(header("X-CRM-Atendimento-Modo", "IA"))
+                .andExpect(header("X-CRM-Ia-Ativa", "true"))
                 .andRespond(withStatus(SERVICE_UNAVAILABLE));
 
         assertDoesNotThrow(() -> service.enviarPayloadMetaOriginal(
@@ -348,7 +357,10 @@ class N8nEventServiceTest {
                         456L,
                         789L,
                         "AUDIO",
-                        "wamid-audio"
+                        "wamid-audio",
+                        "IA",
+                        "IA",
+                        true
                 )
         ));
         server.verify();

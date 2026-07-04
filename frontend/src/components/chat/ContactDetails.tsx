@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CalendarCheck, Mail, Phone, Plus, User, X } from 'lucide-react';
+import { Bot, CalendarCheck, Mail, Phone, Plus, User, X } from 'lucide-react';
 import type {
   AtendenteOption,
   AtendimentoDetalhe,
@@ -16,6 +16,7 @@ type Props = {
   canManage: boolean;
   busy: boolean;
   onAssume: () => Promise<void>;
+  onActivateIa: () => Promise<void>;
   onTransfer: (usuarioId: number) => Promise<void>;
   onReview: (result: 'APROVADO' | 'RECUSADO' | 'PENDENTE') => Promise<void>;
   onAddTag: (tagId: number) => Promise<void>;
@@ -30,6 +31,7 @@ export function ContactDetails({
   canManage,
   busy,
   onAssume,
+  onActivateIa,
   onTransfer,
   onReview,
   onAddTag,
@@ -100,6 +102,17 @@ export function ContactDetails({
               className="h-8 w-full rounded-lg bg-clinic-primary text-[10px] font-extrabold text-white disabled:opacity-50"
             >
               Assumir atendimento
+            </button>
+          ) : null}
+          {canManage && !detail.tratadoPorIa ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void onActivateIa()}
+              className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-clinic-primary/40 bg-clinic-primary/10 text-[10px] font-extrabold text-clinic-primary hover:bg-clinic-primary/15 disabled:opacity-50"
+            >
+              <Bot className="h-3.5 w-3.5" />
+              Voltar para IA
             </button>
           ) : null}
           {canManage && atendentes.length > 0 ? (

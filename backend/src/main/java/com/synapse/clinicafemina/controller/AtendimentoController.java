@@ -120,6 +120,12 @@ public class AtendimentoController {
         return atendimentoService.assumir(id, clinicaId(), usuario.getId());
     }
 
+    @PatchMapping("/{id}/modo-ia")
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
+    public AtendimentoDetalheDTO ativarModoIa(@PathVariable Long id) {
+        return atendimentoService.ativarModoIa(id, clinicaId());
+    }
+
     @PatchMapping("/{id}/convenio")
     @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public AtendimentoDetalheDTO revisarConvenio(

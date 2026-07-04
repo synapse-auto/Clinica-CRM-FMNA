@@ -21,9 +21,14 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
+
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(AtendimentoController.class)
@@ -111,5 +116,40 @@ class AtendimentoControllerTest {
 
         mockMvc.perform(get("/api/atendimentos/30/mensagens/100/midia"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @WithMockUser(roles = "RECEPCIONISTA")
+    void should_return_atendimento_to_ai_mode() throws Exception {
+        when(atendimentoService.ativarModoIa(30L, 9L))
+                .thenReturn(new AtendimentoDetalheDTO(
+                        30L,
+                        "ATIVO",
+                        true,
+                        null,
+                        null,
+                        0,
+                        new AtendimentoDetalheDTO.PacienteDetalheDTO(
+                                20L,
+                                "Paciente Teste",
+                                "44999999999",
+                                null,
+                                "EM_ATENDIMENTO",
+                                null,
+                                false,
+                                null,
+                                null,
+                                null,
+                                null
+                        ),
+                        null
+                ));
+
+        mockMvc.perform(patch("/api/atendimentos/30/modo-ia").with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tratadoPorIa").value(true))
+                .andExpect(jsonPath("$.atendentePrincipal").doesNotExist());
+
+        verify(atendimentoService).ativarModoIa(30L, 9L);
     }
 }

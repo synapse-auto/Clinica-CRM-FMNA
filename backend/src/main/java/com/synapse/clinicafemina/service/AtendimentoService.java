@@ -125,6 +125,20 @@ public class AtendimentoService {
     }
 
     @Transactional
+    public AtendimentoDetalheDTO ativarModoIa(Long id, Long clinicaId) {
+        Atendimento atendimento = buscarOuFalhar(id, clinicaId);
+        if ("ENCERRADO".equals(atendimento.getStatus())) {
+            throw new IllegalStateException("Nao e possivel ativar IA em um atendimento encerrado");
+        }
+        atendimento.setAtendentePrincipal(null);
+        atendimento.setTratadoPorIa(true);
+        atendimento.setStatus("ATIVO");
+        Atendimento salvo = atendimentoRepository.save(atendimento);
+        log.info("Atendimento {} retornado para IA", id);
+        return toDetalheDTO(salvo);
+    }
+
+    @Transactional
     public AtendimentoDetalheDTO encerrar(Long id, Long clinicaId, String motivo) {
         Atendimento atendimento = buscarOuFalhar(id, clinicaId);
         if ("ENCERRADO".equals(atendimento.getStatus())) {

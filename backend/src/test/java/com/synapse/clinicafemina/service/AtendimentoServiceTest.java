@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -110,5 +112,25 @@ class AtendimentoServiceTest {
         assertFalse(atendimento.getTratadoPorIa());
         verify(transferenciaRepository).save(any(TransferenciaAtendimento.class));
         verify(notificationService).notificarAtribuicao(atendimento, destinatario);
+    }
+
+    @Test
+    void should_return_human_atendimento_to_ai_mode() {
+        Recepcionista atendente = new Recepcionista();
+        atendente.setId(10L);
+        atendimento.setAtendentePrincipal(atendente);
+        atendimento.setTratadoPorIa(false);
+
+        when(atendimentoRepository.findByIdAndClinicaId(3L, 1L))
+                .thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.ativarModoIa(3L, 1L);
+
+        assertTrue(atendimento.getTratadoPorIa());
+        assertNull(atendimento.getAtendentePrincipal());
+        assertTrue(result.tratadoPorIa());
+        assertNull(result.atendentePrincipal());
+        verify(atendimentoRepository).save(atendimento);
     }
 }

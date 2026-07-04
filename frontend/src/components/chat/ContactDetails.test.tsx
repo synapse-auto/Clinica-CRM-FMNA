@@ -35,6 +35,7 @@ const baseProps = {
   canManage: true,
   busy: false,
   onAssume: async () => undefined,
+  onActivateIa: async () => undefined,
   onTransfer: async () => undefined,
   onReview: async () => undefined,
   onAddTag: async () => undefined,
@@ -108,5 +109,33 @@ describe('ContactDetails', () => {
 
     expect(onAddTag).toHaveBeenCalledWith(4);
     expect(onRemoveTag).toHaveBeenCalledWith(3);
+  });
+
+  it('should_allow_returning_human_atendimento_to_ai', async () => {
+    const user = userEvent.setup();
+    const onActivateIa = vi.fn();
+
+    render(
+      <ContactDetails
+        detail={detail}
+        {...baseProps}
+        onActivateIa={onActivateIa}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Voltar para IA' }));
+
+    expect(onActivateIa).toHaveBeenCalledTimes(1);
+  });
+
+  it('should_hide_return_to_ai_action_when_atendimento_is_already_ai', () => {
+    render(
+      <ContactDetails
+        detail={{ ...detail, tratadoPorIa: true }}
+        {...baseProps}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Voltar para IA' })).not.toBeInTheDocument();
   });
 });

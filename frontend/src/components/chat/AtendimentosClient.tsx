@@ -5,6 +5,7 @@ import type { AuthUser } from '@/lib/auth/types';
 import {
   adicionarTagAtendimento,
   assumirAtendimento,
+  ativarIaAtendimento,
   enviarAnexo,
   enviarMensagem,
   getAtendimento,
@@ -222,6 +223,9 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
         busy={busy}
         onAssume={() => activeId
           ? runAction(() => assumirAtendimento(activeId))
+          : Promise.resolve()}
+        onActivateIa={() => activeId
+          ? runAction(() => ativarIaAtendimento(activeId))
           : Promise.resolve()}
         onTransfer={(usuarioId) => activeId
           ? runAction(() => transferirAtendimento(activeId, usuarioId))

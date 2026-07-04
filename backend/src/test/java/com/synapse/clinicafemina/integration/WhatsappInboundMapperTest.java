@@ -150,6 +150,7 @@ class WhatsappInboundMapperTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
 
         when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
@@ -180,7 +181,50 @@ class WhatsappInboundMapperTest {
         assertEquals(20L, contextCaptor.getValue().pacienteId());
         assertEquals(40L, contextCaptor.getValue().mensagemId());
         assertEquals("wamid-1", contextCaptor.getValue().whatsappMessageId());
+        assertEquals("IA", contextCaptor.getValue().atendimentoOrigem());
+        assertEquals("IA", contextCaptor.getValue().atendimentoModo());
+        assertTrue(contextCaptor.getValue().iaAtiva());
         assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
+        verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
+    }
+
+    @Test
+    void should_not_emit_n8n_when_atendimento_is_humano() {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        byte[] rawBody = fullMetaPayload("phone-ultra").getBytes(StandardCharsets.UTF_8);
+
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(false);
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(40L);
+            return mensagem;
+        });
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(validValuePayload("phone-ultra"), rawBody);
+
+        verify(mensagemRepository).save(any(Mensagem.class));
+        verify(n8nEventService, never()).enviarPayloadMetaOriginal(any(), any(), any());
         verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
     }
 
@@ -202,6 +246,7 @@ class WhatsappInboundMapperTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
 
         when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
@@ -275,6 +320,7 @@ class WhatsappInboundMapperTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
 
         when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-2")).thenReturn(Optional.empty());
@@ -324,6 +370,7 @@ class WhatsappInboundMapperTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
 
         when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-long")).thenReturn(Optional.empty());
@@ -378,6 +425,7 @@ class WhatsappInboundMapperTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
 
         when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
@@ -432,6 +480,7 @@ class WhatsappInboundMapperTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
 
         Mensagem existente1 = mensagemExistente("wamid-1");
         Mensagem existente2 = mensagemExistente("wamid-2");
@@ -485,6 +534,7 @@ class WhatsappInboundMapperTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
 
         when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-audio")).thenReturn(Optional.empty());
@@ -531,6 +581,62 @@ class WhatsappInboundMapperTest {
     }
 
     @Test
+    void should_not_emit_audio_to_n8n_when_atendimento_is_humano() {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        byte[] rawBody = fullMetaPayload("phone-ultra").getBytes(StandardCharsets.UTF_8);
+
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(false);
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-audio")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(40L);
+            return mensagem;
+        });
+        when(whatsappOutboundClient.baixarMidia("media-audio")).thenThrow(new IllegalStateException("meta indisponivel"));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(Map.of(
+                "metadata", Map.of("phone_number_id", "phone-ultra"),
+                "contacts", List.of(Map.of(
+                        "wa_id", "5511999990000",
+                        "profile", Map.of("name", "Paciente Teste")
+                )),
+                "messages", List.of(Map.of(
+                        "id", "wamid-audio",
+                        "timestamp", "1781455200",
+                        "type", "audio",
+                        "audio", Map.of(
+                                "id", "media-audio",
+                                "mime_type", "audio/ogg"
+                        )
+                ))
+        ), rawBody);
+
+        verify(midiaMensagemRepository).save(any(MidiaMensagem.class));
+        verify(n8nEventService, never()).enviarPayloadMetaOriginal(any(), any(), any());
+        verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
+    }
+
+    @Test
     void should_persist_unknown_meta_message_type_and_emit_original_payload_to_n8n() {
         clinica.setSlug("ultramedical");
         clinica.setUsaN8n(true);
@@ -548,6 +654,7 @@ class WhatsappInboundMapperTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
 
         when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-sticker")).thenReturn(Optional.empty());
@@ -606,6 +713,7 @@ class WhatsappInboundMapperTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
 
         when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-audio"))
@@ -668,6 +776,7 @@ class WhatsappInboundMapperTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
 
         when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-sticker"))
@@ -764,6 +873,7 @@ class WhatsappInboundMapperTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
         when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
             Mensagem mensagem = invocation.getArgument(0);
