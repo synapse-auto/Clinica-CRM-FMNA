@@ -224,9 +224,73 @@ class ExternalSyncServiceTest {
         IntegrationSyncLog finalLog = logCaptor.getAllValues().getLast();
         assertEquals(ExternalProviderType.MEDWARE, saved.getExternalSource());
         assertEquals("98765", saved.getExternalId());
+        assertEquals(dataInicio, finalLog.getDataInicio());
+        assertEquals(dataFim, finalLog.getDataFim());
         assertEquals(OffsetDateTime.parse("2026-07-01T00:00:00-03:00"), finalLog.getUpdatedAfterUtilizado());
         assertEquals(1, finalLog.getAgendamentosProcessados());
         assertEquals(1, result.agendamentosCriados());
+    }
+
+    @Test
+    void should_create_minimal_medware_patient_when_appointment_patient_was_not_imported() {
+        clinica.setSlug("ultramedical");
+        clinica.setExternalProvider(ExternalProviderType.MEDWARE);
+        when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
+        LocalDate dataInicio = LocalDate.of(2026, 6, 1);
+        LocalDate dataFim = LocalDate.of(2026, 7, 31);
+
+        ExternalAppointmentDTO appointment = new ExternalAppointmentDTO(
+                "98765",
+                "1023",
+                OffsetDateTime.parse("2026-07-03T17:30:00-03:00"),
+                null,
+                "EXAME",
+                "Ultrassonografia transvaginal",
+                "AGENDADO",
+                null,
+                null,
+                null,
+                Map.of("medware", Map.of(
+                        "codAgendamento", "98765",
+                        "codPaciente", "1023",
+                        "nomePaciente", "Maria Medware",
+                        "telefonePaciente", "11999990000"
+                ))
+        );
+
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(null, dataInicio, dataFim, null, 100))
+                .thenReturn(new PageResult<>(List.of(appointment), false, null));
+        when(pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                7L, ExternalProviderType.MEDWARE, "1023"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.save(any(Paciente.class))).thenAnswer(invocation -> {
+            Paciente paciente = invocation.getArgument(0);
+            paciente.setId(20L);
+            return paciente;
+        });
+        when(agendamentoRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                7L, ExternalProviderType.MEDWARE, "98765"))
+                .thenReturn(Optional.empty());
+        when(agendamentoRepository.save(any(Agendamento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ExternalSyncResult result = service.sincronizar(clinica, dataInicio, dataFim);
+
+        ArgumentCaptor<Paciente> pacienteCaptor = ArgumentCaptor.forClass(Paciente.class);
+        ArgumentCaptor<Agendamento> agendamentoCaptor = ArgumentCaptor.forClass(Agendamento.class);
+        verify(pacienteRepository).save(pacienteCaptor.capture());
+        verify(agendamentoRepository).save(agendamentoCaptor.capture());
+
+        Paciente pacienteCriado = pacienteCaptor.getValue();
+        Agendamento agendamentoCriado = agendamentoCaptor.getValue();
+        assertEquals(ExternalProviderType.MEDWARE, pacienteCriado.getExternalSource());
+        assertEquals("1023", pacienteCriado.getExternalId());
+        assertEquals("MARIA MEDWARE", pacienteCriado.getNomeBusca());
+        assertEquals("11999990000", pacienteCriado.getTelefoneNormalizado());
+        assertSame(pacienteCriado, agendamentoCriado.getPaciente());
+        assertEquals(1, result.agendamentosCriados());
+        assertEquals(0, result.agendamentosIgnorados());
     }
 
     @Test

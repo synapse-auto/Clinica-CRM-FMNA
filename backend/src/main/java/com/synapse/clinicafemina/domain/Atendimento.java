@@ -39,6 +39,9 @@ public class Atendimento {
     @Column(name = "tratado_por_ia", nullable = false)
     private Boolean tratadoPorIa = false;
 
+    @Column(name = "humano_desde")
+    private OffsetDateTime humanoDesde;
+
     @Column(name = "motivo_encerramento", length = 255)
     private String motivoEncerramento;
 

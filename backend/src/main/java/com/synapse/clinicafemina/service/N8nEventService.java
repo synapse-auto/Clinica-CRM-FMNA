@@ -31,7 +31,9 @@ public class N8nEventService {
             String whatsappMessageId,
             String atendimentoOrigem,
             String atendimentoModo,
-            Boolean iaAtiva
+            Boolean iaAtiva,
+            Boolean dentroHorario,
+            String horarioMotivo
     ) {
         public MetaWebhookContext(
                 String evento,
@@ -41,7 +43,8 @@ public class N8nEventService {
                 String tipoMedia,
                 String whatsappMessageId
         ) {
-            this(evento, atendimentoId, pacienteId, mensagemId, tipoMedia, whatsappMessageId, null, null, null);
+            this(evento, atendimentoId, pacienteId, mensagemId, tipoMedia, whatsappMessageId,
+                    null, null, null, null, null);
         }
 
         public MetaWebhookContext(
@@ -51,7 +54,8 @@ public class N8nEventService {
                 Long mensagemId,
                 String tipoMedia
         ) {
-            this(evento, atendimentoId, pacienteId, mensagemId, tipoMedia, null, null, null, null);
+            this(evento, atendimentoId, pacienteId, mensagemId, tipoMedia,
+                    null, null, null, null, null, null);
         }
 
         public MetaWebhookContext(
@@ -60,7 +64,23 @@ public class N8nEventService {
                 Long pacienteId,
                 Long mensagemId
         ) {
-            this(evento, atendimentoId, pacienteId, mensagemId, null, null, null, null, null);
+            this(evento, atendimentoId, pacienteId, mensagemId,
+                    null, null, null, null, null, null, null);
+        }
+
+        public MetaWebhookContext(
+                String evento,
+                Long atendimentoId,
+                Long pacienteId,
+                Long mensagemId,
+                String tipoMedia,
+                String whatsappMessageId,
+                String atendimentoOrigem,
+                String atendimentoModo,
+                Boolean iaAtiva
+        ) {
+            this(evento, atendimentoId, pacienteId, mensagemId, tipoMedia, whatsappMessageId,
+                    atendimentoOrigem, atendimentoModo, iaAtiva, null, null);
         }
     }
 
@@ -271,6 +291,8 @@ public class N8nEventService {
         adicionarHeader(headers, "X-CRM-Atendimento-Origem", context == null ? null : context.atendimentoOrigem());
         adicionarHeader(headers, "X-CRM-Atendimento-Modo", context == null ? null : context.atendimentoModo());
         adicionarHeader(headers, "X-CRM-Ia-Ativa", context == null ? null : context.iaAtiva());
+        adicionarHeader(headers, "X-CRM-Dentro-Horario", context == null ? null : context.dentroHorario());
+        adicionarHeader(headers, "X-CRM-Horario-Motivo", context == null ? null : context.horarioMotivo());
     }
 
     private void adicionarHeader(HttpHeaders headers, String nome, Object valor) {

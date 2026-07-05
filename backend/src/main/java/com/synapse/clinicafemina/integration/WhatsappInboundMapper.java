@@ -17,6 +17,7 @@ import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.service.AtendimentoNotificationService;
+import com.synapse.clinicafemina.service.HorarioIaService;
 import com.synapse.clinicafemina.service.N8nEventService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +50,7 @@ public class WhatsappInboundMapper {
     private final ClinicaRepository clinicaRepository;
     private final RabbitTemplate rabbitTemplate;
     private final N8nEventService n8nEventService;
+    private final HorarioIaService horarioIaService;
     private final AtendimentoNotificationService notificationService;
     private final ObjectMapper objectMapper;
     private final WhatsappInboundPayloadParser payloadParser;
@@ -408,7 +410,7 @@ public class WhatsappInboundMapper {
     ) {
         if (!iaAtiva(atendimento)) {
             log.info(
-                    "Payload Meta para N8N bloqueado por atendimento humano: atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, atendimentoOrigem={}, atendimentoModo={}, iaAtiva={}",
+                    "Payload Meta para N8N bloqueado por atendimento humano: atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, atendimentoOrigem={}, atendimentoModo={}, iaAtiva={}, horarioMotivo={}",
                     atendimento.getId(),
                     paciente.getId(),
                     mensagem.getId(),
@@ -416,9 +418,11 @@ public class WhatsappInboundMapper {
                     maskId(mensagem.getWhatsappMessageId()),
                     origemAtendimento(atendimento),
                     modoAtendimento(atendimento),
-                    false);
+                    false,
+                    HorarioIaService.HUMANO);
             return;
         }
+        HorarioIaService.HorarioIaStatus horario = horarioIaService.avaliar(clinica);
         if (payloadMetaOriginal != null && payloadMetaOriginal.length > 0) {
             n8nEventService.enviarPayloadMetaOriginal(
                     clinica,
@@ -432,7 +436,9 @@ public class WhatsappInboundMapper {
                             mensagem.getWhatsappMessageId(),
                             origemAtendimento(atendimento),
                             modoAtendimento(atendimento),
-                            true
+                            true,
+                            horario.dentroHorario(),
+                            horario.motivo()
                     )
             );
             return;

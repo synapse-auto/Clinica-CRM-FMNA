@@ -45,6 +45,6 @@ app:
     password-is-hash: true
     token-refresh-margin-seconds: 300
     timeout-seconds: 30
-    default-start-days-back: 30
-    default-end-days-forward: 60
+    default-start-days-back: 90
+    default-end-days-forward: 90
     webhook-token: token-webhook-apenas-etapa-futura

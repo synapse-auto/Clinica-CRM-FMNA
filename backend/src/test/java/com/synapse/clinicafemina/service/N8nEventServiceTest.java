@@ -86,6 +86,8 @@ class N8nEventServiceTest {
                 .andExpect(header("X-CRM-Atendimento-Origem", "IA"))
                 .andExpect(header("X-CRM-Atendimento-Modo", "IA"))
                 .andExpect(header("X-CRM-Ia-Ativa", "true"))
+                .andExpect(header("X-CRM-Dentro-Horario", "true"))
+                .andExpect(header("X-CRM-Horario-Motivo", "DENTRO_HORARIO"))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(content().json("""
                         {
@@ -127,7 +129,9 @@ class N8nEventServiceTest {
                         "wamid-1",
                         "IA",
                         "IA",
-                        true
+                        true,
+                        true,
+                        "DENTRO_HORARIO"
                 )
         );
 
@@ -346,6 +350,8 @@ class N8nEventServiceTest {
                 .andExpect(header("X-CRM-Atendimento-Origem", "IA"))
                 .andExpect(header("X-CRM-Atendimento-Modo", "IA"))
                 .andExpect(header("X-CRM-Ia-Ativa", "true"))
+                .andExpect(header("X-CRM-Dentro-Horario", "false"))
+                .andExpect(header("X-CRM-Horario-Motivo", "FORA_HORARIO"))
                 .andRespond(withStatus(SERVICE_UNAVAILABLE));
 
         assertDoesNotThrow(() -> service.enviarPayloadMetaOriginal(
@@ -360,7 +366,9 @@ class N8nEventServiceTest {
                         "wamid-audio",
                         "IA",
                         "IA",
-                        true
+                        true,
+                        false,
+                        "FORA_HORARIO"
                 )
         ));
         server.verify();

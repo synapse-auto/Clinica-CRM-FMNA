@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, vi } from 'vitest';
 import { AgendaClient } from './AgendaClient';
 
 const options = {
@@ -23,7 +24,25 @@ const existingAppointment = {
   motivoCancelamento: null,
 };
 
+const julyAppointment = {
+  ...existingAppointment,
+  id: 41,
+  pacienteNome: 'Paciente Julho',
+  dataHoraInicio: '2026-07-10T09:00:00-03:00',
+  dataHoraFim: '2026-07-10T09:30:00-03:00',
+};
+
 describe('AgendaClient (somente leitura)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-05T12:00:00-03:00'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
   it('should_not_show_novo_agendamento_button', () => {
     render(
       <AgendaClient
@@ -118,5 +137,54 @@ describe('AgendaClient (somente leitura)', () => {
 
     expect(screen.getByRole('button', { name: 'Todos' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Dra. Renata' })).toBeInTheDocument();
+  });
+
+  it('should_load_current_month_period_and_show_period_label', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [julyAppointment],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <AgendaClient
+        initialAppointments={[]}
+        initialOptions={options}
+        initialError={null}
+        weekStart="2026-07-06"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /mês atual/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(decodeURIComponent(String(fetchMock.mock.calls[0][0]))).toContain('/api/agendamentos?inicio=');
+    expect(decodeURIComponent(String(fetchMock.mock.calls[0][0]))).toContain('&fim=');
+    expect(await screen.findByText('Paciente Julho')).toBeInTheDocument();
+    expect(screen.getByText('Agendamentos de 01/07/2026 a 31/07/2026')).toBeInTheDocument();
+    expect(screen.getByText('Total no período')).toBeInTheDocument();
+  });
+
+  it('should_load_previous_month_period', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [existingAppointment],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <AgendaClient
+        initialAppointments={[]}
+        initialOptions={options}
+        initialError={null}
+        weekStart="2026-07-06"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /mês anterior/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Maria da Silva')).toBeInTheDocument();
+    expect(screen.getByText('Agendamentos de 01/06/2026 a 30/06/2026')).toBeInTheDocument();
   });
 });

@@ -15,6 +15,7 @@ import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.service.N8nEventService;
+import com.synapse.clinicafemina.service.HorarioIaService;
 import com.synapse.clinicafemina.service.AtendimentoNotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -71,6 +73,9 @@ class WhatsappInboundMapperTest {
     private N8nEventService n8nEventService;
 
     @Mock
+    private HorarioIaService horarioIaService;
+
+    @Mock
     private AtendimentoNotificationService notificationService;
 
     @Mock
@@ -92,6 +97,7 @@ class WhatsappInboundMapperTest {
                 clinicaRepository,
                 rabbitTemplate,
                 n8nEventService,
+                horarioIaService,
                 notificationService,
                 new ObjectMapper(),
                 new WhatsappInboundPayloadParser(),
@@ -103,6 +109,8 @@ class WhatsappInboundMapperTest {
         clinica.setId(2L);
         clinica.setNome("UltraMedical");
         clinica.setWhatsappPhoneNumberId("phone-ultra");
+        lenient().when(horarioIaService.avaliar(any(Clinica.class)))
+                .thenReturn(new HorarioIaService.HorarioIaStatus(true, HorarioIaService.DENTRO_HORARIO));
     }
 
     @Test
@@ -184,8 +192,54 @@ class WhatsappInboundMapperTest {
         assertEquals("IA", contextCaptor.getValue().atendimentoOrigem());
         assertEquals("IA", contextCaptor.getValue().atendimentoModo());
         assertTrue(contextCaptor.getValue().iaAtiva());
+        assertTrue(contextCaptor.getValue().dentroHorario());
+        assertEquals(HorarioIaService.DENTRO_HORARIO, contextCaptor.getValue().horarioMotivo());
         assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
         verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
+    }
+
+    @Test
+    void should_emit_n8n_with_outside_schedule_headers_when_ai_mode_is_active() {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        byte[] rawBody = fullMetaPayload("phone-ultra").getBytes(StandardCharsets.UTF_8);
+
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(true);
+
+        when(horarioIaService.avaliar(clinica))
+                .thenReturn(new HorarioIaService.HorarioIaStatus(false, HorarioIaService.FORA_HORARIO));
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(40L);
+            return mensagem;
+        });
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(validValuePayload("phone-ultra"), rawBody);
+
+        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
+                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
+        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), any(), contextCaptor.capture());
+        assertFalse(contextCaptor.getValue().dentroHorario());
+        assertEquals(HorarioIaService.FORA_HORARIO, contextCaptor.getValue().horarioMotivo());
     }
 
     @Test

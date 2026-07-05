@@ -56,8 +56,8 @@ public class MedwareProvider implements ExternalClinicProvider {
             @Value("${app.medware.password-is-hash:false}") boolean passwordIsHash,
             @Value("${app.medware.token-refresh-margin-seconds:300}") long tokenRefreshMarginSeconds,
             @Value("${app.medware.timeout-seconds:30}") int timeoutSeconds,
-            @Value("${app.medware.default-start-days-back:30}") int defaultStartDaysBack,
-            @Value("${app.medware.default-end-days-forward:60}") int defaultEndDaysForward) {
+            @Value("${app.medware.default-start-days-back:90}") int defaultStartDaysBack,
+            @Value("${app.medware.default-end-days-forward:90}") int defaultEndDaysForward) {
         this(
                 withTimeout(restClientBuilder, timeoutSeconds),
                 objectMapper,

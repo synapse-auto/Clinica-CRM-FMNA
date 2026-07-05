@@ -75,8 +75,8 @@ app:
     password-is-hash: ${MEDWARE_PASSWORD_IS_HASH:false}
     token-refresh-margin-seconds: ${MEDWARE_TOKEN_REFRESH_MARGIN_SECONDS:300}
     timeout-seconds: ${MEDWARE_TIMEOUT_SECONDS:30}
-    default-start-days-back: ${MEDWARE_DEFAULT_START_DAYS_BACK:30}
-    default-end-days-forward: ${MEDWARE_DEFAULT_END_DAYS_FORWARD:60}
+    default-start-days-back: ${MEDWARE_DEFAULT_START_DAYS_BACK:90}
+    default-end-days-forward: ${MEDWARE_DEFAULT_END_DAYS_FORWARD:90}
     webhook-token: ${MEDWARE_WEBHOOK_TOKEN:}
 
   integrations:

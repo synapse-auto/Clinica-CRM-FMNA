@@ -11,13 +11,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -110,6 +113,7 @@ class AtendimentoServiceTest {
         );
 
         assertFalse(atendimento.getTratadoPorIa());
+        assertTrue(atendimento.getHumanoDesde() != null);
         verify(transferenciaRepository).save(any(TransferenciaAtendimento.class));
         verify(notificationService).notificarAtribuicao(atendimento, destinatario);
     }
@@ -129,8 +133,43 @@ class AtendimentoServiceTest {
 
         assertTrue(atendimento.getTratadoPorIa());
         assertNull(atendimento.getAtendentePrincipal());
+        assertNull(atendimento.getHumanoDesde());
         assertTrue(result.tratadoPorIa());
         assertNull(result.atendentePrincipal());
         verify(atendimentoRepository).save(atendimento);
+    }
+
+    @Test
+    void should_return_human_atendimentos_to_ai_after_24_hours() {
+        Recepcionista atendente = new Recepcionista();
+        atendente.setId(10L);
+        atendimento.setAtendentePrincipal(atendente);
+        atendimento.setTratadoPorIa(false);
+        atendimento.setHumanoDesde(OffsetDateTime.parse("2026-07-04T10:00:00Z"));
+
+        OffsetDateTime now = OffsetDateTime.parse("2026-07-05T10:00:00Z");
+        when(atendimentoRepository.findHumanosParaRetornoIa(now.minusHours(24)))
+                .thenReturn(List.of(atendimento));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        int total = service.retornarHumanosExpiradosParaIa(now);
+
+        assertEquals(1, total);
+        assertTrue(atendimento.getTratadoPorIa());
+        assertNull(atendimento.getAtendentePrincipal());
+        assertNull(atendimento.getHumanoDesde());
+        verify(atendimentoRepository).save(atendimento);
+    }
+
+    @Test
+    void should_keep_human_atendimentos_before_24_hours() {
+        OffsetDateTime now = OffsetDateTime.parse("2026-07-05T10:00:00Z");
+        when(atendimentoRepository.findHumanosParaRetornoIa(now.minusHours(24)))
+                .thenReturn(List.of());
+
+        int total = service.retornarHumanosExpiradosParaIa(now);
+
+        assertEquals(0, total);
+        verify(atendimentoRepository, never()).save(any());
     }
 }

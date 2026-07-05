@@ -122,6 +122,39 @@ class MedwareProviderTest {
     }
 
     @Test
+    void should_use_wider_default_date_window_when_no_manual_period_is_informed() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).ignoreExpectOrder(true).build();
+        MedwareProvider provider = createProvider(
+                builder,
+                "https://medware.example/api",
+                "usuario",
+                "senha",
+                false,
+                90,
+                90
+        );
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andExpect(method(POST))
+                .andRespond(withSuccess("{\"token\":\"jwt-token\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/ProcedPlanoOp/Listar?dataInicio=17/03/2026&dataFim=13/09/2026"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar?dataInicio=17/03/2026&dataFim=13/09/2026"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Agendamento/Listar?dataInicio=17/03/2026&dataFim=13/09/2026"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        PageResult<ExternalAppointmentDTO> page = provider.getAppointments(null, null, 50);
+
+        assertTrue(page.data().isEmpty());
+        server.verify();
+    }
+
+    @Test
     void should_read_appointments_with_explicit_date_window_in_medware_format() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).ignoreExpectOrder(true).build();
@@ -180,6 +213,12 @@ class MedwareProviderTest {
 
     private MedwareProvider createProvider(RestClient.Builder builder, String apiUrl, String username,
                                            String password, boolean passwordIsHash) {
+        return createProvider(builder, apiUrl, username, password, passwordIsHash, 30, 60);
+    }
+
+    private MedwareProvider createProvider(RestClient.Builder builder, String apiUrl, String username,
+                                           String password, boolean passwordIsHash,
+                                           int defaultStartDaysBack, int defaultEndDaysForward) {
         return new MedwareProvider(
                 builder,
                 objectMapper,
@@ -191,8 +230,8 @@ class MedwareProviderTest {
                 passwordIsHash,
                 300,
                 5,
-                30,
-                60
+                defaultStartDaysBack,
+                defaultEndDaysForward
         );
     }
 }

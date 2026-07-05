@@ -14,6 +14,7 @@ public interface HorarioAtendenteRepository extends JpaRepository<HorarioAtenden
             JOIN FETCH h.usuario u
             WHERE u.clinica.id = :clinicaId
               AND h.deletadoEm IS NULL
+              AND h.ativo = true
             ORDER BY u.nome ASC, h.diaSemana ASC, h.horaInicio ASC
             """)
     List<HorarioAtendente> findAtivosByClinicaId(@Param("clinicaId") Long clinicaId);

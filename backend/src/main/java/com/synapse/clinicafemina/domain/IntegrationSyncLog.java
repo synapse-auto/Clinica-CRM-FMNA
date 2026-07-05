@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -57,6 +58,12 @@ public class IntegrationSyncLog {
 
     @Column(name = "updated_after_utilizado")
     private OffsetDateTime updatedAfterUtilizado;
+
+    @Column(name = "data_inicio")
+    private LocalDate dataInicio;
+
+    @Column(name = "data_fim")
+    private LocalDate dataFim;
 
     @Column(name = "mensagem_erro", columnDefinition = "TEXT")
     private String mensagemErro;

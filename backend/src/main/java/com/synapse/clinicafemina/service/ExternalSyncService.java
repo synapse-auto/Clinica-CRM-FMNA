@@ -84,10 +84,15 @@ public class ExternalSyncService {
         runLog.setClinica(clinica);
         runLog.setExternalProvider(providerType);
         runLog.setUpdatedAfterUtilizado(dataInicio == null ? updatedAfter : inicioDoDia(dataInicio));
+        runLog.setDataInicio(dataInicio);
+        runLog.setDataFim(dataFim);
         runLog = syncLogRepository.save(runLog);
 
         SyncCounters counters = new SyncCounters();
         try {
+            log.info(
+                    "Sincronizacao externa iniciada: clinica={}, provider={}, dataInicio={}, dataFim={}, updatedAfter={}",
+                    clinica.getId(), providerType, dataInicio, dataFim, updatedAfter);
             syncPatients(clinica, provider, updatedAfter, counters);
             syncAppointments(clinica, provider, updatedAfter, dataInicio, dataFim, counters);
             runLog.setStatus("SUCESSO");
@@ -100,6 +105,12 @@ public class ExternalSyncService {
             applyCounters(runLog, counters);
             runLog.setConcluidoEm(OffsetDateTime.now());
             syncLogRepository.save(runLog);
+            log.info(
+                    "Sincronizacao externa finalizada: clinica={}, provider={}, status={}, dataInicio={}, dataFim={}, pacientesProcessados={}, pacientesCriados={}, pacientesAtualizados={}, agendamentosProcessados={}, agendamentosCriados={}, agendamentosAtualizados={}, agendamentosIgnorados={}",
+                    clinica.getId(), providerType, runLog.getStatus(), dataInicio, dataFim,
+                    counters.pacientesProcessados, counters.pacientesCriados, counters.pacientesAtualizados,
+                    counters.agendamentosProcessados, counters.agendamentosCriados,
+                    counters.agendamentosAtualizados, counters.agendamentosIgnorados);
         }
 
         return counters.toResult(runLog.getStatus());
@@ -134,11 +145,16 @@ public class ExternalSyncService {
             PageResult<ExternalAppointmentDTO> page = dataInicio == null
                     ? provider.getAppointments(updatedAfter, cursor, pageSize)
                     : provider.getAppointments(updatedAfter, dataInicio, dataFim, cursor, pageSize);
+            log.info(
+                    "Pagina de agendamentos externos recebida: clinica={}, provider={}, dataInicio={}, dataFim={}, cursor={}, quantidade={}",
+                    clinica.getId(), provider.getType(), dataInicio, dataFim, cursor, page.data().size());
             for (ExternalAppointmentDTO dto : page.data()) {
-                Optional<Paciente> paciente = pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
-                        clinica.getId(), provider.getType(), dto.externalPatientId());
+                Optional<Paciente> paciente = resolverPacienteDoAgendamento(clinica, provider.getType(), dto, counters);
                 if (paciente.isEmpty()) {
                     counters.agendamentosIgnorados++;
+                    log.warn(
+                            "Agendamento externo ignorado por paciente ausente: clinica={}, provider={}, externalAppointmentId={}, externalPatientId={}",
+                            clinica.getId(), provider.getType(), dto.externalId(), dto.externalPatientId());
                     continue;
                 }
 
@@ -153,6 +169,25 @@ public class ExternalSyncService {
             hasMore = page.hasMore();
             cursor = page.nextCursor();
         }
+    }
+
+    private Optional<Paciente> resolverPacienteDoAgendamento(
+            Clinica clinica,
+            ExternalProviderType providerType,
+            ExternalAppointmentDTO dto,
+            SyncCounters counters
+    ) {
+        Optional<Paciente> paciente = pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                clinica.getId(), providerType, dto.externalPatientId());
+        if (paciente.isPresent() || providerType != ExternalProviderType.MEDWARE) {
+            return paciente;
+        }
+        Paciente criado = criarPacienteMinimoMedware(clinica, dto);
+        counters.pacientesCriados++;
+        log.info(
+                "Paciente minimo Medware criado a partir de agendamento: clinica={}, externalPatientId={}, externalAppointmentId={}",
+                clinica.getId(), dto.externalPatientId(), dto.externalId());
+        return Optional.of(criado);
     }
 
     private void validarPeriodoManual(LocalDate dataInicio, LocalDate dataFim) {
@@ -207,6 +242,31 @@ public class ExternalSyncService {
 
         pacienteRepository.save(paciente);
         return created;
+    }
+
+    private Paciente criarPacienteMinimoMedware(Clinica clinica, ExternalAppointmentDTO dto) {
+        String nome = nullToFallback(payloadText(dto.payload(), "nomePaciente", "pacienteNome", "nomePacienteAgenda"),
+                "Paciente Medware " + dto.externalPatientId());
+        String telefone = payloadText(dto.payload(), "telefonePaciente", "celularPaciente", "telefone", "celular");
+        String cpfLimpo = onlyDigits(payloadText(dto.payload(), "cpfPaciente", "cpf", "documentoPaciente"));
+
+        Paciente paciente = new Paciente();
+        paciente.setClinica(clinica);
+        paciente.setExternalSource(ExternalProviderType.MEDWARE);
+        paciente.setExternalId(dto.externalPatientId());
+        paciente.setNome(nome);
+        paciente.setNomeBusca(normalizarBusca(nome));
+        paciente.setTelefone(nullToFallback(telefone, "00000000000"));
+        paciente.setTelefoneNormalizado(normalizarTelefone(telefone, dto.externalPatientId()));
+        paciente.setCpf(cpfLimpo);
+        paciente.setCpfHash(gerarSha256(cpfLimpo));
+        paciente.setStatus("EM_ATENDIMENTO");
+        paciente.setChaveCriptografiaId("v1");
+        paciente.setExternalPayload(toJson(Map.of(
+                "source", "MEDWARE_APPOINTMENT",
+                "appointment", dto.payload()
+        )));
+        return pacienteRepository.save(paciente);
     }
 
     private boolean upsertAppointment(Clinica clinica, ExternalProviderType providerType,
@@ -308,6 +368,28 @@ public class ExternalSyncService {
         }
         String digits = input.replaceAll("\\D", "");
         return digits.isBlank() ? null : digits;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String payloadText(Map<String, Object> payload, String... keys) {
+        if (payload == null || payload.isEmpty()) {
+            return null;
+        }
+        for (String key : keys) {
+            Object value = payload.get(key);
+            if (value != null && !String.valueOf(value).isBlank()) {
+                return String.valueOf(value);
+            }
+        }
+        for (Object value : payload.values()) {
+            if (value instanceof Map<?, ?> nested) {
+                String nestedValue = payloadText((Map<String, Object>) nested, keys);
+                if (nestedValue != null) {
+                    return nestedValue;
+                }
+            }
+        }
+        return null;
     }
 
     private String nullToFallback(String value, String fallback) {

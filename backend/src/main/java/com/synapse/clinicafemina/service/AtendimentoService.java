@@ -94,6 +94,7 @@ public class AtendimentoService {
 
         atendimento.setAtendentePrincipal(novoAtendente);
         atendimento.setTratadoPorIa(false);
+        atendimento.setHumanoDesde(OffsetDateTime.now());
         atendimento.setStatus("ATIVO");
         atendimentoRepository.save(atendimento);
         transferenciaRepository.save(criarTransferencia(
@@ -132,10 +133,26 @@ public class AtendimentoService {
         }
         atendimento.setAtendentePrincipal(null);
         atendimento.setTratadoPorIa(true);
+        atendimento.setHumanoDesde(null);
         atendimento.setStatus("ATIVO");
         Atendimento salvo = atendimentoRepository.save(atendimento);
         log.info("Atendimento {} retornado para IA", id);
         return toDetalheDTO(salvo);
+    }
+
+    @Transactional
+    public int retornarHumanosExpiradosParaIa(OffsetDateTime agora) {
+        OffsetDateTime limite = agora.minusHours(24);
+        List<Atendimento> expirados = atendimentoRepository.findHumanosParaRetornoIa(limite);
+        for (Atendimento atendimento : expirados) {
+            atendimento.setAtendentePrincipal(null);
+            atendimento.setTratadoPorIa(true);
+            atendimento.setHumanoDesde(null);
+            atendimentoRepository.save(atendimento);
+            log.info("Atendimento {} retornado automaticamente para IA apos 24h em modo humano",
+                    atendimento.getId());
+        }
+        return expirados.size();
     }
 
     @Transactional
