@@ -59,10 +59,18 @@ public class MedwareApiMapper {
     }
 
     public ExternalAppointmentDTO toAppointment(JsonNode node, Map<String, JsonNode> procedimentos, Map<String, JsonNode> medicos) {
-        String codProcedimento = text(node, "codProcedimento", "codprocedimento", "idProcedimento");
-        String codMedico = text(node, "codMedico", "codmedico", "idMedico");
-        JsonNode procedimento = procedimentos.getOrDefault(codProcedimento, objectMapper.createObjectNode());
-        JsonNode medico = medicos.getOrDefault(codMedico, objectMapper.createObjectNode());
+        JsonNode procedimentoPayload = object(node, "procedimento", "procedimentoAgenda", "procedimentoAgendado");
+        JsonNode medicoPayload = object(node, "medico");
+        String codProcedimento = firstNonBlank(
+                text(node, "codProcedimento", "codprocedimento", "idProcedimento"),
+                text(procedimentoPayload, "codProcedimento", "codprocedimento", "idProcedimento")
+        );
+        String codMedico = firstNonBlank(
+                text(node, "codMedico", "codmedico", "idMedico"),
+                text(medicoPayload, "codMedico", "codmedico", "idMedico")
+        );
+        JsonNode procedimento = catalogOrPayload(procedimentos, codProcedimento, procedimentoPayload);
+        JsonNode medico = catalogOrPayload(medicos, codMedico, medicoPayload);
         OffsetDateTime startAt = appointmentStart(node);
         Integer duration = integer(node, "duracao", "duracaoMinutos");
         if (duration == null) {
@@ -138,7 +146,15 @@ public class MedwareApiMapper {
     }
 
     private OffsetDateTime appointmentStart(JsonNode node) {
-        OffsetDateTime direct = parseOffset(text(node, "dataHoraAgendada", "dataHoraInicio", "dataHora", "inicio"));
+        OffsetDateTime direct = parseOffset(text(
+                node,
+                "dataHoraAgenda",
+                "dataHoraAgendada",
+                "dataHoraReferencia",
+                "dataHoraInicio",
+                "dataHora",
+                "inicio"
+        ));
         if (direct != null) {
             return direct;
         }
@@ -202,6 +218,9 @@ public class MedwareApiMapper {
             return normalized.replaceAll("\\s+", "_");
         }
         String code = text(node, "codStatusAgendamento", "codstatusagendamento");
+        if ("1".equals(code)) {
+            return "AGENDADO";
+        }
         if ("2".equals(code)) {
             return "CONFIRMADO";
         }
@@ -282,6 +301,33 @@ public class MedwareApiMapper {
         if (value != null && !value.isBlank()) {
             payload.put(key, value);
         }
+    }
+
+    private JsonNode catalogOrPayload(Map<String, JsonNode> catalog, String code, JsonNode payload) {
+        JsonNode item = code == null ? null : catalog.get(code);
+        if (item != null) {
+            return item;
+        }
+        return payload == null ? objectMapper.createObjectNode() : payload;
+    }
+
+    private JsonNode object(JsonNode node, String... names) {
+        for (String name : names) {
+            JsonNode value = find(node, name);
+            if (value != null && value.isObject()) {
+                return value;
+            }
+        }
+        return objectMapper.createObjectNode();
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private String onlyDigits(String value) {

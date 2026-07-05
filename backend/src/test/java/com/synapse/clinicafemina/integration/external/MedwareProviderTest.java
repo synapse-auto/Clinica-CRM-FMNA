@@ -8,6 +8,7 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 
@@ -117,6 +118,43 @@ class MedwareProviderTest {
         assertEquals("1023", page.data().getFirst().externalPatientId());
         assertEquals("Ultrassom", page.data().getFirst().serviceName());
         assertEquals("EXAME", page.data().getFirst().type());
+        server.verify();
+    }
+
+    @Test
+    void should_read_appointments_with_explicit_date_window_in_medware_format() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).ignoreExpectOrder(true).build();
+        MedwareProvider provider = createProvider(builder, "https://medware.example/api", "usuario", "senha", false);
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andExpect(method(POST))
+                .andRespond(withSuccess("{\"token\":\"jwt-token\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/ProcedPlanoOp/Listar?dataInicio=01/07/2026&dataFim=03/07/2026"))
+                .andExpect(method(GET))
+                .andExpect(header("Authorization", "Bearer jwt-token"))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar?dataInicio=01/07/2026&dataFim=03/07/2026"))
+                .andExpect(method(GET))
+                .andExpect(header("Authorization", "Bearer jwt-token"))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Agendamento/Listar?dataInicio=01/07/2026&dataFim=03/07/2026"))
+                .andExpect(method(GET))
+                .andExpect(header("Authorization", "Bearer jwt-token"))
+                .andRespond(withSuccess("""
+                        [{"codAgendamento":555,"codPaciente":1023,"dataHoraAgenda":"03/07/2026 17:30"}]
+                        """, MediaType.APPLICATION_JSON));
+
+        PageResult<ExternalAppointmentDTO> page = provider.getAppointments(
+                null,
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 3),
+                null,
+                50
+        );
+
+        assertEquals(1, page.data().size());
+        assertEquals("555", page.data().getFirst().externalId());
         server.verify();
     }
 

@@ -129,6 +129,29 @@ class AgendamentoServiceTest {
     }
 
     @Test
+    void should_list_imported_medware_appointments_for_selected_period() {
+        OffsetDateTime inicio = OffsetDateTime.parse("2026-07-01T00:00:00-03:00");
+        OffsetDateTime fim = OffsetDateTime.parse("2026-07-04T00:00:00-03:00");
+        Agendamento agendamento = appointment();
+        agendamento.setExternalSource(ExternalProviderType.MEDWARE);
+        agendamento.setExternalId("98765");
+        agendamento.setOrigem("INTEGRACAO_EXTERNA");
+        agendamento.setDataHoraInicio(OffsetDateTime.parse("2026-07-03T17:30:00-03:00"));
+        agendamento.setServicoNome("Ultrassonografia transvaginal");
+        when(agendamentoRepository
+                .findByClinicaIdAndDataHoraInicioGreaterThanEqualAndDataHoraInicioLessThanOrderByDataHoraInicioAsc(
+                        7L, inicio, fim))
+                .thenReturn(List.of(agendamento));
+
+        List<AgendamentoResponse> response = service.listar(clinica, inicio, fim);
+
+        assertEquals(1, response.size());
+        assertEquals("Ultrassonografia transvaginal", response.getFirst().servicoNome());
+        assertEquals("INTEGRACAO_EXTERNA", response.getFirst().origem());
+    }
+
+
+    @Test
     void should_update_appointment_without_changing_manual_origin() {
         Agendamento agendamento = appointment();
         OffsetDateTime novoInicio = OffsetDateTime.parse("2026-06-23T10:00:00-03:00");

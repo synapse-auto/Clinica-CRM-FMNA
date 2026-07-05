@@ -5,11 +5,15 @@ import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.ExternalSyncResult;
 import com.synapse.clinicafemina.service.ExternalSyncService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/integracoes")
@@ -21,8 +25,15 @@ public class IntegracaoController {
 
     @PostMapping("/sincronizar")
     @PreAuthorize("hasRole('GESTOR')")
-    public ResponseEntity<ExternalSyncResult> sincronizar() {
+    public ResponseEntity<ExternalSyncResult> sincronizar(
+            @RequestParam(required = false)
+            @DateTimeFormat(pattern = "dd/MM/yyyy")
+            LocalDate dataInicio,
+            @RequestParam(required = false)
+            @DateTimeFormat(pattern = "dd/MM/yyyy")
+            LocalDate dataFim
+    ) {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
-        return ResponseEntity.ok(externalSyncService.sincronizar(clinica));
+        return ResponseEntity.ok(externalSyncService.sincronizar(clinica, dataInicio, dataFim));
     }
 }

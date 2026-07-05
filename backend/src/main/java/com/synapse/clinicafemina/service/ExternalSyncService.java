@@ -6,6 +6,7 @@ import com.synapse.clinicafemina.domain.Agendamento;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.IntegrationSyncLog;
 import com.synapse.clinicafemina.domain.Paciente;
+import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.integration.external.ExternalAppointmentDTO;
 import com.synapse.clinicafemina.integration.external.ExternalClinicProvider;
 import com.synapse.clinicafemina.integration.external.ExternalClinicalNoteDTO;
@@ -26,7 +27,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.Normalizer;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +39,8 @@ import java.util.Optional;
 @Slf4j
 @Service
 public class ExternalSyncService {
+
+    private static final ZoneId SYNC_ZONE = ZoneId.of("America/Sao_Paulo");
 
     private final ExternalProviderFactory providerFactory;
     private final IntegrationSyncLogRepository syncLogRepository;
@@ -60,22 +66,30 @@ public class ExternalSyncService {
 
     @Transactional
     public ExternalSyncResult sincronizar(Clinica clinica) {
+        return sincronizar(clinica, null, null);
+    }
+
+    @Transactional
+    public ExternalSyncResult sincronizar(Clinica clinica, LocalDate dataInicio, LocalDate dataFim) {
+        validarPeriodoManual(dataInicio, dataFim);
         ExternalProviderType providerType = clinica.getExternalProvider();
         ExternalClinicProvider provider = providerFactory.getProvider(providerType);
-        OffsetDateTime updatedAfter = syncLogRepository.findUltimoSucesso(clinica.getId(), providerType)
-                .map(IntegrationSyncLog::getIniciadoEm)
-                .orElse(null);
+        OffsetDateTime updatedAfter = dataInicio == null
+                ? syncLogRepository.findUltimoSucesso(clinica.getId(), providerType)
+                        .map(IntegrationSyncLog::getIniciadoEm)
+                        .orElse(null)
+                : null;
 
         IntegrationSyncLog runLog = new IntegrationSyncLog();
         runLog.setClinica(clinica);
         runLog.setExternalProvider(providerType);
-        runLog.setUpdatedAfterUtilizado(updatedAfter);
+        runLog.setUpdatedAfterUtilizado(dataInicio == null ? updatedAfter : inicioDoDia(dataInicio));
         runLog = syncLogRepository.save(runLog);
 
         SyncCounters counters = new SyncCounters();
         try {
             syncPatients(clinica, provider, updatedAfter, counters);
-            syncAppointments(clinica, provider, updatedAfter, counters);
+            syncAppointments(clinica, provider, updatedAfter, dataInicio, dataFim, counters);
             runLog.setStatus("SUCESSO");
         } catch (Exception e) {
             runLog.setStatus("FALHA_TOTAL");
@@ -112,11 +126,14 @@ public class ExternalSyncService {
     }
 
     private void syncAppointments(Clinica clinica, ExternalClinicProvider provider,
-                                  OffsetDateTime updatedAfter, SyncCounters counters) {
+                                  OffsetDateTime updatedAfter, LocalDate dataInicio,
+                                  LocalDate dataFim, SyncCounters counters) {
         String cursor = null;
         boolean hasMore = true;
         while (hasMore) {
-            PageResult<ExternalAppointmentDTO> page = provider.getAppointments(updatedAfter, cursor, pageSize);
+            PageResult<ExternalAppointmentDTO> page = dataInicio == null
+                    ? provider.getAppointments(updatedAfter, cursor, pageSize)
+                    : provider.getAppointments(updatedAfter, dataInicio, dataFim, cursor, pageSize);
             for (ExternalAppointmentDTO dto : page.data()) {
                 Optional<Paciente> paciente = pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
                         clinica.getId(), provider.getType(), dto.externalPatientId());
@@ -136,6 +153,19 @@ public class ExternalSyncService {
             hasMore = page.hasMore();
             cursor = page.nextCursor();
         }
+    }
+
+    private void validarPeriodoManual(LocalDate dataInicio, LocalDate dataFim) {
+        if (dataInicio == null && dataFim == null) {
+            return;
+        }
+        if (dataInicio == null || dataFim == null || dataFim.isBefore(dataInicio)) {
+            throw new BadRequestException("Periodo de sincronizacao invalido");
+        }
+    }
+
+    private OffsetDateTime inicioDoDia(LocalDate dataInicio) {
+        return dataInicio.atTime(LocalTime.MIDNIGHT).atZone(SYNC_ZONE).toOffsetDateTime();
     }
 
     @Transactional(propagation = Propagation.MANDATORY)

@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
@@ -127,8 +128,19 @@ public class MedwareProvider implements ExternalClinicProvider {
 
     @Override
     public PageResult<ExternalAppointmentDTO> getAppointments(OffsetDateTime updatedAfter, String cursor, int limit) {
+        return getAppointments(updatedAfter, null, null, cursor, limit);
+    }
+
+    @Override
+    public PageResult<ExternalAppointmentDTO> getAppointments(
+            OffsetDateTime updatedAfter,
+            LocalDate dataInicio,
+            LocalDate dataFim,
+            String cursor,
+            int limit
+    ) {
         assertConfigured();
-        DateWindow dateWindow = dateWindow(updatedAfter);
+        DateWindow dateWindow = explicitDateWindow(dataInicio, dataFim).orElseGet(() -> dateWindow(updatedAfter));
         Map<String, String> dateParams = dateParams(dateWindow);
         Map<String, JsonNode> procedimentos = loadCatalog(
                 "/Medware/ProcedPlanoOp/Listar",
@@ -283,6 +295,14 @@ public class MedwareProvider implements ExternalClinicProvider {
         return new DateWindow(start, end);
     }
 
+    private java.util.Optional<DateWindow> explicitDateWindow(LocalDate dataInicio, LocalDate dataFim) {
+        if (dataInicio == null || dataFim == null) {
+            return java.util.Optional.empty();
+        }
+        LocalDate end = dataFim.isBefore(dataInicio) ? dataInicio : dataFim;
+        return java.util.Optional.of(new DateWindow(dataInicio, end));
+    }
+
     private Map<String, String> dateParams(DateWindow dateWindow) {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("dataInicio", BR_DATE.format(dateWindow.start()));
@@ -314,19 +334,14 @@ public class MedwareProvider implements ExternalClinicProvider {
         if (params == null || params.isEmpty()) {
             return path;
         }
-        StringBuilder builder = new StringBuilder(path).append("?");
-        boolean first = true;
+        UriComponentsBuilder builder = UriComponentsBuilder.fromPath(path);
         for (Map.Entry<String, String> entry : params.entrySet()) {
             if (entry.getValue() == null || entry.getValue().isBlank()) {
                 continue;
             }
-            if (!first) {
-                builder.append("&");
-            }
-            builder.append(entry.getKey()).append("=").append(entry.getValue());
-            first = false;
+            builder.queryParam(entry.getKey(), entry.getValue());
         }
-        return builder.toString();
+        return builder.build(false).toUriString();
     }
 
     private void assertConfigured() {

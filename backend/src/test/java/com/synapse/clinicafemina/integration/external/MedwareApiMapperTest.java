@@ -79,4 +79,36 @@ class MedwareApiMapperTest {
         assertEquals("Dra. Ana", dto.payload().get("medicoNome"));
         assertNotNull(dto.payload().get("medware"));
     }
+
+    @Test
+    void should_map_real_medware_appointment_with_data_hora_agenda_and_blank_fields() throws Exception {
+        JsonNode payload = objectMapper.readTree("""
+                {
+                  "codAgendamento": 98765,
+                  "codPaciente": 1023,
+                  "codStatusAgendamento": 1,
+                  "dataHoraAgenda": "03/07/2026 17:30",
+                  "dataHoraReferencia": "03/07/2026 17:30",
+                  "dataHoraChegada": "",
+                  "dataHoraLiberacao": "",
+                  "obs": null,
+                  "retorno": false,
+                  "encaixe": false,
+                  "medico": {
+                    "codMedico": 7,
+                    "nome": "Dra. Ana"
+                  },
+                  "medicoSolicitante": null
+                }
+                """);
+
+        ExternalAppointmentDTO dto = mapper.toAppointment(payload, Map.of(), Map.of());
+
+        assertEquals("98765", dto.externalId());
+        assertEquals("1023", dto.externalPatientId());
+        assertEquals(OffsetDateTime.parse("2026-07-03T17:30:00-03:00"), dto.startAt());
+        assertEquals("AGENDADO", dto.status());
+        assertEquals("Dra. Ana", dto.payload().get("medicoNome"));
+        assertNotNull(dto.payload().get("medware"));
+    }
 }
