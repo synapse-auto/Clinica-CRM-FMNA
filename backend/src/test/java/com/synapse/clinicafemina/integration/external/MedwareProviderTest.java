@@ -83,6 +83,90 @@ class MedwareProviderTest {
     }
 
     @Test
+    void should_reject_html_login_response_with_clear_medware_url_message() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        MedwareProvider provider = createProvider(builder, "https://medware.example", "usuario", "senha", false);
+
+        server.expect(once(), requestTo("https://medware.example/Acesso/login"))
+                .andExpect(method(POST))
+                .andRespond(withSuccess("<html>login web</html>", MediaType.TEXT_HTML));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> provider.getPatients(null, null, 50));
+
+        assertEquals(
+                "MEDWARE_API_URL invalida ou endpoint nao retornou JSON. Verifique se a URL termina com /api.",
+                ex.getMessage()
+        );
+        assertTrue(!ex.getMessage().contains("senha"));
+        server.verify();
+    }
+
+    @Test
+    void should_login_with_token_inside_retorno_object() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        MedwareProvider provider = createProvider(builder, "https://medware.example/api", "usuario", "senha", false);
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andExpect(method(POST))
+                .andRespond(withSuccess("""
+                        {"retorno":{"token":"jwt-token","refreshToken":"refresh-token"}}
+                        """, MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Paciente/Listar"))
+                .andExpect(method(GET))
+                .andExpect(header("Authorization", "Bearer jwt-token"))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        PageResult<ExternalPatientDTO> page = provider.getPatients(null, null, 50);
+
+        assertTrue(page.data().isEmpty());
+        server.verify();
+    }
+
+    @Test
+    void should_login_with_access_token_inside_retorno_object() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        MedwareProvider provider = createProvider(builder, "https://medware.example/api", "usuario", "senha", false);
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andExpect(method(POST))
+                .andRespond(withSuccess("""
+                        {"retorno":{"accessToken":"jwt-token"}}
+                        """, MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Paciente/Listar"))
+                .andExpect(method(GET))
+                .andExpect(header("Authorization", "Bearer jwt-token"))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        PageResult<ExternalPatientDTO> page = provider.getPatients(null, null, 50);
+
+        assertTrue(page.data().isEmpty());
+        server.verify();
+    }
+
+    @Test
+    void should_reject_login_json_without_valid_token_with_clear_credentials_message() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        MedwareProvider provider = createProvider(builder, "https://medware.example/api", "usuario", "senha-secreta", false);
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andExpect(method(POST))
+                .andRespond(withSuccess("{\"retorno\":\"Usuario invalido\"}", MediaType.APPLICATION_JSON));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> provider.getPatients(null, null, 50));
+
+        assertEquals("Credenciais Medware invalidas ou token ausente.", ex.getMessage());
+        assertTrue(!ex.getMessage().contains("senha-secreta"));
+        assertTrue(!ex.getMessage().contains("Usuario invalido"));
+        server.verify();
+    }
+
+    @Test
     void should_read_appointments_with_date_window_and_catalog_enrichment() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).ignoreExpectOrder(true).build();
@@ -118,6 +202,35 @@ class MedwareProviderTest {
         assertEquals("1023", page.data().getFirst().externalPatientId());
         assertEquals("Ultrassom", page.data().getFirst().serviceName());
         assertEquals("EXAME", page.data().getFirst().type());
+        server.verify();
+    }
+
+    @Test
+    void should_reject_html_appointment_response_with_clear_medware_url_message() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).ignoreExpectOrder(true).build();
+        MedwareProvider provider = createProvider(builder, "https://medware.example/api", "usuario", "senha", false);
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andExpect(method(POST))
+                .andRespond(withSuccess("{\"token\":\"jwt-token\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/ProcedPlanoOp/Listar?dataInicio=15/06/2026&dataFim=14/08/2026"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar?dataInicio=15/06/2026&dataFim=14/08/2026"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Agendamento/Listar?dataInicio=15/06/2026&dataFim=14/08/2026"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("<html>pagina web</html>", MediaType.TEXT_HTML));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> provider.getAppointments(OffsetDateTime.parse("2026-06-15T08:00:00-03:00"), null, 50));
+
+        assertEquals(
+                "MEDWARE_API_URL invalida ou endpoint nao retornou JSON. Verifique se a URL termina com /api.",
+                ex.getMessage()
+        );
         server.verify();
     }
 

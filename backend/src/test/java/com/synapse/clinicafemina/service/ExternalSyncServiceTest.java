@@ -357,4 +357,26 @@ class ExternalSyncServiceTest {
         assertFalse(finalLog.getMensagemErro().contains("detalhe interno simulado"));
         verifyNoInteractions(agendamentoRepository);
     }
+
+    @Test
+    void should_record_safe_medware_error_message_in_sync_log() {
+        clinica.setSlug("ultramedical");
+        clinica.setExternalProvider(ExternalProviderType.MEDWARE);
+        when(provider.getPatients(null, null, 100))
+                .thenThrow(new IllegalStateException(
+                        "MEDWARE_API_URL invalida ou endpoint nao retornou JSON. Verifique se a URL termina com /api."
+                ));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        ArgumentCaptor<IntegrationSyncLog> logCaptor = ArgumentCaptor.forClass(IntegrationSyncLog.class);
+        verify(syncLogRepository, times(2)).save(logCaptor.capture());
+        IntegrationSyncLog finalLog = logCaptor.getAllValues().getLast();
+
+        assertEquals("FALHA_TOTAL", result.status());
+        assertEquals(
+                "Falha na sincronizacao externa: MEDWARE_API_URL invalida ou endpoint nao retornou JSON. Verifique se a URL termina com /api.",
+                finalLog.getMensagemErro()
+        );
+    }
 }

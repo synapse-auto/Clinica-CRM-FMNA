@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -31,6 +32,10 @@ public class MedwareProvider implements ExternalClinicProvider {
     private static final ZoneId MEDWARE_ZONE = ZoneId.of("America/Sao_Paulo");
     private static final DateTimeFormatter BR_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final int DEFAULT_TOKEN_LIFETIME_HOURS = 24;
+    private static final String INVALID_URL_MESSAGE =
+            "MEDWARE_API_URL invalida ou endpoint nao retornou JSON. Verifique se a URL termina com /api.";
+    private static final String INVALID_CREDENTIALS_MESSAGE =
+            "Credenciais Medware invalidas ou token ausente.";
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
@@ -178,20 +183,20 @@ public class MedwareProvider implements ExternalClinicProvider {
 
     private JsonNode get(String path, Map<String, String> queryParams) {
         String uri = uri(path, queryParams);
-        String body = restClient.get()
+        ResponseEntity<String> response = restClient.get()
                 .uri(uri)
                 .header("Authorization", "Bearer " + bearerToken())
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
-                .onStatus(HttpStatusCode::isError, (request, response) -> {
-                    int status = response.getStatusCode().value();
+                .onStatus(HttpStatusCode::isError, (request, errorResponse) -> {
+                    int status = errorResponse.getStatusCode().value();
                     if (status == 401) {
                         tokenState.set(null);
                     }
                     throw new IllegalStateException("Medware retornou status " + status + " em endpoint read-only " + path);
                 })
-                .body(String.class);
-        return readJson(body, path);
+                .toEntity(String.class);
+        return readJson(response.getBody(), path, response.getHeaders().getContentType());
     }
 
     private String bearerToken() {
@@ -217,15 +222,15 @@ public class MedwareProvider implements ExternalClinicProvider {
 
     private TokenState tryRefresh(TokenState current) {
         try {
-            String response = restClient.post()
+            ResponseEntity<String> response = restClient.post()
                     .uri(uri("/Acesso/refreshToken", Map.of(
                             "refreshToken", current.refreshToken(),
                             "token", current.token()
                     )))
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
-                    .body(String.class);
-            return parseToken(response);
+                    .toEntity(String.class);
+            return parseToken(response.getBody(), response.getHeaders().getContentType());
         } catch (Exception e) {
             log.warn("Falha ao renovar token Medware; novo login sera realizado. tipoErro={}", e.getClass().getSimpleName());
             return null;
@@ -233,7 +238,7 @@ public class MedwareProvider implements ExternalClinicProvider {
     }
 
     private TokenState login() {
-        String response = restClient.post()
+        ResponseEntity<String> response = restClient.post()
                 .uri("/Acesso/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
@@ -246,25 +251,27 @@ public class MedwareProvider implements ExternalClinicProvider {
                 .onStatus(HttpStatusCode::isError, (request, result) -> {
                     throw new IllegalStateException("Falha de autenticacao Medware. Status " + result.getStatusCode().value());
                 })
-                .body(String.class);
-        return parseToken(response);
+                .toEntity(String.class);
+        return parseToken(response.getBody(), response.getHeaders().getContentType());
     }
 
-    private JsonNode readJson(String body, String path) {
+    private JsonNode readJson(String body, String path, MediaType contentType) {
         if (body == null || body.isBlank()) {
             return MissingNode.getInstance();
         }
+        rejectHtmlResponse(body, contentType);
         try {
             return objectMapper.readTree(body);
         } catch (Exception e) {
-            throw new IllegalStateException("Resposta Medware invalida em endpoint read-only " + path);
+            throw new IllegalStateException(INVALID_URL_MESSAGE);
         }
     }
 
-    private TokenState parseToken(String body) {
+    private TokenState parseToken(String body, MediaType contentType) {
         String token = null;
         String refreshToken = null;
         if (body != null && !body.isBlank()) {
+            rejectHtmlResponse(body, contentType);
             try {
                 JsonNode response = objectMapper.readTree(body);
                 if (response.isTextual()) {
@@ -272,15 +279,48 @@ public class MedwareProvider implements ExternalClinicProvider {
                 } else if (response.isObject()) {
                     token = text(response, "token", "accessToken", "jwt");
                     refreshToken = text(response, "refreshToken", "refresh_token");
+                    JsonNode retorno = response.get("retorno");
+                    if ((token == null || token.isBlank()) && retorno != null) {
+                        if (retorno.isTextual()) {
+                            token = retorno.asText();
+                        } else if (retorno.isObject()) {
+                            token = text(retorno, "token", "accessToken", "jwt");
+                            refreshToken = firstNonBlank(refreshToken, text(retorno, "refreshToken", "refresh_token"));
+                        }
+                    }
                 }
             } catch (Exception e) {
-                token = body.trim();
+                throw new IllegalStateException(INVALID_URL_MESSAGE);
             }
         }
-        if (token == null || token.isBlank()) {
-            throw new IllegalStateException("Resposta de autenticacao Medware nao retornou token");
+        if (!isTokenCandidate(token)) {
+            throw new IllegalStateException(INVALID_CREDENTIALS_MESSAGE);
         }
         return new TokenState(token, refreshToken, OffsetDateTime.now(clock).plusHours(DEFAULT_TOKEN_LIFETIME_HOURS));
+    }
+
+    private void rejectHtmlResponse(String body, MediaType contentType) {
+        if ((contentType != null && MediaType.TEXT_HTML.includes(contentType)) || body.stripLeading().startsWith("<")) {
+            throw new IllegalStateException(INVALID_URL_MESSAGE);
+        }
+    }
+
+    private boolean isTokenCandidate(String token) {
+        if (token == null || token.isBlank() || token.stripLeading().startsWith("<") || token.matches(".*\\s+.*")) {
+            return false;
+        }
+        String normalized = token.toLowerCase();
+        return !normalized.contains("invalido")
+                && !normalized.contains("inválido")
+                && !normalized.contains("erro")
+                && !normalized.contains("senha")
+                && !normalized.contains("usuario")
+                && !normalized.contains("usuário")
+                && !normalized.contains("credencial");
+    }
+
+    private String firstNonBlank(String first, String second) {
+        return first == null || first.isBlank() ? second : first;
     }
 
     private DateWindow dateWindow(OffsetDateTime updatedAfter) {

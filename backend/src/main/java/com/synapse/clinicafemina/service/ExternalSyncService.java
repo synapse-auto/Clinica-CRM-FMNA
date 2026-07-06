@@ -41,6 +41,12 @@ import java.util.Optional;
 public class ExternalSyncService {
 
     private static final ZoneId SYNC_ZONE = ZoneId.of("America/Sao_Paulo");
+    private static final List<String> SAFE_EXTERNAL_ERROR_PREFIXES = List.of(
+            "MEDWARE_API_URL invalida",
+            "Credenciais Medware invalidas",
+            "Medware retornou status",
+            "Falha de autenticacao Medware"
+    );
 
     private final ExternalProviderFactory providerFactory;
     private final IntegrationSyncLogRepository syncLogRepository;
@@ -97,10 +103,11 @@ public class ExternalSyncService {
             syncAppointments(clinica, provider, updatedAfter, dataInicio, dataFim, counters);
             runLog.setStatus("SUCESSO");
         } catch (Exception e) {
+            String erroResumo = safeExternalErrorSummary(e);
             runLog.setStatus("FALHA_TOTAL");
-            runLog.setMensagemErro("Falha na sincronizacao externa: " + e.getClass().getSimpleName());
-            log.error("Falha na sincronizacao externa clinica={}, provider={}, tipoErro={}",
-                    clinica.getId(), providerType, e.getClass().getSimpleName());
+            runLog.setMensagemErro("Falha na sincronizacao externa: " + erroResumo);
+            log.error("Falha na sincronizacao externa clinica={}, provider={}, erroResumo={}",
+                    clinica.getId(), providerType, erroResumo);
         } finally {
             applyCounters(runLog, counters);
             runLog.setConcluidoEm(OffsetDateTime.now());
@@ -201,6 +208,14 @@ public class ExternalSyncService {
 
     private OffsetDateTime inicioDoDia(LocalDate dataInicio) {
         return dataInicio.atTime(LocalTime.MIDNIGHT).atZone(SYNC_ZONE).toOffsetDateTime();
+    }
+
+    private String safeExternalErrorSummary(Exception e) {
+        String message = e.getMessage();
+        if (message != null && SAFE_EXTERNAL_ERROR_PREFIXES.stream().anyMatch(message::startsWith)) {
+            return message.replaceAll("[\\r\\n\\t]+", " ").trim();
+        }
+        return e.getClass().getSimpleName();
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
