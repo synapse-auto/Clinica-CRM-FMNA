@@ -52,12 +52,14 @@ public class AgendamentoController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public AgendamentoResponse criar(@RequestBody @Valid AgendamentoCreateRequest request) {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
         return agendamentoService.criar(clinica, request);
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public AgendamentoResponse atualizar(
             @PathVariable Long id,
             @RequestBody @Valid AgendamentoUpdateRequest request
@@ -67,6 +69,7 @@ public class AgendamentoController {
     }
 
     @PatchMapping("/{id}/cancelamento")
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public AgendamentoResponse cancelar(
             @PathVariable Long id,
             @RequestBody @Valid AgendamentoCancelRequest request

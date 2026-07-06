@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Gestor;
+import com.synapse.clinicafemina.domain.Medico;
 import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.MensagemDTO;
@@ -77,6 +78,7 @@ class AuthSecurityIntegrationTest {
 
     private String gestorEmail;
     private String recepcionistaEmail;
+    private String medicoEmail;
     private String trocaObrigatoriaEmail;
     private String senha;
     private Long clinicaId;
@@ -96,9 +98,11 @@ class AuthSecurityIntegrationTest {
         senha = UUID.randomUUID() + "!Aa1";
         gestorEmail = "gestor-" + UUID.randomUUID() + "@clinica.local";
         recepcionistaEmail = "recepcao-" + UUID.randomUUID() + "@clinica.local";
+        medicoEmail = "medico-" + UUID.randomUUID() + "@clinica.local";
         trocaObrigatoriaEmail = "primeiro-acesso-" + UUID.randomUUID() + "@clinica.local";
 
         saveUser(new Gestor(), clinica, "Gestor Teste", gestorEmail, false, false);
+        saveUser(new Medico(), clinica, "Medico Teste", medicoEmail, false, false);
         saveUser(new Recepcionista(), clinica, "Recepção Teste", recepcionistaEmail, false, false);
         saveUser(new Gestor(), clinica, "Primeiro Acesso", trocaObrigatoriaEmail, true, true);
         entityManager.flush();
@@ -168,6 +172,41 @@ class AuthSecurityIntegrationTest {
                         .param("inicio", "2026-06-22T00:00:00-03:00")
                         .param("fim", "2026-06-27T00:00:00-03:00"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_allow_all_authenticated_profiles_to_view_agenda() throws Exception {
+        for (String token : new String[] {
+                login(gestorEmail, senha, false),
+                login(recepcionistaEmail, senha, false),
+                login(medicoEmail, senha, false)
+        }) {
+            mockMvc.perform(get("/api/agendamentos")
+                            .header("Authorization", "Bearer " + token)
+                            .param("inicio", "2026-06-22T00:00:00-03:00")
+                            .param("fim", "2026-06-27T00:00:00-03:00"))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    @Test
+    void should_forbid_doctor_from_mutating_agenda() throws Exception {
+        String token = login(medicoEmail, senha, false);
+
+        mockMvc.perform(post("/api/agendamentos")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "pacienteId": 20,
+                                  "medicoId": 30,
+                                  "dataHoraInicio": "2026-06-22T09:00:00-03:00",
+                                  "dataHoraFim": "2026-06-22T09:30:00-03:00",
+                                  "tipo": "CONSULTA",
+                                  "servicoNome": "Consulta"
+                                }
+                                """))
+                .andExpect(status().isForbidden());
     }
 
     @Test
