@@ -12,6 +12,7 @@ import type {
   DashboardPeriodo,
   DashboardResponse,
 } from '@/types/dashboard';
+import type { ConfiguracaoResumo } from '@/types/configuracoes';
 import type { Agendamento, AgendaOptions } from '@/types/agendamento';
 import type {
   AtendenteOption,
@@ -55,6 +56,10 @@ export async function getDashboardData(
 
 export async function getClinicaAtual(): Promise<ClinicaAtualResponse> {
   return getJsonOrFallback('/api/configuracoes/clinica-atual', DEFAULT_CLINICA);
+}
+
+export async function getConfiguracoesResumo(): Promise<ConfiguracaoResumo> {
+  return getJson<ConfiguracaoResumo>('/api/configuracoes/resumo');
 }
 
 export async function getFollowUpConfigs(): Promise<FollowUpConfig[]> {

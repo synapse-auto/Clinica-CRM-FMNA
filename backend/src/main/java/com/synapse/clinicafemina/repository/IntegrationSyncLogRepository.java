@@ -20,4 +20,9 @@ public interface IntegrationSyncLogRepository extends JpaRepository<IntegrationS
             """)
     Optional<IntegrationSyncLog> findUltimoSucesso(@Param("clinicaId") Long clinicaId,
                                                    @Param("provider") ExternalProviderType provider);
+
+    Optional<IntegrationSyncLog> findTopByClinicaIdAndExternalProviderOrderByIniciadoEmDesc(
+            Long clinicaId,
+            ExternalProviderType externalProvider
+    );
 }

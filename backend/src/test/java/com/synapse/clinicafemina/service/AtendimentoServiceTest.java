@@ -73,14 +73,35 @@ class AtendimentoServiceTest {
                 eq(1L), isNull(), isNull(), eq(10L),
                 eq(false), eq(false), eq(false), eq(""), any()
         )).thenReturn(new PageImpl<>(List.of(atendimento)));
-        when(mensagemRepository.findFirstByAtendimentoIdOrderByDataHoraDesc(3L))
-                .thenReturn(Optional.empty());
 
         var result = service.listar(
                 1L, null, "TODOS", "MEUS", null, 10L, PageRequest.of(0, 20)
         );
 
         assertFalse(result.isEmpty());
+    }
+
+    @Test
+    void should_not_fetch_last_message_one_by_one_when_listing() {
+        Atendimento segundoAtendimento = new Atendimento();
+        segundoAtendimento.setId(4L);
+        segundoAtendimento.setClinica(clinica);
+        segundoAtendimento.setPaciente(atendimento.getPaciente());
+        segundoAtendimento.setStatus("ATIVO");
+        segundoAtendimento.setTratadoPorIa(false);
+        segundoAtendimento.setNaoLidas(0);
+        when(atendimentoRepository.findByClinica(
+                eq(1L), isNull(), isNull(), isNull(),
+                eq(false), eq(false), eq(false), eq(""), any()
+        )).thenReturn(new PageImpl<>(List.of(atendimento, segundoAtendimento)));
+
+        var result = service.listar(
+                1L, null, "TODOS", "TODOS", null, null, PageRequest.of(0, 20)
+        );
+
+        assertEquals(2, result.getTotalElements());
+        verify(mensagemRepository, never()).findFirstByAtendimentoIdOrderByDataHoraDesc(3L);
+        verify(mensagemRepository, never()).findFirstByAtendimentoIdOrderByDataHoraDesc(4L);
     }
 
     @Test

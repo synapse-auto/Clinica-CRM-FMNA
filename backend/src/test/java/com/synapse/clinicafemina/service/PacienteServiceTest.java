@@ -113,13 +113,27 @@ class PacienteServiceTest {
         tag.setAtualizadoEm(OffsetDateTime.parse("2026-06-15T12:00:00Z"));
         when(pacienteRepository.findResumosDisponiveisByClinicaId(clinica.getId()))
                 .thenReturn(List.of(paciente));
-        when(pacienteTagRepository.findTagsByPacienteIdAndClinicaId(6L, clinica.getId()))
-                .thenReturn(List.of(tag));
+        when(pacienteTagRepository.findTagsByPacienteIdsAndClinicaId(List.of(6L), clinica.getId()))
+                .thenReturn(List.<Object[]>of(new Object[] {6L, tag}));
 
         List<PacienteResumoDTO> result = service.listar(clinica);
 
         assertEquals(1, result.get(0).tags().size());
         assertEquals("VIP", result.get(0).tags().get(0).nome());
+    }
+
+    @Test
+    void listar_naoBuscaTagsPacientePorPacienteParaEvitarNMaisUm() {
+        PacienteRepository.PacienteResumoProjection p1 = resumoProjection(7L, "olivia costa", "5511944443333");
+        PacienteRepository.PacienteResumoProjection p2 = resumoProjection(8L, "paula lima", "5511933332222");
+        when(pacienteRepository.findResumosDisponiveisByClinicaId(clinica.getId()))
+                .thenReturn(List.of(p1, p2));
+
+        List<PacienteResumoDTO> result = service.listar(clinica);
+
+        assertEquals(2, result.size());
+        verify(pacienteTagRepository, never()).findTagsByPacienteIdAndClinicaId(7L, clinica.getId());
+        verify(pacienteTagRepository, never()).findTagsByPacienteIdAndClinicaId(8L, clinica.getId());
     }
 
     @Test

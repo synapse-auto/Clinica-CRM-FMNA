@@ -4,6 +4,7 @@ import com.synapse.clinicafemina.domain.PacienteTag;
 import com.synapse.clinicafemina.domain.PacienteTagId;
 import com.synapse.clinicafemina.domain.Tag;
 import java.util.List;
+import java.util.Collection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -22,6 +23,20 @@ public interface PacienteTagRepository extends JpaRepository<PacienteTag, Pacien
             """)
     List<Tag> findTagsByPacienteIdAndClinicaId(
             @Param("pacienteId") Long pacienteId,
+            @Param("clinicaId") Long clinicaId
+    );
+
+    @Query("""
+            SELECT vinculo.paciente.id, vinculo.tag
+            FROM PacienteTag vinculo
+            WHERE vinculo.paciente.id IN :pacienteIds
+              AND vinculo.paciente.clinica.id = :clinicaId
+              AND vinculo.tag.clinica.id = :clinicaId
+              AND vinculo.tag.deletadoEm IS NULL
+            ORDER BY vinculo.paciente.id ASC, vinculo.tag.nome ASC
+            """)
+    List<Object[]> findTagsByPacienteIdsAndClinicaId(
+            @Param("pacienteIds") Collection<Long> pacienteIds,
             @Param("clinicaId") Long clinicaId
     );
 

@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.repository;
 import com.synapse.clinicafemina.domain.Atendimento;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,6 +15,7 @@ import java.util.Optional;
 public interface AtendimentoRepository extends JpaRepository<Atendimento, Long> {
 
     /** Lista atendimentos de uma clínica com filtros opcionais de status e tipo (IA/HUMANO). */
+    @EntityGraph(attributePaths = {"paciente", "atendentePrincipal"})
     @Query("""
             SELECT a FROM Atendimento a
             WHERE a.clinica.id = :clinicaId

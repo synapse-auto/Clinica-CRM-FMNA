@@ -64,4 +64,15 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
             ORDER BY u.nome ASC
             """)
     List<Usuario> findAtendentesVisiveisByClinicaId(@Param("clinicaId") Long clinicaId);
+
+    @Query("""
+            SELECT u.perfil, COUNT(u) FROM Usuario u
+            WHERE u.clinica.id = :clinicaId
+              AND u.ativo = true
+              AND u.adminInterno = false
+              AND u.deletadoEm IS NULL
+            GROUP BY u.perfil
+            ORDER BY u.perfil ASC
+            """)
+    List<Object[]> countAtivosVisiveisPorPerfil(@Param("clinicaId") Long clinicaId);
 }

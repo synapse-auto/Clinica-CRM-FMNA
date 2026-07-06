@@ -30,4 +30,12 @@ public interface HorarioAtendenteRepository extends JpaRepository<HorarioAtenden
             @Param("id") Long id,
             @Param("clinicaId") Long clinicaId
     );
+
+    @Query("""
+            SELECT COUNT(h) > 0 FROM HorarioAtendente h
+            WHERE h.usuario.clinica.id = :clinicaId
+              AND h.deletadoEm IS NULL
+              AND h.ativo = true
+            """)
+    boolean existsAtivoByClinicaId(@Param("clinicaId") Long clinicaId);
 }

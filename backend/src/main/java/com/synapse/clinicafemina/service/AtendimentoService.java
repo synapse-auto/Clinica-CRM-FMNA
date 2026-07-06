@@ -1,7 +1,6 @@
 package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.domain.Atendimento;
-import com.synapse.clinicafemina.domain.Mensagem;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.domain.TransferenciaAtendimento;
 import com.synapse.clinicafemina.domain.Usuario;
@@ -22,8 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -58,7 +59,7 @@ public class AtendimentoService {
         String filtroNormalizado = filtro == null ? "TODOS" : filtro.toUpperCase();
         String statusEfetivo = "FINALIZADOS".equals(filtroNormalizado) ? "ENCERRADO" : normalizar(status);
 
-        return atendimentoRepository.findByClinica(
+        Page<Atendimento> atendimentos = atendimentoRepository.findByClinica(
                 clinicaId,
                 statusEfetivo,
                 tratadoPorIa,
@@ -68,7 +69,9 @@ public class AtendimentoService {
                 "REVISAO".equals(filtroNormalizado),
                 normalizarBusca(busca),
                 pageable
-        ).map(this::toResumoDTO);
+        );
+        Map<Long, String> previasPorAtendimento = ultimasPrevias(atendimentos.getContent());
+        return atendimentos.map(atendimento -> toResumoDTO(atendimento, previasPorAtendimento));
     }
 
     @Transactional(readOnly = true)
@@ -219,12 +222,27 @@ public class AtendimentoService {
         return transferencia;
     }
 
-    private AtendimentoResumoDTO toResumoDTO(Atendimento atendimento) {
+    private Map<Long, String> ultimasPrevias(List<Atendimento> atendimentos) {
+        if (atendimentos.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = atendimentos.stream()
+                .map(Atendimento::getId)
+                .toList();
+        Map<Long, String> previas = new HashMap<>();
+        for (MensagemRepository.UltimaPreviaProjection previa : mensagemRepository.findUltimasPreviasByAtendimentoIds(ids)) {
+            previas.put(previa.getAtendimentoId(), previa.getConteudoPrevia());
+        }
+        return previas;
+    }
+
+    private AtendimentoResumoDTO toResumoDTO(
+            Atendimento atendimento,
+            Map<Long, String> previasPorAtendimento
+    ) {
         Paciente paciente = atendimento.getPaciente();
         Usuario atendente = atendimento.getAtendentePrincipal();
-        String previa = mensagemRepository.findFirstByAtendimentoIdOrderByDataHoraDesc(atendimento.getId())
-                .map(Mensagem::getConteudoPrevia)
-                .orElse("");
+        String previa = previasPorAtendimento.getOrDefault(atendimento.getId(), "");
         return new AtendimentoResumoDTO(
                 atendimento.getId(),
                 atendimento.getStatus(),

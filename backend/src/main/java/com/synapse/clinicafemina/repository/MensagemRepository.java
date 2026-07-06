@@ -8,11 +8,18 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Optional;
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface MensagemRepository extends JpaRepository<Mensagem, Long> {
+
+    interface UltimaPreviaProjection {
+        Long getAtendimentoId();
+
+        String getConteudoPrevia();
+    }
 
     /** Histórico paginado de mensagens de um atendimento (mais recentes primeiro). */
     @Query("""
@@ -26,6 +33,18 @@ public interface MensagemRepository extends JpaRepository<Mensagem, Long> {
                                                    Pageable pageable);
 
     Optional<Mensagem> findFirstByAtendimentoIdOrderByDataHoraDesc(Long atendimentoId);
+
+    @Query(value = """
+            SELECT DISTINCT ON (atendimento_id)
+                   atendimento_id AS "atendimentoId",
+                   conteudo_previa AS "conteudoPrevia"
+            FROM mensagem
+            WHERE atendimento_id IN (:atendimentoIds)
+            ORDER BY atendimento_id, data_hora DESC
+            """, nativeQuery = true)
+    List<UltimaPreviaProjection> findUltimasPreviasByAtendimentoIds(
+            @Param("atendimentoIds") Collection<Long> atendimentoIds
+    );
 
     /** Localiza mensagem por ID externo do WhatsApp dentro da clínica resolvida no webhook. */
     @Query("""

@@ -28,6 +28,7 @@ spring:
       "[org.quartz.threadPool.threadCount]": 2
 
 app:
+  environment: ${APP_ENV:${APP_ENVIRONMENT:teste}}
   clinic:
     slug: ${CLINIC_SLUG:}
     name: ${CLINIC_NAME:Clínica Femina CRM}
