@@ -42,6 +42,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers("/api/webhooks/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/n8n/**").permitAll()
+                        .requestMatchers(HttpMethod.PATCH, "/api/n8n/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()   // autenticado no STOMP CONNECT
                         .anyRequest().authenticated()
                 )

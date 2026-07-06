@@ -7,10 +7,12 @@ import com.synapse.clinicafemina.domain.Gestor;
 import com.synapse.clinicafemina.domain.Medico;
 import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.domain.Usuario;
+import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
+import com.synapse.clinicafemina.service.AtendimentoService;
 import com.synapse.clinicafemina.service.MensagemService;
 import jakarta.persistence.EntityManager;
 import java.time.OffsetDateTime;
@@ -75,6 +77,9 @@ class AuthSecurityIntegrationTest {
 
     @MockBean
     private MensagemService mensagemService;
+
+    @MockBean
+    private AtendimentoService atendimentoService;
 
     private String gestorEmail;
     private String recepcionistaEmail;
@@ -247,6 +252,18 @@ class AuthSecurityIntegrationTest {
     }
 
     @Test
+    void should_allow_n8n_ai_mode_endpoint_with_secret_without_jwt() throws Exception {
+        when(atendimentoService.ativarModoIa(30L, clinicaId))
+                .thenReturn(atendimentoIaDto());
+
+        mockMvc.perform(patch("/api/n8n/atendimentos/30/modo-ia")
+                        .header("X-N8N-SECRET", "test-secret"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(30))
+                .andExpect(jsonPath("$.tratadoPorIa").value(true));
+    }
+
+    @Test
     void should_reach_whatsapp_webhook_without_crm_authentication() throws Exception {
         mockMvc.perform(get("/api/webhooks/whatsapp/verify")
                         .param("hub.mode", "subscribe")
@@ -400,6 +417,31 @@ class AuthSecurityIntegrationTest {
                 .getContentAsString();
         JsonNode json = objectMapper.readTree(response);
         return json.get("token").asText();
+    }
+
+    private AtendimentoDetalheDTO atendimentoIaDto() {
+        return new AtendimentoDetalheDTO(
+                30L,
+                "ATIVO",
+                true,
+                OffsetDateTime.parse("2026-07-03T12:00:00Z"),
+                null,
+                0,
+                new AtendimentoDetalheDTO.PacienteDetalheDTO(
+                        20L,
+                        "Paciente",
+                        "5544999999999",
+                        null,
+                        "EM_ATENDIMENTO",
+                        null,
+                        false,
+                        null,
+                        null,
+                        null,
+                        null
+                ),
+                null
+        );
     }
 
     private void saveUser(
