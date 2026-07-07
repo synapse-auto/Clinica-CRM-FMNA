@@ -28,6 +28,7 @@ const PASSWORD_RULE_MESSAGE = 'A senha deve ter no mínimo 6 caracteres, contend
 const CRM_PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
 
 export function MinhaContaClient({ user, clinic }: MinhaContaClientProps) {
+  const showPermissions = user.perfil === 'GESTOR';
   const permissions = buildPermissions(user.perfil);
   const [isPasswordFormOpen, setIsPasswordFormOpen] = useState(false);
 
@@ -36,7 +37,7 @@ export function MinhaContaClient({ user, clinic }: MinhaContaClientProps) {
       <PageHeader
         eyebrow="Conta"
         title="Minha conta"
-        description="Dados do usuário, segurança da sessão e permissões do seu perfil."
+        description="Dados do usuário, segurança da sessão e preferências do CRM."
         icon={<UserCircle className="h-5 w-5" />}
       />
 
@@ -88,7 +89,7 @@ export function MinhaContaClient({ user, clinic }: MinhaContaClientProps) {
 
       <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-12">
         <DemoCard
-          className="xl:col-span-5"
+          className={showPermissions ? 'xl:col-span-5' : 'xl:col-span-12'}
           title="Preferências"
           description="Opções já disponíveis na experiência do CRM"
           icon={<Palette className="h-4 w-4" />}
@@ -102,18 +103,20 @@ export function MinhaContaClient({ user, clinic }: MinhaContaClientProps) {
           </div>
         </DemoCard>
 
-        <DemoCard
-          className="xl:col-span-7"
-          title="Permissões"
-          description="Resumo do que o seu perfil consegue acessar"
-          icon={<ShieldCheck className="h-4 w-4" />}
-        >
-          <div className="grid gap-2 px-4 pb-4 md:grid-cols-2">
-            {permissions.map((item) => (
-              <PermissionRow key={item.label} {...item} />
-            ))}
-          </div>
-        </DemoCard>
+        {showPermissions ? (
+          <DemoCard
+            className="xl:col-span-7"
+            title="Permissões"
+            description="Resumo do que o seu perfil consegue acessar"
+            icon={<ShieldCheck className="h-4 w-4" />}
+          >
+            <div className="grid gap-2 px-4 pb-4 md:grid-cols-2">
+              {permissions.map((item) => (
+                <PermissionRow key={item.label} {...item} />
+              ))}
+            </div>
+          </DemoCard>
+        ) : null}
       </div>
     </div>
   );
