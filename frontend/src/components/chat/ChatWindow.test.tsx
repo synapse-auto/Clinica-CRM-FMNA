@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatWindow } from './ChatWindow';
 import type { AtendimentoDetalhe, MensagemAtendimento } from '@/types/atendimento';
 
@@ -26,6 +26,47 @@ const detail: AtendimentoDetalhe = {
   },
   atendentePrincipal: null,
 };
+
+const scrollIntoViewMock = vi.fn();
+
+beforeEach(() => {
+  scrollIntoViewMock.mockClear();
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scrollIntoViewMock,
+  });
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+function makeMessage(id: number, direcao: MensagemAtendimento['direcao'] = 'ENTRADA'): MensagemAtendimento {
+  return {
+    id,
+    direcao,
+    remetente: direcao === 'SAIDA' ? 'ATENDENTE' : 'PACIENTE',
+    tipoMedia: 'TEXTO',
+    conteudo: `Mensagem ${id}`,
+    conteudoPrevia: `Mensagem ${id}`,
+    whatsappStatus: direcao === 'SAIDA' ? 'ENVIADA' : 'RECEBIDA',
+    motivoFalha: null,
+    dataHora: new Date(2026, 6, 1, 10, id).toISOString(),
+    entregueEm: null,
+    lidaEm: null,
+    midia: null,
+  };
+}
+
+function setScrollMetrics(element: HTMLElement, metrics: { scrollHeight: number; clientHeight: number; scrollTop: number }) {
+  Object.defineProperty(element, 'scrollHeight', { configurable: true, value: metrics.scrollHeight });
+  Object.defineProperty(element, 'clientHeight', { configurable: true, value: metrics.clientHeight });
+  Object.defineProperty(element, 'scrollTop', { configurable: true, writable: true, value: metrics.scrollTop });
+}
 
 describe('ChatWindow', () => {
   it('should_show_ai_attendance_label_in_header', () => {
@@ -288,5 +329,163 @@ describe('ChatWindow', () => {
     fireEvent.error(imgElement);
 
     expect(screen.getByText('Imagem indisponível')).toBeInTheDocument();
+  });
+
+  it('should_scroll_to_latest_message_when_opening_conversation', async () => {
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[makeMessage(1), makeMessage(2), makeMessage(3)]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      behavior: 'auto',
+      block: 'end',
+    }));
+  });
+
+  it('should_scroll_to_latest_message_when_switching_conversation', async () => {
+    const { rerender } = render(
+      <ChatWindow
+        detail={detail}
+        messages={[makeMessage(1)]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalled());
+    scrollIntoViewMock.mockClear();
+
+    rerender(
+      <ChatWindow
+        detail={{ ...detail, id: 31, paciente: { ...detail.paciente, id: 11, nome: 'Outra Paciente' } }}
+        messages={[makeMessage(10), makeMessage(11)]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      behavior: 'auto',
+      block: 'end',
+    }));
+  });
+
+  it('should_follow_new_messages_when_user_is_near_the_bottom', async () => {
+    const { rerender } = render(
+      <ChatWindow
+        detail={detail}
+        messages={[makeMessage(1), makeMessage(2)]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalled());
+    scrollIntoViewMock.mockClear();
+
+    const container = screen.getByTestId('message-scroll-container');
+    setScrollMetrics(container, { scrollHeight: 1000, clientHeight: 360, scrollTop: 620 });
+    fireEvent.scroll(container);
+
+    rerender(
+      <ChatWindow
+        detail={detail}
+        messages={[makeMessage(1), makeMessage(2), makeMessage(3)]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalled());
+  });
+
+  it('should_not_force_scroll_when_user_is_reading_old_messages', async () => {
+    const { rerender } = render(
+      <ChatWindow
+        detail={detail}
+        messages={[makeMessage(1), makeMessage(2)]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalled());
+    scrollIntoViewMock.mockClear();
+
+    const container = screen.getByTestId('message-scroll-container');
+    setScrollMetrics(container, { scrollHeight: 1200, clientHeight: 360, scrollTop: 100 });
+    fireEvent.scroll(container);
+
+    rerender(
+      <ChatWindow
+        detail={detail}
+        messages={[makeMessage(1), makeMessage(2), makeMessage(3)]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ir para novas mensagens' })).toBeInTheDocument());
+    expect(scrollIntoViewMock).not.toHaveBeenCalled();
+  });
+
+  it('should_scroll_to_sent_message_even_when_user_was_reading_old_messages', async () => {
+    const { rerender } = render(
+      <ChatWindow
+        detail={detail}
+        messages={[makeMessage(1), makeMessage(2)]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalled());
+    scrollIntoViewMock.mockClear();
+
+    const container = screen.getByTestId('message-scroll-container');
+    setScrollMetrics(container, { scrollHeight: 1200, clientHeight: 360, scrollTop: 100 });
+    fireEvent.scroll(container);
+
+    rerender(
+      <ChatWindow
+        detail={detail}
+        messages={[makeMessage(1), makeMessage(2), makeMessage(3, 'SAIDA')]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'end',
+    }));
   });
 });

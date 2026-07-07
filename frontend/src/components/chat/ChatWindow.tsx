@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   Check,
@@ -33,8 +33,62 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
   const [content, setContent] = useState('');
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState('');
+  const [showNewMessagesNotice, setShowNewMessagesNotice] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const messageScrollContainer = useRef<HTMLDivElement>(null);
+  const messageEnd = useRef<HTMLDivElement>(null);
+  const previousConversationId = useRef<number | null>(null);
+  const previousLastMessageId = useRef<number | null>(null);
+  const isNearBottom = useRef(true);
   const filteredQuickMessages = filterQuickMessages(quickMessages, quickSearch);
+  const lastMessage = messages.at(-1);
+
+  const scrollToLastMessage = useCallback((behavior: ScrollBehavior = 'auto') => {
+    window.requestAnimationFrame(() => {
+      const container = messageScrollContainer.current;
+      if (!container) return;
+      container.scrollTop = container.scrollHeight;
+      messageEnd.current?.scrollIntoView?.({ behavior, block: 'end' });
+      isNearBottom.current = true;
+      setShowNewMessagesNotice(false);
+    });
+  }, []);
+
+  function handleMessageScroll() {
+    const container = messageScrollContainer.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const nextIsNearBottom = distanceFromBottom <= 96;
+    isNearBottom.current = nextIsNearBottom;
+    if (nextIsNearBottom) setShowNewMessagesNotice(false);
+  }
+
+  useEffect(() => {
+    const currentConversationId = detail?.id ?? null;
+    const currentLastMessageId = lastMessage?.id ?? null;
+    const conversationChanged = previousConversationId.current !== currentConversationId;
+    const messageChanged = previousLastMessageId.current !== currentLastMessageId;
+
+    if (!currentConversationId) {
+      previousConversationId.current = null;
+      previousLastMessageId.current = null;
+      setShowNewMessagesNotice(false);
+      return;
+    }
+
+    if (conversationChanged) {
+      scrollToLastMessage('auto');
+    } else if (messageChanged && currentLastMessageId) {
+      if (isNearBottom.current || lastMessage?.direcao === 'SAIDA') {
+        scrollToLastMessage(lastMessage?.direcao === 'SAIDA' ? 'smooth' : 'auto');
+      } else {
+        setShowNewMessagesNotice(true);
+      }
+    }
+
+    previousConversationId.current = currentConversationId;
+    previousLastMessageId.current = currentLastMessageId;
+  }, [detail?.id, lastMessage?.direcao, lastMessage?.id, scrollToLastMessage]);
 
   async function submit() {
     const value = content.trim();
@@ -71,7 +125,13 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
         </div>
       ) : null}
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-5 custom-scrollbar">
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={messageScrollContainer}
+          className="h-full space-y-4 overflow-y-auto p-5 custom-scrollbar"
+          data-testid="message-scroll-container"
+          onScroll={handleMessageScroll}
+        >
         {detail && messages.length === 0 ? (
           <p className="text-center text-[11px] text-clinic-muted">
             Ainda não há mensagens nesta conversa.
@@ -79,6 +139,18 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
         ) : messages.map((message) => (
           <MessageBubble key={message.id} message={message} />
         ))}
+          <div ref={messageEnd} aria-hidden="true" data-testid="message-scroll-end" />
+        </div>
+        {showNewMessagesNotice ? (
+          <button
+            type="button"
+            aria-label="Ir para novas mensagens"
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-clinic-border bg-clinic-surface px-3 py-1.5 text-[10px] font-extrabold text-clinic-primary shadow-lg transition hover:bg-clinic-hover"
+            onClick={() => scrollToLastMessage('smooth')}
+          >
+            Novas mensagens
+          </button>
+        ) : null}
       </div>
 
       <div className="shrink-0 border-t border-clinic-border bg-clinic-surface p-3">
