@@ -16,6 +16,7 @@ import {
   Stethoscope,
   Sun,
   Tag,
+  UserCircle,
   UserPlus,
   Users,
   Zap,
@@ -37,6 +38,7 @@ const menuIcons = {
   '/msgs-rapidas': BadgeHelp,
   '/horarios': Clock,
   '/configuracoes': Settings,
+  '/minha-conta': UserCircle,
 } as const;
 
 type DemoSidebarProps = {
@@ -145,8 +147,8 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
           )}
           Tema {theme === 'dark' ? 'Claro' : 'Escuro'}
         </button>
-        <div className="flex items-center justify-between rounded-lg p-2 transition hover:bg-sidebar-accent/55">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="flex items-center justify-between gap-2 rounded-lg p-2 transition hover:bg-sidebar-accent/55">
+          <Link href="/minha-conta" className="flex min-w-0 flex-1 items-center gap-3 rounded-md focus:outline-none focus:ring-2 focus:ring-sidebar-primary/45">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-sm font-bold text-sidebar-primary-foreground ring-2 ring-sidebar-primary/20">
               {initials}
             </div>
@@ -154,7 +156,7 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
               <p className="truncate text-[15px] font-bold text-white">{user.nome}</p>
               <p className="truncate text-xs text-sidebar-foreground/65">{formatProfile(user.perfil)}</p>
             </div>
-          </div>
+          </Link>
           <button
             type="button"
             aria-label="Sair"

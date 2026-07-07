@@ -20,7 +20,7 @@ public class ConfiguracaoController {
     private final ConfiguracaoResumoService configuracaoResumoService;
 
     @GetMapping("/resumo")
-    @PreAuthorize("hasAnyRole('GESTOR', 'MEDICO', 'RECEPCIONISTA')")
+    @PreAuthorize("hasRole('GESTOR')")
     public ConfiguracaoResumoResponse resumo() {
         return configuracaoResumoService.obterResumo();
     }

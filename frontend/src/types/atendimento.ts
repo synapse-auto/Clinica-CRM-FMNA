@@ -29,6 +29,13 @@ export type AtendimentoResumo = {
     id: number;
     nome: string;
   } | null;
+  tags: AtendimentoTagResumo[];
+};
+
+export type AtendimentoTagResumo = {
+  id: number;
+  nome: string;
+  cor: string | null;
 };
 
 export type AtendimentoDetalhe = {
@@ -94,4 +101,24 @@ export type NotificacaoAtendimento = {
   descricao: string;
   lida: boolean;
   criadoEm: string;
+};
+
+export type AtendimentoLembreteStatus = 'PENDENTE' | 'CONCLUIDO' | 'CANCELADO';
+
+export type AtendimentoLembrete = {
+  id: number;
+  atendimentoId: number;
+  mensagem: string;
+  lembrarEm: string;
+  status: AtendimentoLembreteStatus;
+  criadoPorId: number | null;
+  criadoPorNome: string | null;
+  criadoEm: string | null;
+  atualizadoEm: string | null;
+};
+
+export type NovoAtendimentoLembrete = {
+  data: string;
+  hora: string;
+  mensagem: string;
 };

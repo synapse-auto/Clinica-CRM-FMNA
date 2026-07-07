@@ -2,15 +2,19 @@ package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Paciente;
+import com.synapse.clinicafemina.domain.Tag;
 import com.synapse.clinicafemina.domain.TransferenciaAtendimento;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.AtendenteOptionDTO;
 import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
 import com.synapse.clinicafemina.dto.AtendimentoResumoDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
+import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
+import com.synapse.clinicafemina.repository.AtendimentoTagRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
+import com.synapse.clinicafemina.repository.PacienteTagRepository;
 import com.synapse.clinicafemina.repository.TransferenciaAtendimentoRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +25,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -40,6 +46,8 @@ public class AtendimentoService {
     private final TransferenciaAtendimentoRepository transferenciaRepository;
     private final AtendimentoNotificationService notificationService;
     private final RealtimeBroadcastService broadcastService;
+    private final AtendimentoTagRepository atendimentoTagRepository;
+    private final PacienteTagRepository pacienteTagRepository;
 
     @Transactional(readOnly = true)
     public Page<AtendimentoResumoDTO> listar(
@@ -71,7 +79,13 @@ public class AtendimentoService {
                 pageable
         );
         Map<Long, String> previasPorAtendimento = ultimasPrevias(atendimentos.getContent());
-        return atendimentos.map(atendimento -> toResumoDTO(atendimento, previasPorAtendimento));
+        Map<Long, List<TagResponse>> tagsPorAtendimento =
+                tagsDosAtendimentos(atendimentos.getContent(), clinicaId);
+        return atendimentos.map(atendimento -> toResumoDTO(
+                atendimento,
+                previasPorAtendimento,
+                tagsPorAtendimento
+        ));
     }
 
     @Transactional(readOnly = true)
@@ -238,7 +252,8 @@ public class AtendimentoService {
 
     private AtendimentoResumoDTO toResumoDTO(
             Atendimento atendimento,
-            Map<Long, String> previasPorAtendimento
+            Map<Long, String> previasPorAtendimento,
+            Map<Long, List<TagResponse>> tagsPorAtendimento
     ) {
         Paciente paciente = atendimento.getPaciente();
         Usuario atendente = atendimento.getAtendentePrincipal();
@@ -257,7 +272,70 @@ public class AtendimentoService {
                 ),
                 atendente != null
                         ? new AtendimentoResumoDTO.AtendenteDTO(atendente.getId(), atendente.getNome())
-                        : null
+                        : null,
+                tagsPorAtendimento.getOrDefault(atendimento.getId(), List.of())
+        );
+    }
+
+    private Map<Long, List<TagResponse>> tagsDosAtendimentos(List<Atendimento> atendimentos, Long clinicaId) {
+        if (atendimentos.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> atendimentoIds = atendimentos.stream()
+                .map(Atendimento::getId)
+                .toList();
+        Map<Long, LinkedHashMap<Long, TagResponse>> agrupadas = new HashMap<>();
+        for (Object[] linha : atendimentoTagRepository.findTagsByAtendimentoIdsAndClinicaId(
+                atendimentoIds, clinicaId
+        )) {
+            Long atendimentoId = (Long) linha[0];
+            Tag tag = (Tag) linha[1];
+            adicionarTag(agrupadas, atendimentoId, tag);
+        }
+
+        Map<Long, List<Long>> atendimentosPorPaciente = new HashMap<>();
+        for (Atendimento atendimento : atendimentos) {
+            Long pacienteId = atendimento.getPaciente().getId();
+            atendimentosPorPaciente
+                    .computeIfAbsent(pacienteId, ignored -> new ArrayList<>())
+                    .add(atendimento.getId());
+        }
+        for (Object[] linha : pacienteTagRepository.findTagsByPacienteIdsAndClinicaId(
+                atendimentosPorPaciente.keySet(), clinicaId
+        )) {
+            Long pacienteId = (Long) linha[0];
+            Tag tag = (Tag) linha[1];
+            for (Long atendimentoId : atendimentosPorPaciente.getOrDefault(pacienteId, List.of())) {
+                adicionarTag(agrupadas, atendimentoId, tag);
+            }
+        }
+
+        Map<Long, List<TagResponse>> resultado = new HashMap<>();
+        agrupadas.forEach((atendimentoId, tags) ->
+                resultado.put(atendimentoId, new ArrayList<>(tags.values()))
+        );
+        return resultado;
+    }
+
+    private void adicionarTag(
+            Map<Long, LinkedHashMap<Long, TagResponse>> agrupadas,
+            Long atendimentoId,
+            Tag tag
+    ) {
+        agrupadas
+                .computeIfAbsent(atendimentoId, ignored -> new LinkedHashMap<>())
+                .putIfAbsent(tag.getId(), toTagResponse(tag));
+    }
+
+    private TagResponse toTagResponse(Tag tag) {
+        return new TagResponse(
+                tag.getId(),
+                tag.getNome(),
+                tag.getCor(),
+                tag.getDescricao(),
+                Boolean.TRUE.equals(tag.getAtivo()),
+                tag.getCriadoEm(),
+                tag.getAtualizadoEm()
         );
     }
 

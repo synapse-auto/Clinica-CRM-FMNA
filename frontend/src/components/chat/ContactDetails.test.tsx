@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ContactDetails } from './ContactDetails';
-import type { AtendimentoDetalhe } from '@/types/atendimento';
+import type { AtendimentoDetalhe, AtendimentoLembrete } from '@/types/atendimento';
 import type { TagOperacional } from '@/types/operacional';
 
 const detail: AtendimentoDetalhe = {
@@ -40,6 +40,12 @@ const baseProps = {
   onReview: async () => undefined,
   onAddTag: async () => undefined,
   onRemoveTag: async () => undefined,
+  reminders: [],
+  remindersLoading: false,
+  remindersError: null,
+  onCreateReminder: async () => undefined,
+  onConcludeReminder: async () => undefined,
+  onCancelReminder: async () => undefined,
 };
 
 const tags: TagOperacional[] = [
@@ -62,6 +68,18 @@ const tags: TagOperacional[] = [
     atualizadoEm: null,
   },
 ];
+
+const reminder: AtendimentoLembrete = {
+  id: 20,
+  atendimentoId: 1,
+  mensagem: 'Conferir autorizacao do plano',
+  lembrarEm: '2026-07-10T10:00:00Z',
+  status: 'PENDENTE',
+  criadoPorId: 3,
+  criadoPorNome: 'Recepcao',
+  criadoEm: '2026-07-01T10:00:00Z',
+  atualizadoEm: '2026-07-01T10:00:00Z',
+};
 
 describe('ContactDetails', () => {
   it('should_hide_confirmation_when_patient_does_not_require_review', () => {
@@ -137,5 +155,45 @@ describe('ContactDetails', () => {
     );
 
     expect(screen.queryByRole('button', { name: 'Voltar para IA' })).not.toBeInTheDocument();
+  });
+
+  it('should_show_empty_internal_reminders_section', () => {
+    render(<ContactDetails detail={detail} {...baseProps} />);
+
+    expect(screen.getByText('Lembretes')).toBeInTheDocument();
+    expect(screen.getByText('Nenhum lembrete para este atendimento.')).toBeInTheDocument();
+  });
+
+  it('should_create_conclude_and_cancel_internal_reminders', async () => {
+    const user = userEvent.setup();
+    const onCreateReminder = vi.fn();
+    const onConcludeReminder = vi.fn();
+    const onCancelReminder = vi.fn();
+
+    render(
+      <ContactDetails
+        detail={detail}
+        {...baseProps}
+        reminders={[reminder]}
+        onCreateReminder={onCreateReminder}
+        onConcludeReminder={onConcludeReminder}
+        onCancelReminder={onCancelReminder}
+      />,
+    );
+
+    await user.type(screen.getByLabelText('Data do lembrete'), '2026-07-12');
+    await user.type(screen.getByLabelText('Hora do lembrete'), '14:30');
+    await user.type(screen.getByLabelText('Mensagem do lembrete'), 'Retornar com horarios disponiveis');
+    await user.click(screen.getByRole('button', { name: 'Adicionar lembrete' }));
+    await user.click(screen.getByRole('button', { name: 'Concluir lembrete' }));
+    await user.click(screen.getByRole('button', { name: 'Cancelar lembrete' }));
+
+    expect(onCreateReminder).toHaveBeenCalledWith({
+      data: '2026-07-12',
+      hora: '14:30',
+      mensagem: 'Retornar com horarios disponiveis',
+    });
+    expect(onConcludeReminder).toHaveBeenCalledWith(20);
+    expect(onCancelReminder).toHaveBeenCalledWith(20);
   });
 });

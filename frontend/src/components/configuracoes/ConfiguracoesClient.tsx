@@ -27,8 +27,8 @@ export function ConfiguracoesClient({ resumo, error = null }: ConfiguracoesClien
     <div className="h-full overflow-auto bg-clinic-canvas p-4 custom-scrollbar">
       <PageHeader
         icon={<Settings className="h-4 w-4" />}
-        title="Configurações"
-        description="Resumo operacional da clínica, integrações e políticas de acesso"
+        title="Administração"
+        description="Configurações administrativas, integrações e políticas internas do CRM"
       />
 
       {error ? (

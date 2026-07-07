@@ -20,7 +20,8 @@ export const AUTH_MENU_ITEMS: readonly AuthMenuItem[] = [
   { name: 'Tags', href: '/tags', profiles: OPERATIONAL_PROFILES },
   { name: 'Msgs Rápidas', href: '/msgs-rapidas', profiles: OPERATIONAL_PROFILES },
   { name: 'Horários', href: '/horarios', profiles: OPERATIONAL_PROFILES },
-  { name: 'Configurações', href: '/configuracoes', profiles: ['GESTOR'] },
+  { name: 'Administração', href: '/configuracoes', profiles: ['GESTOR'] },
+  { name: 'Minha conta', href: '/minha-conta', profiles: ALL_PROFILES },
 ];
 
 export function menuItemsForProfile(profile: AuthProfile): AuthMenuItem[] {

@@ -7,10 +7,13 @@ import com.synapse.clinicafemina.dto.AtendimentoResumoDTO;
 import com.synapse.clinicafemina.dto.ConvenioReviewRequest;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
+import com.synapse.clinicafemina.dto.atendimento.AtendimentoLembreteRequest;
+import com.synapse.clinicafemina.dto.atendimento.AtendimentoLembreteResponse;
 import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada;
 import com.synapse.clinicafemina.service.AtendimentoService;
+import com.synapse.clinicafemina.service.AtendimentoLembreteService;
 import com.synapse.clinicafemina.service.AtendimentoTagService;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.ConvenioReviewService;
@@ -38,6 +41,7 @@ import java.util.List;
 public class AtendimentoController {
 
     private final AtendimentoService atendimentoService;
+    private final AtendimentoLembreteService atendimentoLembreteService;
     private final AtendimentoTagService atendimentoTagService;
     private final MensagemService mensagemService;
     private final ConvenioReviewService convenioReviewService;
@@ -85,6 +89,40 @@ public class AtendimentoController {
     @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public void removerTag(@PathVariable Long id, @PathVariable Long tagId) {
         atendimentoTagService.remover(id, tagId, clinicaId());
+    }
+
+    @GetMapping("/{id}/lembretes")
+    public List<AtendimentoLembreteResponse> listarLembretes(@PathVariable Long id) {
+        return atendimentoLembreteService.listar(id, clinicaId());
+    }
+
+    @PostMapping("/{id}/lembretes")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
+    public AtendimentoLembreteResponse criarLembrete(
+            @PathVariable Long id,
+            @RequestBody AtendimentoLembreteRequest request,
+            @AuthenticationPrincipal Usuario usuario
+    ) {
+        return atendimentoLembreteService.criar(id, request, clinicaId(), usuario.getId());
+    }
+
+    @PatchMapping("/{id}/lembretes/{lembreteId}/concluir")
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
+    public AtendimentoLembreteResponse concluirLembrete(
+            @PathVariable Long id,
+            @PathVariable Long lembreteId
+    ) {
+        return atendimentoLembreteService.concluir(id, lembreteId, clinicaId());
+    }
+
+    @PatchMapping("/{id}/lembretes/{lembreteId}/cancelar")
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
+    public AtendimentoLembreteResponse cancelarLembrete(
+            @PathVariable Long id,
+            @PathVariable Long lembreteId
+    ) {
+        return atendimentoLembreteService.cancelar(id, lembreteId, clinicaId());
     }
 
     @GetMapping("/{id}/mensagens")

@@ -6,9 +6,13 @@ import {
   adicionarTagAtendimento,
   assumirAtendimento,
   ativarIaAtendimento,
+  cancelarAtendimentoLembrete,
+  concluirAtendimentoLembrete,
+  criarAtendimentoLembrete,
   enviarAnexo,
   enviarMensagem,
   getAtendimento,
+  getAtendimentoLembretes,
   getAtendimentoTags,
   getMensagensRapidasAtivas,
   getMensagens,
@@ -26,8 +30,10 @@ import type {
   AtendenteOption,
   AtendimentoDetalhe,
   AtendimentoFilter,
+  AtendimentoLembrete,
   AtendimentoResumo,
   MensagemAtendimento,
+  NovoAtendimentoLembrete,
 } from '@/types/atendimento';
 import type { MensagemRapida, TagOperacional } from '@/types/operacional';
 import { ChatList } from './ChatList';
@@ -48,6 +54,9 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
   const [quickMessages, setQuickMessages] = useState<MensagemRapida[]>([]);
   const [availableTags, setAvailableTags] = useState<TagOperacional[]>([]);
   const [activeTags, setActiveTags] = useState<TagOperacional[]>([]);
+  const [reminders, setReminders] = useState<AtendimentoLembrete[]>([]);
+  const [remindersLoading, setRemindersLoading] = useState(false);
+  const [remindersError, setRemindersError] = useState<string | null>(null);
   const [filter, setFilter] = useState<AtendimentoFilter>('TODOS');
   const [type, setType] = useState<'TODOS' | 'IA' | 'HUMANO'>('TODOS');
   const [search, setSearch] = useState('');
@@ -72,6 +81,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
   }, [filter, search, type]);
 
   const refreshActive = useCallback(async (id: number) => {
+    setRemindersLoading(true);
     try {
       const [nextDetail, nextMessages, nextTags] = await Promise.all([
         getAtendimento(id),
@@ -82,8 +92,28 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       setMessages(nextMessages);
       setActiveTags(nextTags);
       setError(null);
+      try {
+        setReminders(await getAtendimentoLembretes(id));
+        setRemindersError(null);
+      } catch (cause) {
+        setRemindersError(errorMessage(cause));
+      }
     } catch (cause) {
       setError(errorMessage(cause));
+    } finally {
+      setRemindersLoading(false);
+    }
+  }, []);
+
+  const refreshReminders = useCallback(async (id: number) => {
+    setRemindersLoading(true);
+    try {
+      setReminders(await getAtendimentoLembretes(id));
+      setRemindersError(null);
+    } catch (cause) {
+      setRemindersError(errorMessage(cause));
+    } finally {
+      setRemindersLoading(false);
     }
   }, []);
 
@@ -113,6 +143,8 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       setDetail(null);
       setMessages([]);
       setActiveTags([]);
+      setReminders([]);
+      setRemindersError(null);
       return;
     }
     void marcarAtendimentoComoLido(activeId)
@@ -162,6 +194,20 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       setError(null);
     } catch (cause) {
       setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runReminderAction(action: () => Promise<unknown>) {
+    if (!activeId) return;
+    setBusy(true);
+    try {
+      await action();
+      await refreshReminders(activeId);
+      setError(null);
+    } catch (cause) {
+      setRemindersError(errorMessage(cause));
     } finally {
       setBusy(false);
     }
@@ -219,6 +265,9 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
         atendentes={atendentes}
         tags={activeTags}
         availableTags={availableTags}
+        reminders={reminders}
+        remindersLoading={remindersLoading}
+        remindersError={remindersError}
         canManage={user.perfil !== 'MEDICO'}
         busy={busy}
         onAssume={() => activeId
@@ -238,6 +287,15 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
           : Promise.resolve()}
         onRemoveTag={(tagId) => activeId
           ? runAction(() => removerTagAtendimento(activeId, tagId))
+          : Promise.resolve()}
+        onCreateReminder={(lembrete: NovoAtendimentoLembrete) => activeId
+          ? runReminderAction(() => criarAtendimentoLembrete(activeId, lembrete))
+          : Promise.resolve()}
+        onConcludeReminder={(lembreteId) => activeId
+          ? runReminderAction(() => concluirAtendimentoLembrete(activeId, lembreteId))
+          : Promise.resolve()}
+        onCancelReminder={(lembreteId) => activeId
+          ? runReminderAction(() => cancelarAtendimentoLembrete(activeId, lembreteId))
           : Promise.resolve()}
       />
     </div>

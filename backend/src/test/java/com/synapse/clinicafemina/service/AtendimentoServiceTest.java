@@ -12,6 +12,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,6 +34,8 @@ class AtendimentoServiceTest {
     @Mock private TransferenciaAtendimentoRepository transferenciaRepository;
     @Mock private AtendimentoNotificationService notificationService;
     @Mock private RealtimeBroadcastService broadcastService;
+    @Mock private AtendimentoTagRepository atendimentoTagRepository;
+    @Mock private PacienteTagRepository pacienteTagRepository;
 
     private AtendimentoService service;
     private Atendimento atendimento;
@@ -46,7 +49,9 @@ class AtendimentoServiceTest {
                 usuarioRepository,
                 transferenciaRepository,
                 notificationService,
-                broadcastService
+                broadcastService,
+                atendimentoTagRepository,
+                pacienteTagRepository
         );
         clinica = new Clinica();
         clinica.setId(1L);
@@ -102,6 +107,49 @@ class AtendimentoServiceTest {
         assertEquals(2, result.getTotalElements());
         verify(mensagemRepository, never()).findFirstByAtendimentoIdOrderByDataHoraDesc(3L);
         verify(mensagemRepository, never()).findFirstByAtendimentoIdOrderByDataHoraDesc(4L);
+    }
+
+    @Test
+    void should_list_atendimentos_with_real_tags_in_batch() {
+        Atendimento segundoAtendimento = new Atendimento();
+        segundoAtendimento.setId(4L);
+        segundoAtendimento.setClinica(clinica);
+        Paciente outroPaciente = new Paciente();
+        outroPaciente.setId(5L);
+        outroPaciente.setClinica(clinica);
+        outroPaciente.setNome("Outra Paciente");
+        outroPaciente.setNomeBusca("OUTRA PACIENTE");
+        outroPaciente.setTelefoneNormalizado("5544888888888");
+        outroPaciente.setRequerRevisao(false);
+        segundoAtendimento.setPaciente(outroPaciente);
+        segundoAtendimento.setStatus("ATIVO");
+        segundoAtendimento.setTratadoPorIa(false);
+        segundoAtendimento.setNaoLidas(0);
+
+        Tag tagAtendimento = criarTag(100L, "Retorno", "#0d9488");
+        Tag tagPaciente = criarTag(101L, "Particular", "#f97316");
+
+        when(atendimentoRepository.findByClinica(
+                eq(1L), isNull(), isNull(), isNull(),
+                eq(false), eq(false), eq(false), eq(""), any()
+        )).thenReturn(new PageImpl<>(List.of(atendimento, segundoAtendimento)));
+        when(atendimentoTagRepository.findTagsByAtendimentoIdsAndClinicaId(any(Collection.class), eq(1L)))
+                .thenReturn(List.<Object[]>of(new Object[] {3L, tagAtendimento}));
+        when(pacienteTagRepository.findTagsByPacienteIdsAndClinicaId(any(Collection.class), eq(1L)))
+                .thenReturn(List.<Object[]>of(new Object[] {2L, tagPaciente}));
+
+        var result = service.listar(
+                1L, null, "TODOS", "TODOS", null, null, PageRequest.of(0, 20)
+        );
+
+        var tags = result.getContent().getFirst().tags();
+        assertEquals(2, tags.size());
+        assertTrue(tags.stream().anyMatch(tag -> tag.nome().equals("Retorno")));
+        assertTrue(tags.stream().anyMatch(tag -> tag.nome().equals("Particular")));
+        verify(atendimentoTagRepository).findTagsByAtendimentoIdsAndClinicaId(any(Collection.class), eq(1L));
+        verify(pacienteTagRepository).findTagsByPacienteIdsAndClinicaId(any(Collection.class), eq(1L));
+        verify(atendimentoTagRepository, never()).findTagsByAtendimentoIdAndClinicaId(anyLong(), anyLong());
+        verify(pacienteTagRepository, never()).findTagsByPacienteIdAndClinicaId(anyLong(), anyLong());
     }
 
     @Test
@@ -192,5 +240,15 @@ class AtendimentoServiceTest {
 
         assertEquals(0, total);
         verify(atendimentoRepository, never()).save(any());
+    }
+
+    private Tag criarTag(Long id, String nome, String cor) {
+        Tag tag = new Tag();
+        tag.setId(id);
+        tag.setClinica(clinica);
+        tag.setNome(nome);
+        tag.setCor(cor);
+        tag.setAtivo(true);
+        return tag;
     }
 }

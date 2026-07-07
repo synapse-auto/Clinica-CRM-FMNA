@@ -19,26 +19,30 @@ describe('auth permissions', () => {
       '/equipe',
       '/automacao-ia',
       '/configuracoes',
+      '/minha-conta',
     ]) {
       expect(isRouteAllowed('GESTOR', route)).toBe(true);
     }
   });
 
-  it('should_limit_receptionist_to_operational_routes', () => {
+  it('should_limit_receptionist_to_operational_routes_and_account', () => {
     expect(isRouteAllowed('RECEPCIONISTA', '/pacientes')).toBe(true);
     expect(isRouteAllowed('RECEPCIONISTA', '/horarios')).toBe(true);
     expect(isRouteAllowed('RECEPCIONISTA', '/equipe')).toBe(false);
     expect(isRouteAllowed('RECEPCIONISTA', '/automacao-ia')).toBe(false);
     expect(isRouteAllowed('RECEPCIONISTA', '/configuracoes')).toBe(false);
+    expect(isRouteAllowed('RECEPCIONISTA', '/minha-conta')).toBe(true);
   });
 
-  it('should_limit_doctor_to_dashboard_conversations_and_agenda', () => {
+  it('should_limit_doctor_to_dashboard_conversations_agenda_and_account', () => {
     expect(menuItemsForProfile('MEDICO').map((item) => item.href)).toEqual([
       '/atendimentos',
       '/dashboard',
       '/agenda',
+      '/minha-conta',
     ]);
     expect(isRouteAllowed('MEDICO', '/pacientes')).toBe(false);
+    expect(isRouteAllowed('MEDICO', '/configuracoes')).toBe(false);
   });
 
   it('should_choose_an_allowed_default_route_for_each_profile', () => {
@@ -50,5 +54,16 @@ describe('auth permissions', () => {
   it('should_force_password_change_before_profile_default_route', () => {
     expect(routeAfterAuthentication('GESTOR', true)).toBe('/alterar-senha');
     expect(routeAfterAuthentication('MEDICO', false)).toBe('/agenda');
+  });
+
+  it('should_show_account_for_all_profiles_and_administration_only_for_manager', () => {
+    expect(menuItemsForProfile('GESTOR').map((item) => item.href)).toContain('/configuracoes');
+    expect(menuItemsForProfile('GESTOR').map((item) => item.href)).toContain('/minha-conta');
+
+    expect(menuItemsForProfile('RECEPCIONISTA').map((item) => item.href)).not.toContain('/configuracoes');
+    expect(menuItemsForProfile('RECEPCIONISTA').map((item) => item.href)).toContain('/minha-conta');
+
+    expect(menuItemsForProfile('MEDICO').map((item) => item.href)).not.toContain('/configuracoes');
+    expect(menuItemsForProfile('MEDICO').map((item) => item.href)).toContain('/minha-conta');
   });
 });

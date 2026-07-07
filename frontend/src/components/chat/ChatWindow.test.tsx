@@ -28,6 +28,42 @@ const detail: AtendimentoDetalhe = {
 };
 
 describe('ChatWindow', () => {
+  it('should_show_ai_attendance_label_in_header', () => {
+    render(
+      <ChatWindow
+        detail={{ ...detail, tratadoPorIa: true }}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText(/Atendido por IA/)).toBeInTheDocument();
+  });
+
+  it('should_show_human_attendant_name_in_header', () => {
+    render(
+      <ChatWindow
+        detail={{
+          ...detail,
+          tratadoPorIa: false,
+          atendentePrincipal: { id: 50, nome: 'Ana Lima', perfil: 'RECEPCIONISTA' },
+        }}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText(/Atendido por Ana Lima/)).toBeInTheDocument();
+  });
+
   it('should_not_render_quick_action_buttons_above_message_input', () => {
     render(
       <ChatWindow

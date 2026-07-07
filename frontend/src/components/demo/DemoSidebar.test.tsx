@@ -22,7 +22,7 @@ vi.mock('@/components/theme/ThemeProvider', () => ({
 }));
 
 const clinic = {
-  nome: 'Clínica Femina',
+  nome: 'Clinica Femina',
   slug: 'clinica-femina',
   tipoClinica: 'PRE_NATAL' as const,
   usaCirurgiasNaAgenda: true,
@@ -52,9 +52,33 @@ describe('DemoSidebar', () => {
     );
 
     expect(screen.getByText('Agenda')).toBeInTheDocument();
+    expect(screen.getByText('Minha conta')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Dra. Ana/ })).toHaveAttribute('href', '/minha-conta');
     expect(screen.queryByText('Pacientes')).not.toBeInTheDocument();
     expect(screen.queryByText('Equipe')).not.toBeInTheDocument();
-    expect(screen.queryByText('Configurações')).not.toBeInTheDocument();
+    expect(screen.queryByText('Administração')).not.toBeInTheDocument();
+  });
+
+  it('should_show_administration_only_for_manager_and_account_for_all_profiles', () => {
+    const { rerender } = render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false }}
+      />,
+    );
+
+    expect(screen.getByText('Administração')).toBeInTheDocument();
+    expect(screen.getByText('Minha conta')).toBeInTheDocument();
+
+    rerender(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 2, nome: 'Recepcao', email: 'recepcao@clinica.local', perfil: 'RECEPCIONISTA', clinicaId: 7, mustChangePassword: false }}
+      />,
+    );
+
+    expect(screen.queryByText('Administração')).not.toBeInTheDocument();
+    expect(screen.getByText('Minha conta')).toBeInTheDocument();
   });
 
   it('should_logout_and_redirect_to_login', async () => {

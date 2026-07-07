@@ -2,9 +2,11 @@ import type {
   AtendenteOption,
   AtendimentoDetalhe,
   AtendimentoFilter,
+  AtendimentoLembrete,
   AtendimentoPage,
   AtendimentoResumo,
   MensagemAtendimento,
+  NovoAtendimentoLembrete,
   NotificacaoAtendimento,
 } from '@/types/atendimento';
 import type { MensagemRapida, TagOperacional } from '@/types/operacional';
@@ -62,6 +64,38 @@ export function adicionarTagAtendimento(id: number, tagId: number): Promise<TagO
 
 export function removerTagAtendimento(id: number, tagId: number): Promise<void> {
   return requestVoid(`/api/atendimentos/${id}/tags/${tagId}`, { method: 'DELETE' });
+}
+
+export function getAtendimentoLembretes(id: number): Promise<AtendimentoLembrete[]> {
+  return requestJson(`/api/atendimentos/${id}/lembretes`);
+}
+
+export function criarAtendimentoLembrete(
+  id: number,
+  lembrete: NovoAtendimentoLembrete,
+): Promise<AtendimentoLembrete> {
+  return requestJson(`/api/atendimentos/${id}/lembretes`, {
+    method: 'POST',
+    body: JSON.stringify(lembrete),
+  });
+}
+
+export function concluirAtendimentoLembrete(
+  id: number,
+  lembreteId: number,
+): Promise<AtendimentoLembrete> {
+  return requestJson(`/api/atendimentos/${id}/lembretes/${lembreteId}/concluir`, {
+    method: 'PATCH',
+  });
+}
+
+export function cancelarAtendimentoLembrete(
+  id: number,
+  lembreteId: number,
+): Promise<AtendimentoLembrete> {
+  return requestJson(`/api/atendimentos/${id}/lembretes/${lembreteId}/cancelar`, {
+    method: 'PATCH',
+  });
 }
 
 export function enviarMensagem(id: number, conteudo: string): Promise<MensagemAtendimento> {

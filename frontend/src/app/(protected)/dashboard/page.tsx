@@ -244,8 +244,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <div className="px-4 pb-4">
             <EmptyState
               icon={RefreshCw}
-              title="Em configuração"
-              description="A automação de follow-up será habilitada em uma próxima etapa."
+              title="Réguas de relacionamento"
+              description="Configure follow-ups, lembretes e mensagens festivas na área de Automação."
             />
           </div>
         </DemoCard>
@@ -261,7 +261,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </p>
             <p className="mt-2 text-[11px] font-bold text-clinic-text">Taxa de fidelização</p>
             <p className="mt-1 text-[9px] text-clinic-muted">
-              Detalhamento por origem em configuração.
+              Indicador calculado a partir dos retornos registrados.
             </p>
           </div>
         </DemoCard>

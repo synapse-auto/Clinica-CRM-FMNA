@@ -128,6 +128,24 @@ class AuthSecurityIntegrationTest {
     }
 
     @Test
+    void should_allow_only_manager_to_access_administrative_configuration_summary() throws Exception {
+        mockMvc.perform(get("/api/configuracoes/resumo")
+                        .header("Authorization", "Bearer " + login(gestorEmail, senha, false)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.identidade.slug").value("auth-test"))
+                .andExpect(jsonPath("$.token").doesNotExist())
+                .andExpect(jsonPath("$.senha").doesNotExist());
+
+        mockMvc.perform(get("/api/configuracoes/resumo")
+                        .header("Authorization", "Bearer " + login(recepcionistaEmail, senha, false)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/configuracoes/resumo")
+                        .header("Authorization", "Bearer " + login(medicoEmail, senha, false)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void should_return_unauthorized_when_calling_me_without_token() throws Exception {
         mockMvc.perform(get("/api/auth/me"))
                 .andExpect(status().isUnauthorized());
@@ -211,6 +229,27 @@ class AuthSecurityIntegrationTest {
                                   "servicoNome": "Consulta"
                                 }
                                 """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void should_forbid_doctor_from_mutating_internal_atendimento_reminders() throws Exception {
+        String token = login(medicoEmail, senha, false);
+
+        mockMvc.perform(post("/api/atendimentos/30/lembretes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "data":"2026-07-10",
+                                  "hora":"10:00",
+                                  "mensagem":"Ligar para paciente"
+                                }
+                                """))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(patch("/api/atendimentos/30/lembretes/7/concluir")
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
     }
 

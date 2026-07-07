@@ -76,6 +76,9 @@ export function ChatList(props: Props) {
           </p>
         ) : props.conversations.map((chat) => {
           const active = chat.id === props.activeId;
+          const attendanceLabel = getAttendanceLabel(chat);
+          const visibleTags = chat.tags.slice(0, 2);
+          const hiddenTags = Math.max(chat.tags.length - visibleTags.length, 0);
           return (
             <button
               type="button"
@@ -100,7 +103,10 @@ export function ChatList(props: Props) {
                   <p className="truncate text-[9px] leading-4 text-clinic-muted">
                     {chat.ultimaMensagemPrevia || 'Sem mensagens'}
                   </p>
-                  <div className="mt-1.5 flex items-center gap-1 text-[8px]">
+                  <p className="mt-0.5 truncate text-[8px] font-semibold text-clinic-muted">
+                    {attendanceLabel}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[8px]">
                     <span className="rounded bg-clinic-blue/10 px-1.5 py-0.5 font-bold text-clinic-blue">
                       {chat.tratadoPorIa ? 'IA' : 'Humano'}
                     </span>
@@ -115,6 +121,27 @@ export function ChatList(props: Props) {
                       </span>
                     ) : null}
                   </div>
+                  {visibleTags.length > 0 ? (
+                    <div className="mt-1.5 flex max-w-full flex-wrap gap-1 overflow-hidden">
+                      {visibleTags.map((tag) => (
+                        <span
+                          key={tag.id}
+                          className="inline-flex max-w-[92px] items-center gap-1 rounded-full border border-clinic-border bg-clinic-soft px-1.5 py-0.5 text-[8px] font-bold text-clinic-text"
+                        >
+                          <span
+                            className="h-1.5 w-1.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: tag.cor ?? '#64748b' }}
+                          />
+                          <span className="truncate">{tag.nome}</span>
+                        </span>
+                      ))}
+                      {hiddenTags > 0 ? (
+                        <span className="rounded-full border border-clinic-border bg-clinic-soft px-1.5 py-0.5 text-[8px] font-bold text-clinic-muted">
+                          +{hiddenTags}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </button>
@@ -123,6 +150,12 @@ export function ChatList(props: Props) {
       </div>
     </aside>
   );
+}
+
+function getAttendanceLabel(chat: AtendimentoResumo) {
+  if (chat.tratadoPorIa) return 'Atendido por IA';
+  if (chat.atendentePrincipal) return `Atendido por ${chat.atendentePrincipal.nome}`;
+  return 'Humano sem responsável';
 }
 
 function Avatar({ name }: { name: string }) {

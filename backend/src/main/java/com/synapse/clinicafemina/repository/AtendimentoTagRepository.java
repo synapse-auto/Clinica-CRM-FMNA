@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.repository;
 import com.synapse.clinicafemina.domain.AtendimentoTag;
 import com.synapse.clinicafemina.domain.AtendimentoTagId;
 import com.synapse.clinicafemina.domain.Tag;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -22,6 +23,20 @@ public interface AtendimentoTagRepository extends JpaRepository<AtendimentoTag, 
             """)
     List<Tag> findTagsByAtendimentoIdAndClinicaId(
             @Param("atendimentoId") Long atendimentoId,
+            @Param("clinicaId") Long clinicaId
+    );
+
+    @Query("""
+            SELECT vinculo.atendimento.id, vinculo.tag
+            FROM AtendimentoTag vinculo
+            WHERE vinculo.atendimento.id IN :atendimentoIds
+              AND vinculo.atendimento.clinica.id = :clinicaId
+              AND vinculo.tag.clinica.id = :clinicaId
+              AND vinculo.tag.deletadoEm IS NULL
+            ORDER BY vinculo.atendimento.id ASC, vinculo.tag.nome ASC
+            """)
+    List<Object[]> findTagsByAtendimentoIdsAndClinicaId(
+            @Param("atendimentoIds") Collection<Long> atendimentoIds,
             @Param("clinicaId") Long clinicaId
     );
 

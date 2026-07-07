@@ -52,10 +52,10 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
               {detail.paciente.nome}
             </h2>
             <p className="truncate text-[9px] text-clinic-muted">
-              {detail.paciente.telefone} · {detail.tratadoPorIa ? 'Atendimento por IA' : (
+              {detail.paciente.telefone} · {detail.tratadoPorIa ? 'Atendido por IA' : (
                 detail.atendentePrincipal
                   ? `Atendido por ${detail.atendentePrincipal.nome}`
-                  : 'Aguardando atendente'
+                  : 'Humano sem responsável'
               )}
             </p>
           </div>
