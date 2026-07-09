@@ -313,10 +313,11 @@ public class ExternalSyncService {
         if (dto.payload() != null) {
             Object medicoNomeObj = dto.payload().get("medicoNome");
             if (medicoNomeObj instanceof String medicoNome && !medicoNome.isBlank()) {
-                List<Usuario> medicos = usuarioRepository.findMedicosAtivosByClinicaIdAndNome(clinica.getId(), medicoNome);
-                if (!medicos.isEmpty()) {
-                    agendamento.setMedico(medicos.get(0));
-                }
+                List<Usuario> medicos = usuarioRepository.findMedicosAtivosByClinicaId(clinica.getId());
+                medicos.stream()
+                        .filter(m -> medicoNome.equalsIgnoreCase(m.getNome()))
+                        .findFirst()
+                        .ifPresent(agendamento::setMedico);
             }
         }
 
