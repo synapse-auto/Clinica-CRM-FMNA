@@ -7,6 +7,7 @@ export type PacienteResumo = {
   status: string;
   externalSource: string | null;
   externalId: string | null;
+  fotoUrl: string | null;
   criadoEm: string;
   ultimaInteracaoEm: string | null;
   tags: TagOperacional[];

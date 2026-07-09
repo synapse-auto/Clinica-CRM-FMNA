@@ -473,6 +473,7 @@ class AuthSecurityIntegrationTest {
                         null,
                         "EM_ATENDIMENTO",
                         null,
+                        null,
                         false,
                         null,
                         null,

@@ -24,6 +24,7 @@ export type AtendimentoResumo = {
     id: number;
     nomeBusca: string;
     telefoneNormalizado: string;
+    fotoUrl: string | null;
   };
   atendentePrincipal: {
     id: number;
@@ -51,6 +52,7 @@ export type AtendimentoDetalhe = {
     telefone: string;
     email: string | null;
     status: string;
+    fotoUrl: string | null;
     ultimaInteracaoEm: string | null;
     requerRevisao: boolean;
     convenioStatus: string | null;

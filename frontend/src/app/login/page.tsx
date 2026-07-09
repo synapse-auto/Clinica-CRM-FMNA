@@ -1,4 +1,4 @@
-import { Stethoscope } from 'lucide-react';
+import Image from 'next/image';
 import { redirect } from 'next/navigation';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { routeAfterAuthentication } from '@/lib/auth/permissions';
@@ -12,8 +12,8 @@ export default async function LoginPage() {
     <main className="flex min-h-dvh items-center justify-center bg-clinic-canvas px-4 py-10">
       <section className="w-full max-w-[410px] rounded-2xl border border-clinic-border bg-clinic-surface p-7 shadow-xl shadow-black/5">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-clinic-primary text-white">
-            <Stethoscope className="h-6 w-6" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white p-1 shadow-sm">
+            <Image src="/ultramedical-logo.png" alt="UltraMedical" width={40} height={40} className="object-contain" />
           </div>
           <div>
             <h1 className="text-lg font-extrabold text-clinic-text">Acesso ao CRM</h1>

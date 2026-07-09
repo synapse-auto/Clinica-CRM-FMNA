@@ -268,7 +268,7 @@ public class AtendimentoService {
                 paciente.getRequerRevisao(),
                 paciente.getConvenioStatus(),
                 new AtendimentoResumoDTO.PacienteResumoDTO(
-                        paciente.getId(), paciente.getNomeBusca(), paciente.getTelefoneNormalizado()
+                        paciente.getId(), paciente.getNomeBusca(), paciente.getTelefoneNormalizado(), paciente.getFotoUrl()
                 ),
                 atendente != null
                         ? new AtendimentoResumoDTO.AtendenteDTO(atendente.getId(), atendente.getNome())
@@ -356,6 +356,7 @@ public class AtendimentoService {
                         paciente.getTelefone(),
                         paciente.getEmail(),
                         paciente.getStatus(),
+                        paciente.getFotoUrl(),
                         paciente.getUltimaInteracaoEm(),
                         paciente.getRequerRevisao(),
                         paciente.getConvenioStatus(),

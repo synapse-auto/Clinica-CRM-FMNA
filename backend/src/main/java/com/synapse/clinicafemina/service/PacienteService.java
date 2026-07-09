@@ -63,6 +63,7 @@ public class PacienteService {
                 paciente.getStatus(),
                 paciente.getExternalSource(),
                 paciente.getExternalId(),
+                paciente.getFotoUrl(),
                 toOffsetDateTime(paciente.getCriadoEm()),
                 toOffsetDateTime(paciente.getUltimaInteracaoEm()),
                 tagsPorPaciente.getOrDefault(paciente.getId(), List.of())

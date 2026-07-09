@@ -147,6 +147,7 @@ class AtendimentoControllerTest {
                                 null,
                                 "EM_ATENDIMENTO",
                                 null,
+                                null,
                                 false,
                                 null,
                                 null,

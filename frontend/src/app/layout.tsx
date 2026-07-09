@@ -23,8 +23,7 @@ const themeInitializationScript = `
   (() => {
     try {
       const storedTheme = localStorage.getItem('clinica-crm-theme');
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      const theme = storedTheme === 'dark' || storedTheme === 'light' ? storedTheme : systemTheme;
+      const theme = storedTheme === 'dark' || storedTheme === 'light' ? storedTheme : 'light';
       document.documentElement.classList.toggle('dark', theme === 'dark');
       document.documentElement.dataset.theme = theme;
       document.documentElement.style.colorScheme = theme;

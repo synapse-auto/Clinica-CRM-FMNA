@@ -13,7 +13,6 @@ import {
   MessageSquare,
   Moon,
   Settings,
-  Stethoscope,
   Sun,
   Tag,
   UserCircle,
@@ -21,12 +20,12 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
+import Image from 'next/image';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { menuItemsForProfile } from '@/lib/auth/permissions';
 import type { AuthUser } from '@/lib/auth/types';
 import type { ClinicaAtualResponse } from '@/types/dashboard';
 import { getNotificacoesResumo } from '@/services/atendimentos';
-
 const menuIcons = {
   '/atendimentos': MessageSquare,
   '/dashboard': LayoutDashboard,
@@ -88,8 +87,8 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
   return (
     <aside className="flex h-screen w-[244px] shrink-0 flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-[80px] items-center gap-3 border-b border-sidebar-border px-5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-sidebar-primary/25 bg-sidebar-accent text-sidebar-primary">
-          <Stethoscope className="h-5 w-5" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white p-1">
+          <Image src="/ultramedical-logo.png" alt="UltraMedical" width={32} height={32} className="object-contain" />
         </div>
         <div className="min-w-0">
           <p className="truncate text-[15px] font-bold leading-tight text-white">{clinic.nome}</p>

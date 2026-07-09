@@ -522,6 +522,16 @@ public class WhatsappInboundMapper {
     private Paciente criarPaciente(Clinica clinica, String telefone, Map<String, Object> contato) {
         Map<String, Object> perfil = (Map<String, Object>) contato.get("profile");
         String nome = perfil == null ? "Contato WhatsApp" : String.valueOf(perfil.get("name"));
+
+        String fotoUrl = null;
+        if (perfil != null) {
+            if (perfil.get("picture") != null) {
+                fotoUrl = String.valueOf(perfil.get("picture"));
+            } else if (perfil.get("avatar") != null) {
+                fotoUrl = String.valueOf(perfil.get("avatar"));
+            }
+        }
+
         Paciente paciente = new Paciente();
         paciente.setClinica(clinica);
         paciente.setNome(nome);
@@ -530,6 +540,7 @@ public class WhatsappInboundMapper {
         paciente.setTelefoneNormalizado(telefone);
         paciente.setExternalSource(ExternalProviderType.WHATSAPP);
         paciente.setExternalId(telefone);
+        paciente.setFotoUrl(fotoUrl);
         paciente.setStatus("EM_ATENDIMENTO");
         return paciente;
     }

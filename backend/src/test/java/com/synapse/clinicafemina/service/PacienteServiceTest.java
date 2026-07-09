@@ -248,6 +248,11 @@ class PacienteServiceTest {
             public Instant getUltimaInteracaoEm() {
                 return ultimaInteracaoEm;
             }
+
+            @Override
+            public String getFotoUrl() {
+                return null;
+            }
         };
     }
 }

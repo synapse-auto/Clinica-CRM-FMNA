@@ -21,6 +21,6 @@ public record AtendimentoResumoDTO(
         AtendenteDTO atendentePrincipal,
         List<TagResponse> tags
 ) {
-    public record PacienteResumoDTO(Long id, String nomeBusca, String telefoneNormalizado) {}
+    public record PacienteResumoDTO(Long id, String nomeBusca, String telefoneNormalizado, String fotoUrl) {}
     public record AtendenteDTO(Long id, String nome) {}
 }

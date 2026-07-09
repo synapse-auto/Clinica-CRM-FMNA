@@ -28,6 +28,8 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
 
         String getExternalId();
 
+        String getFotoUrl();
+
         Instant getCriadoEm();
 
         Instant getUltimaInteracaoEm();

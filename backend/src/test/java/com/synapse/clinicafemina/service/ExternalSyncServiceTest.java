@@ -57,6 +57,9 @@ class ExternalSyncServiceTest {
     @Mock
     private AgendamentoRepository agendamentoRepository;
 
+    @Mock
+    private com.synapse.clinicafemina.repository.UsuarioRepository usuarioRepository;
+
     private ExternalSyncService service;
     private Clinica clinica;
 
@@ -67,6 +70,7 @@ class ExternalSyncServiceTest {
                 syncLogRepository,
                 pacienteRepository,
                 agendamentoRepository,
+                usuarioRepository,
                 new ObjectMapper(),
                 100
         );

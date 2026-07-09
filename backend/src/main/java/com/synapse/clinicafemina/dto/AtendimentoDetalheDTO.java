@@ -23,6 +23,7 @@ public record AtendimentoDetalheDTO(
             String telefone,
             String email,
             String status,
+            String fotoUrl,
             OffsetDateTime ultimaInteracaoEm,
             Boolean requerRevisao,
             String convenioStatus,

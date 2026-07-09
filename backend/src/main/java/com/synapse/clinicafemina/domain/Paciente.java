@@ -48,6 +48,9 @@ public class Paciente {
     @Column(name = "email_hash", length = 64)
     private String emailHash;
 
+    @Column(name = "foto_url", length = 500)
+    private String fotoUrl;
+
     @Column(nullable = false)
     @Convert(converter = AesGcmConverter.class)
     private String telefone;

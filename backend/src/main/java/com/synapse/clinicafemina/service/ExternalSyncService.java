@@ -17,6 +17,8 @@ import com.synapse.clinicafemina.integration.external.PageResult;
 import com.synapse.clinicafemina.repository.AgendamentoRepository;
 import com.synapse.clinicafemina.repository.IntegrationSyncLogRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
+import com.synapse.clinicafemina.repository.UsuarioRepository;
+import com.synapse.clinicafemina.domain.Usuario;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -52,6 +54,7 @@ public class ExternalSyncService {
     private final IntegrationSyncLogRepository syncLogRepository;
     private final PacienteRepository pacienteRepository;
     private final AgendamentoRepository agendamentoRepository;
+    private final UsuarioRepository usuarioRepository;
     private final ObjectMapper objectMapper;
     private final int pageSize;
 
@@ -60,12 +63,14 @@ public class ExternalSyncService {
             IntegrationSyncLogRepository syncLogRepository,
             PacienteRepository pacienteRepository,
             AgendamentoRepository agendamentoRepository,
+            UsuarioRepository usuarioRepository,
             ObjectMapper objectMapper,
             @Value("${app.integrations.page-size:100}") int pageSize) {
         this.providerFactory = providerFactory;
         this.syncLogRepository = syncLogRepository;
         this.pacienteRepository = pacienteRepository;
         this.agendamentoRepository = agendamentoRepository;
+        this.usuarioRepository = usuarioRepository;
         this.objectMapper = objectMapper;
         this.pageSize = pageSize;
     }
@@ -304,6 +309,17 @@ public class ExternalSyncService {
         agendamento.setCanceladoEm(dto.canceledAt());
         agendamento.setMotivoCancelamento(dto.cancellationReason());
         agendamento.setExternalPayload(toJson(dto.payload()));
+
+        if (dto.payload() != null) {
+            Object medicoNomeObj = dto.payload().get("medicoNome");
+            if (medicoNomeObj instanceof String medicoNome && !medicoNome.isBlank()) {
+                List<Usuario> medicos = usuarioRepository.findMedicosAtivosByClinicaIdAndNome(clinica.getId(), medicoNome);
+                if (!medicos.isEmpty()) {
+                    agendamento.setMedico(medicos.get(0));
+                }
+            }
+        }
+
         agendamentoRepository.save(agendamento);
         return created;
     }

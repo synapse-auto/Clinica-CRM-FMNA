@@ -15,6 +15,7 @@ public record PacienteResumoDTO(
         String status,
         String externalSource,
         String externalId,
+        String fotoUrl,
         OffsetDateTime criadoEm,
         OffsetDateTime ultimaInteracaoEm,
         List<TagResponse> tags

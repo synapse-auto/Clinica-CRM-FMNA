@@ -325,6 +325,7 @@ class N8nAtendimentoControllerTest {
                 null,
                 "EM_ATENDIMENTO",
                 null,
+                null,
                 false,
                 null,
                 null,

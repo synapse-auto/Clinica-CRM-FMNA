@@ -90,7 +90,7 @@ export function ChatList(props: Props) {
             >
               {active ? <span className="absolute inset-y-0 left-0 w-1 bg-clinic-primary" /> : null}
               <div className="flex gap-2.5">
-                <Avatar name={chat.paciente.nomeBusca} />
+                <Avatar name={chat.paciente.nomeBusca} url={chat.paciente.fotoUrl} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <h2 className="truncate text-[11px] font-extrabold text-clinic-text">
@@ -158,12 +158,25 @@ function getAttendanceLabel(chat: AtendimentoResumo) {
   return 'Humano sem responsável';
 }
 
-function Avatar({ name }: { name: string }) {
+function Avatar({ name, url }: { name: string; url?: string | null }) {
   const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('');
   return (
-    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-clinic-primary/15 text-xs font-extrabold text-clinic-primary">
-      {initials}
-    </span>
+    <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-clinic-primary/15 text-xs font-extrabold text-clinic-primary">
+      {url ? (
+        <img
+          src={url}
+          alt={name}
+          className="absolute inset-0 h-full w-full rounded-full object-cover"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+            if (e.currentTarget.nextElementSibling) {
+              (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'block';
+            }
+          }}
+        />
+      ) : null}
+      <span style={{ display: url ? 'none' : 'block' }}>{initials}</span>
+    </div>
   );
 }
 
