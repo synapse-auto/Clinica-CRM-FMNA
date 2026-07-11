@@ -132,12 +132,67 @@ class DataSeederTest {
         when(clinicaRepository.findBySlug("fmna")).thenReturn(Optional.of(clinica));
         when(usuarioRepository.findByEmail("gestor@local.test")).thenReturn(Optional.of(existing));
         when(passwordEncoder.encode("NovaSenha2026")).thenReturn("$2a$12$new");
+        ReflectionTestUtils.setField(seeder, "allowPasswordReset", true);
 
         seeder.run();
 
         verify(usuarioRepository).save(existing);
         assertEquals("$2a$12$new", existing.getSenhaHash());
         assertTrue(existing.getMustChangePassword());
+    }
+
+    @Test
+    void should_block_existing_password_reset_in_production_even_with_opt_in() {
+        Clinica clinica = clinic();
+        Gestor existing = new Gestor();
+        existing.setSenhaHash("$2a$12$existing");
+        existing.setMustChangePassword(false);
+        DataSeeder seeder = seeder(true, """
+                [{
+                  "nome": "Gestor",
+                  "email": "gestor@local.test",
+                  "perfil": "GESTOR",
+                  "password": "NovaSenha2026",
+                  "resetPassword": true
+                }]
+                """);
+        ReflectionTestUtils.setField(seeder, "allowPasswordReset", true);
+        ReflectionTestUtils.setField(seeder, "applicationEnvironment", "producao");
+
+        when(clinicaRepository.findBySlug("fmna")).thenReturn(Optional.of(clinica));
+        when(usuarioRepository.findByEmail("gestor@local.test")).thenReturn(Optional.of(existing));
+
+        seeder.run();
+
+        verify(passwordEncoder, never()).encode(anyString());
+        verify(usuarioRepository, never()).save(any());
+        assertEquals("$2a$12$existing", existing.getSenhaHash());
+        assertFalse(existing.getMustChangePassword());
+    }
+
+    @Test
+    void should_require_explicit_opt_in_before_resetting_existing_password_outside_production() {
+        Clinica clinica = clinic();
+        Gestor existing = new Gestor();
+        existing.setSenhaHash("$2a$12$existing");
+        DataSeeder seeder = seeder(true, """
+                [{
+                  "nome": "Gestor",
+                  "email": "gestor@local.test",
+                  "perfil": "GESTOR",
+                  "password": "NovaSenha2026",
+                  "resetPassword": true
+                }]
+                """);
+
+        when(clinicaRepository.findBySlug("fmna")).thenReturn(Optional.of(clinica));
+        when(usuarioRepository.findByEmail("gestor@local.test")).thenReturn(Optional.of(existing));
+
+        seeder.run();
+
+        verify(passwordEncoder, never()).encode(anyString());
+        verify(usuarioRepository, never()).save(any());
+        assertEquals("$2a$12$existing", existing.getSenhaHash());
     }
 
     @Test
@@ -199,6 +254,8 @@ class DataSeederTest {
         ReflectionTestUtils.setField(seeder, "initialUsersEnabled", enabled);
         ReflectionTestUtils.setField(seeder, "initialUsersJson", json);
         ReflectionTestUtils.setField(seeder, "clinicSlug", "fmna");
+        ReflectionTestUtils.setField(seeder, "applicationEnvironment", "teste");
+        ReflectionTestUtils.setField(seeder, "allowPasswordReset", false);
         return seeder;
     }
 

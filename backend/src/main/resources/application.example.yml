@@ -5,6 +5,7 @@ spring:
     password: changeme
 
 app:
+  environment: teste
   clinic:
     slug: fmna
     name: Clínica Femina CRM
@@ -21,6 +22,7 @@ app:
   initial-users:
     enabled: true
     json: '${INITIAL_USERS_JSON:[]}'
+    allow-password-reset: false
 
   rabbitmq:
     username: guest

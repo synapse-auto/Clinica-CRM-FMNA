@@ -28,7 +28,7 @@ spring:
       "[org.quartz.threadPool.threadCount]": 2
 
 app:
-  environment: ${APP_ENV:${APP_ENVIRONMENT:teste}}
+  environment: ${APP_ENV:${APP_ENVIRONMENT:producao}}
   clinic:
     slug: ${CLINIC_SLUG:}
     name: ${CLINIC_NAME:Clínica Femina CRM}
@@ -45,6 +45,7 @@ app:
   initial-users:
     enabled: ${INITIAL_USERS_ENABLED:false}
     json: '${INITIAL_USERS_JSON:[]}'
+    allow-password-reset: ${INITIAL_USERS_ALLOW_PASSWORD_RESET:false}
 
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}

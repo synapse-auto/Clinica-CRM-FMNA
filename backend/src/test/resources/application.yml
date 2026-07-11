@@ -11,6 +11,7 @@ spring:
       ddl-auto: none
 
 app:
+  environment: teste
   clinic:
     slug: fmna
   security:

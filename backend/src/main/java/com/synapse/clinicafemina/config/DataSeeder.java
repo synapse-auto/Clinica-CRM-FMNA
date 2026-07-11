@@ -42,6 +42,12 @@ public class DataSeeder implements CommandLineRunner {
     @Value("${app.initial-users.json:[]}")
     private String initialUsersJson;
 
+    @Value("${app.initial-users.allow-password-reset:false}")
+    private boolean allowPasswordReset;
+
+    @Value("${app.environment:teste}")
+    private String applicationEnvironment;
+
     @Value("${app.clinic.slug:fmna}")
     private String clinicSlug;
 
@@ -105,6 +111,7 @@ public class DataSeeder implements CommandLineRunner {
             int created = 0;
             int reset = 0;
             int skipped = 0;
+            int blockedResets = 0;
 
             for (InitialUserDefinition definition : definitions) {
                 String maskedEmail = maskEmail(definition.email());
@@ -116,11 +123,15 @@ public class DataSeeder implements CommandLineRunner {
 
                     if (existing != null) {
                         if (Boolean.TRUE.equals(definition.resetPassword())) {
-                            log.info("Usuário existente encontrado para {}. Redefinindo senha (resetPassword=true).", maskedEmail);
-                            resetPassword(existing, definition);
-                            log.info("senha redefinida");
-                            log.info("mustChangePassword=true");
-                            reset++;
+                            if (canResetExistingPassword()) {
+                                log.warn("Redefinição de senha autorizada por opt-in explícito para {}.", maskedEmail);
+                                resetPassword(existing, definition);
+                                log.info("Senha inicial redefinida; troca obrigatória habilitada para {}.", maskedEmail);
+                                reset++;
+                            } else {
+                                log.warn("Redefinição de senha bloqueada pelo ambiente para {}.", maskedEmail);
+                                blockedResets++;
+                            }
                         } else {
                             log.info("Usuário existente encontrado para {}. Ignorando redefinição de senha (resetPassword=false).", maskedEmail);
                             skipped++;
@@ -140,10 +151,11 @@ public class DataSeeder implements CommandLineRunner {
             }
 
             log.info(
-                    "Seed de usuários iniciais concluído com sucesso. criados={}, redefinidos={}, ignorados={}",
+                    "Seed de usuários iniciais concluído com sucesso. criados={}, redefinidos={}, ignorados={}, redefiniçõesBloqueadas={}",
                     created,
                     reset,
-                    skipped
+                    skipped,
+                    blockedResets
             );
         } catch (Exception e) {
             log.error("Falha geral na execução do DataSeeder. Motivo: {}", e.getMessage());
@@ -189,6 +201,22 @@ public class DataSeeder implements CommandLineRunner {
         existing.setSenhaHash(passwordEncoder.encode(definition.password()));
         existing.setMustChangePassword(true);
         usuarioRepository.save(existing);
+    }
+
+    private boolean canResetExistingPassword() {
+        return allowPasswordReset && isDevelopmentOrTestEnvironment();
+    }
+
+    private boolean isDevelopmentOrTestEnvironment() {
+        String normalized = applicationEnvironment == null
+                ? ""
+                : applicationEnvironment.trim().toLowerCase(Locale.ROOT);
+        return normalized.equals("dev")
+                || normalized.equals("development")
+                || normalized.equals("desenvolvimento")
+                || normalized.equals("test")
+                || normalized.equals("teste")
+                || normalized.equals("local");
     }
 
     private Usuario createProfile(String profile) {
