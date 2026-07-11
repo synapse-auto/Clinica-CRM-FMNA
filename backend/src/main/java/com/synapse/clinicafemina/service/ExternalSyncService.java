@@ -310,19 +310,26 @@ public class ExternalSyncService {
         agendamento.setMotivoCancelamento(dto.cancellationReason());
         agendamento.setExternalPayload(toJson(dto.payload()));
 
-        if (dto.payload() != null) {
-            Object medicoNomeObj = dto.payload().get("medicoNome");
-            if (medicoNomeObj instanceof String medicoNome && !medicoNome.isBlank()) {
-                List<Usuario> medicos = usuarioRepository.findMedicosAtivosByClinicaId(clinica.getId());
-                medicos.stream()
-                        .filter(m -> medicoNome.equalsIgnoreCase(m.getNome()))
-                        .findFirst()
-                        .ifPresent(agendamento::setMedico);
-            }
-        }
+        associarMedicoLocal(clinica, agendamento, dto.payload());
 
         agendamentoRepository.save(agendamento);
         return created;
+    }
+
+    private void associarMedicoLocal(
+            Clinica clinica,
+            Agendamento agendamento,
+            Map<String, Object> payload
+    ) {
+        String medicoNome = payloadText(payload, "medicoNome", "nomeMedico");
+        if (medicoNome == null || medicoNome.isBlank()) {
+            return;
+        }
+
+        usuarioRepository.findMedicosAtivosByClinicaId(clinica.getId()).stream()
+                .filter(medico -> normalizarNome(medico.getNome()).equals(normalizarNome(medicoNome)))
+                .findFirst()
+                .ifPresent(agendamento::setMedico);
     }
 
     private List<Map<String, Object>> fetchNotes(ExternalClinicProvider provider, String externalPatientId) {
@@ -380,6 +387,17 @@ public class ExternalSyncService {
         String ascii = Normalizer.normalize(input, Normalizer.Form.NFD)
                 .replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
         return ascii.toUpperCase();
+    }
+
+    private String normalizarNome(String input) {
+        if (input == null) {
+            return "";
+        }
+        return Normalizer.normalize(input, Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+                .trim()
+                .replaceAll("\\s+", " ")
+                .toUpperCase();
     }
 
     private String normalizarTelefone(String phone, String fallback) {

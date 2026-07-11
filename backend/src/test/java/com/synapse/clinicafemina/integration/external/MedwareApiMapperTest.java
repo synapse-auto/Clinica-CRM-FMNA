@@ -111,4 +111,22 @@ class MedwareApiMapperTest {
         assertEquals("Dra. Ana", dto.payload().get("medicoNome"));
         assertNotNull(dto.payload().get("medware"));
     }
+
+    @Test
+    void should_preserve_direct_medware_doctor_name_and_code() throws Exception {
+        JsonNode payload = objectMapper.readTree("""
+                {
+                  "codAgendamento": 98766,
+                  "codPaciente": 1023,
+                  "codMedico": 7,
+                  "nomeMedico": "Médico Teste",
+                  "dataHoraAgenda": "03/07/2026 17:30"
+                }
+                """);
+
+        ExternalAppointmentDTO dto = mapper.toAppointment(payload, Map.of(), Map.of());
+
+        assertEquals("7", dto.payload().get("codMedico"));
+        assertEquals("Médico Teste", dto.payload().get("medicoNome"));
+    }
 }

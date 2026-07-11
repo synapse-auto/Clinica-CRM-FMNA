@@ -84,8 +84,11 @@ public class MedwareApiMapper {
         }
         if (!medico.isMissingNode() && !medico.isEmpty()) {
             payload.put("medico", toMap(medico));
-            putIfNotBlank(payload, "medicoNome", text(medico, "nome", "nomeMedico", "medico"));
         }
+        putIfNotBlank(payload, "medicoNome", firstNonBlank(
+                text(node, "medicoNome", "nomeMedico"),
+                text(medico, "nome", "nomeMedico", "medico")
+        ));
         putIfNotBlank(payload, "codMedico", codMedico);
         putIfNotBlank(payload, "codProcedimento", codProcedimento);
         putIfNotBlank(payload, "codPlano", text(node, "codPlano", "codplano"));

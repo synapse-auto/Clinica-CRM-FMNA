@@ -11,6 +11,7 @@ import com.synapse.clinicafemina.integration.external.ExternalPatientDTO;
 import com.synapse.clinicafemina.integration.external.ExternalProviderFactory;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.integration.external.PageResult;
+import com.synapse.clinicafemina.domain.Medico;
 import com.synapse.clinicafemina.repository.AgendamentoRepository;
 import com.synapse.clinicafemina.repository.IntegrationSyncLogRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
@@ -342,6 +343,58 @@ class ExternalSyncServiceTest {
         verify(agendamentoRepository).save(existing);
         assertEquals(0, result.agendamentosCriados());
         assertEquals(1, result.agendamentosAtualizados());
+    }
+
+    @Test
+    void should_link_medware_appointment_to_active_local_doctor_by_normalized_name() {
+        clinica.setExternalProvider(ExternalProviderType.MEDWARE);
+        when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
+
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setExternalSource(ExternalProviderType.MEDWARE);
+        paciente.setExternalId("1023");
+
+        Medico medico = new Medico();
+        medico.setId(44L);
+        medico.setNome("Médico Teste");
+        medico.setPerfil("MEDICO");
+
+        ExternalAppointmentDTO appointment = new ExternalAppointmentDTO(
+                "98766",
+                "1023",
+                OffsetDateTime.parse("2026-07-03T17:30:00-03:00"),
+                null,
+                "EXAME",
+                "Ultrassonografia",
+                "AGENDADO",
+                null,
+                null,
+                null,
+                Map.of("medicoNome", "MEDICO  TESTE", "codMedico", "7")
+        );
+
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(appointment), false, null));
+        when(pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                7L, ExternalProviderType.MEDWARE, "1023"))
+                .thenReturn(Optional.of(paciente));
+        when(agendamentoRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                7L, ExternalProviderType.MEDWARE, "98766"))
+                .thenReturn(Optional.empty());
+        when(agendamentoRepository.save(any(Agendamento.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(usuarioRepository.findMedicosAtivosByClinicaId(7L))
+                .thenReturn(List.of(medico));
+
+        service.sincronizar(clinica);
+
+        ArgumentCaptor<Agendamento> captor = ArgumentCaptor.forClass(Agendamento.class);
+        verify(agendamentoRepository).save(captor.capture());
+        assertSame(medico, captor.getValue().getMedico());
     }
 
     @Test
