@@ -4,6 +4,8 @@ import {
   AlertCircle,
   Calendar,
   CheckCircle2,
+  Eye,
+  EyeOff,
   KeyRound,
   LayoutDashboard,
   Lock,
@@ -18,14 +20,16 @@ import { DemoCard } from '@/components/demo/DemoCard';
 import { PageHeader } from '@/components/demo/PageHeader';
 import type { AuthUser } from '@/lib/auth/types';
 import type { ClinicaAtualResponse } from '@/types/dashboard';
+import {
+  isValidPassword,
+  PASSWORD_MAX_BYTES,
+  PASSWORD_RULE_MESSAGE,
+} from '@/lib/auth/password-policy';
 
 type MinhaContaClientProps = {
   user: AuthUser;
   clinic: ClinicaAtualResponse;
 };
-
-const PASSWORD_RULE_MESSAGE = 'A senha deve ter no mínimo 6 caracteres, contendo letras e números.';
-const CRM_PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
 
 export function MinhaContaClient({ user, clinic }: MinhaContaClientProps) {
   const showPermissions = user.perfil === 'GESTOR';
@@ -140,7 +144,7 @@ function PasswordChangeForm() {
       return;
     }
 
-    if (!CRM_PASSWORD_PATTERN.test(novaSenha)) {
+    if (!isValidPassword(novaSenha)) {
       setError(PASSWORD_RULE_MESSAGE);
       return;
     }
@@ -237,18 +241,30 @@ function PasswordField({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const [isVisible, setIsVisible] = useState(false);
+
   return (
     <label className="block" htmlFor={id}>
       <span className="text-xs font-bold text-clinic-muted">{label}</span>
-      <input
-        id={id}
-        type="password"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-1 h-10 w-full rounded-lg border border-clinic-border bg-clinic-surface px-3 text-sm font-semibold text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15"
-        maxLength={72}
-        required
-      />
+      <span className="relative mt-1 block">
+        <input
+          id={id}
+          type={isVisible ? 'text' : 'password'}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-surface px-3 pr-10 text-sm font-semibold text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15"
+          maxLength={PASSWORD_MAX_BYTES}
+          required
+        />
+        <button
+          type="button"
+          className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center text-clinic-muted hover:text-clinic-text"
+          onClick={() => setIsVisible((current) => !current)}
+          aria-label={isVisible ? `Ocultar ${label.toLowerCase()}` : `Mostrar ${label.toLowerCase()}`}
+        >
+          {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </span>
     </label>
   );
 }

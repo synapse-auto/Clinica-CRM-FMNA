@@ -87,12 +87,12 @@ class AuthServiceTest {
     void should_change_password_with_bcrypt_and_clear_first_access_state() {
         ChangePasswordRequest request = new ChangePasswordRequest(
                 "SenhaInicial!2026",
-                "Lucas123",
-                "Lucas123"
+                "Senha@123",
+                "Senha@123"
         );
         when(passwordEncoder.matches("SenhaInicial!2026", "$2a$12$old")).thenReturn(true);
-        when(passwordEncoder.matches("Lucas123", "$2a$12$old")).thenReturn(false);
-        when(passwordEncoder.encode("Lucas123")).thenReturn("$2a$12$new");
+        when(passwordEncoder.matches("Senha@123", "$2a$12$old")).thenReturn(false);
+        when(passwordEncoder.encode("Senha@123")).thenReturn("$2a$12$new");
         when(jwtService.generateToken(anyMap(), any())).thenReturn("new-jwt");
 
         LoginResponse response = service.changePassword(usuario, request);

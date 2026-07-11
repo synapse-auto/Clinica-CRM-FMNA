@@ -10,6 +10,8 @@ import {
   UserPlus,
   UsersRound,
   X,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { PageHeader } from '@/components/demo/PageHeader';
@@ -20,6 +22,12 @@ import type {
   EquipeUsuario,
   EquipeUsuarioCreatePayload,
 } from '@/types/equipe';
+import {
+  isValidPassword,
+  PASSWORD_MAX_BYTES,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_RULE_MESSAGE,
+} from '@/lib/auth/password-policy';
 
 type EquipeClientProps = {
   initialData: EquipeResponse;
@@ -71,6 +79,12 @@ export function EquipeClient({ initialData, initialError }: EquipeClientProps) {
       telefone: String(form.get('telefone') ?? '').trim() || undefined,
       senhaTemporaria: String(form.get('senhaTemporaria') ?? ''),
     };
+
+    if (!isValidPassword(payload.senhaTemporaria)) {
+      setSubmitError(PASSWORD_RULE_MESSAGE);
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       const response = await fetch('/api/equipe/usuarios', {
@@ -246,6 +260,8 @@ function CreateUserDialog({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
       <section
@@ -309,9 +325,14 @@ function CreateUserDialog({
 
           <label className="block">
             <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Senha temporária</span>
-            <input name="senhaTemporaria" aria-label="Senha temporária" type="password" minLength={6} maxLength={72} required className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15" />
+            <span className="relative mt-1 block">
+              <input name="senhaTemporaria" aria-label="Senha temporária" type={showPassword ? 'text' : 'password'} minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_BYTES} required className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 pr-10 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15" />
+              <button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center text-clinic-muted hover:text-clinic-text" aria-label={showPassword ? 'Ocultar senha temporária' : 'Mostrar senha temporária'}>
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </span>
             <span className="mt-1 block text-[9px] text-clinic-muted">
-              Mínimo 6 caracteres, com letras e números.
+              {PASSWORD_RULE_MESSAGE}
             </span>
           </label>
 

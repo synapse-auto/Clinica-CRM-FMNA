@@ -27,7 +27,7 @@ describe('LoginForm', () => {
 
   it('should_redirect_to_profile_default_route_after_login', async () => {
     const user = userEvent.setup();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       user: {
         id: 2,
         nome: 'Recepção',
@@ -40,15 +40,19 @@ describe('LoginForm', () => {
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-    })));
+    }));
+    vi.stubGlobal('fetch', fetchMock);
     render(<LoginForm />);
 
     await user.type(screen.getByLabelText('Email'), 'recepcao@clinica.local');
-    await user.type(screen.getByLabelText('Senha'), 'senha-digitada');
+    await user.type(screen.getByLabelText('Senha'), 'Senha@123');
     await user.click(screen.getByRole('button', { name: 'Entrar' }));
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/atendimentos'));
     expect(refresh).toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({
+      body: JSON.stringify({ email: 'recepcao@clinica.local', senha: 'Senha@123' }),
+    }));
   });
 
   it('should_redirect_initial_password_to_change_password', async () => {

@@ -90,7 +90,7 @@ describe('MinhaContaClient', () => {
     expect(screen.getByLabelText('Senha atual')).toBeInTheDocument();
     expect(screen.getByLabelText('Nova senha')).toBeInTheDocument();
     expect(screen.getByLabelText('Confirmar nova senha')).toBeInTheDocument();
-    expect(screen.getByText('A senha deve ter no mínimo 6 caracteres, contendo letras e números.')).toBeInTheDocument();
+    expect(screen.getByText(/Caracteres especiais são permitidos/)).toBeInTheDocument();
   });
 
   it('should_validate_change_password_fields_before_request', async () => {
@@ -101,11 +101,11 @@ describe('MinhaContaClient', () => {
 
     await actor.click(screen.getByRole('button', { name: 'Alterar senha' }));
     await actor.type(screen.getByLabelText('Senha atual'), 'Atual123');
-    await actor.type(screen.getByLabelText('Nova senha'), 'abc@123');
-    await actor.type(screen.getByLabelText('Confirmar nova senha'), 'abc@123');
+    await actor.type(screen.getByLabelText('Nova senha'), 'abcdef');
+    await actor.type(screen.getByLabelText('Confirmar nova senha'), 'abcdef');
     await actor.click(screen.getByRole('button', { name: 'Salvar nova senha' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('A senha deve ter no mínimo 6 caracteres, contendo letras e números.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Caracteres especiais são permitidos.');
     expect(fetchMock).not.toHaveBeenCalled();
 
     await actor.clear(screen.getByLabelText('Nova senha'));
@@ -130,8 +130,8 @@ describe('MinhaContaClient', () => {
 
     await actor.click(screen.getByRole('button', { name: 'Alterar senha' }));
     await actor.type(screen.getByLabelText('Senha atual'), 'Errada123');
-    await actor.type(screen.getByLabelText('Nova senha'), 'Lucas123');
-    await actor.type(screen.getByLabelText('Confirmar nova senha'), 'Lucas123');
+    await actor.type(screen.getByLabelText('Nova senha'), 'Senha@123');
+    await actor.type(screen.getByLabelText('Confirmar nova senha'), 'Senha@123');
     await actor.click(screen.getByRole('button', { name: 'Salvar nova senha' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Senha atual inválida.');
@@ -150,13 +150,18 @@ describe('MinhaContaClient', () => {
 
     await actor.click(screen.getByRole('button', { name: 'Alterar senha' }));
     await actor.type(screen.getByLabelText('Senha atual'), 'Atual123');
-    await actor.type(screen.getByLabelText('Nova senha'), 'Lucas123');
-    await actor.type(screen.getByLabelText('Confirmar nova senha'), 'Lucas123');
+    await actor.type(screen.getByLabelText('Nova senha'), 'Senha@123');
+    await actor.type(screen.getByLabelText('Confirmar nova senha'), 'Senha@123');
     await actor.click(screen.getByRole('button', { name: 'Salvar nova senha' }));
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Senha alterada com sucesso.'));
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/change-password', expect.objectContaining({
       method: 'PATCH',
+      body: JSON.stringify({
+        senhaAtual: 'Atual123',
+        novaSenha: 'Senha@123',
+        confirmacaoNovaSenha: 'Senha@123',
+      }),
     }));
     expect(screen.getByLabelText('Senha atual')).toHaveValue('');
     expect(screen.getByLabelText('Nova senha')).toHaveValue('');

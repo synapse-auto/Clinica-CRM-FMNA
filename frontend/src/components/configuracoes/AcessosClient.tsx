@@ -16,6 +16,8 @@ import {
   UserX,
   Lock,
   ArrowLeft,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -24,6 +26,12 @@ import { StatusBadge } from '@/components/demo/StatusBadge';
 import { DemoCard } from '@/components/demo/DemoCard';
 import type { AuthUser } from '@/lib/auth/types';
 import type { EquipePerfil, EquipeUsuario } from '@/types/equipe';
+import {
+  isValidPassword,
+  PASSWORD_MAX_BYTES,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_RULE_MESSAGE,
+} from '@/lib/auth/password-policy';
 
 type AcessosClientProps = {
   user: AuthUser;
@@ -50,6 +58,8 @@ export function AcessosClient({ user }: AcessosClientProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<EquipeUsuario | null>(null);
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
 
   // Feedbacks
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -65,6 +75,9 @@ export function AcessosClient({ user }: AcessosClientProps) {
     try {
       const response = await fetch('/api/admin/usuarios');
       if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('Você não tem permissão para gerenciar acessos.');
+        }
         throw new Error('Não foi possível carregar os usuários.');
       }
       const data = (await response.json()) as EquipeUsuario[];
@@ -89,6 +102,12 @@ export function AcessosClient({ user }: AcessosClientProps) {
       telefone: String(form.get('telefone') ?? '').trim() || undefined,
       senhaTemporaria: String(form.get('senhaTemporaria') ?? ''),
     };
+
+    if (!isValidPassword(payload.senhaTemporaria)) {
+      setSubmitError(PASSWORD_RULE_MESSAGE);
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       const response = await fetch('/api/admin/usuarios', {
@@ -154,6 +173,12 @@ export function AcessosClient({ user }: AcessosClientProps) {
     const form = new FormData(event.currentTarget);
     const senhaTemporaria = String(form.get('senhaTemporaria') ?? '');
 
+    if (!isValidPassword(senhaTemporaria)) {
+      setSubmitError(PASSWORD_RULE_MESSAGE);
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const response = await fetch(`/api/admin/usuarios/${selectedUser.id}/resetar-senha`, {
         method: 'PATCH',
@@ -178,18 +203,14 @@ export function AcessosClient({ user }: AcessosClientProps) {
     }
   }
 
-  function generateTempPassword(formId: string, inputName: string) {
+  function generateTempPassword(formId: string, inputName: string, reveal: () => void) {
     // Fmna + 4 dígitos + Ok (Garante letras e números)
     const code = Math.floor(1000 + Math.random() * 9000);
     const password = `Fmna${code}Ok`;
     const input = document.querySelector(`#${formId} input[name="${inputName}"]`) as HTMLInputElement;
     if (input) {
       input.value = password;
-      // Para mudar o tipo do input para texto temporariamente para que o administrador veja a senha gerada
-      input.type = 'text';
-      setTimeout(() => {
-        input.type = 'password';
-      }, 5000);
+      reveal();
     }
   }
 
@@ -412,17 +433,18 @@ export function AcessosClient({ user }: AcessosClientProps) {
               <div className="block">
                 <label htmlFor="senhaTemporariaCriacao" className="mb-1.5 block text-[10px] font-bold text-clinic-text">Senha temporária</label>
                 <div className="relative">
-                  <input id="senhaTemporariaCriacao" name="senhaTemporaria" type="password" minLength={6} maxLength={72} required className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input pl-3 pr-20 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15" />
-                  <button
-                    type="button"
-                    onClick={() => generateTempPassword('createUserForm', 'senhaTemporaria')}
-                    className="absolute right-2 top-2 h-6 rounded bg-clinic-soft px-2 text-[9px] font-bold text-clinic-primary hover:bg-clinic-primary/10 transition"
-                  >
-                    Gerar Senha
-                  </button>
+                  <input id="senhaTemporariaCriacao" name="senhaTemporaria" type={showCreatePassword ? 'text' : 'password'} minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_BYTES} required className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input pl-3 pr-32 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15" />
+                  <div className="absolute right-1 top-1 flex items-center gap-1">
+                    <button type="button" onClick={() => setShowCreatePassword((current) => !current)} className="flex h-8 w-8 items-center justify-center text-clinic-muted hover:text-clinic-text" aria-label={showCreatePassword ? 'Ocultar senha temporária' : 'Mostrar senha temporária'}>
+                      {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                    <button type="button" onClick={() => generateTempPassword('createUserForm', 'senhaTemporaria', () => setShowCreatePassword(true))} className="h-7 rounded bg-clinic-soft px-2 text-[9px] font-bold text-clinic-primary hover:bg-clinic-primary/10 transition">
+                      Gerar senha
+                    </button>
+                  </div>
                 </div>
                 <span className="mt-1 block text-[9px] text-clinic-muted">
-                  Mínimo 6 caracteres, contendo letras e números.
+                  {PASSWORD_RULE_MESSAGE}
                 </span>
               </div>
 
@@ -487,17 +509,18 @@ export function AcessosClient({ user }: AcessosClientProps) {
               <div className="block">
                 <label htmlFor="senhaTemporariaReset" className="mb-1.5 block text-[10px] font-bold text-clinic-text">Nova Senha Temporária</label>
                 <div className="relative">
-                  <input id="senhaTemporariaReset" name="senhaTemporaria" type="password" minLength={6} maxLength={72} required className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input pl-3 pr-20 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15" />
-                  <button
-                    type="button"
-                    onClick={() => generateTempPassword('resetPasswordForm', 'senhaTemporaria')}
-                    className="absolute right-2 top-2 h-6 rounded bg-clinic-soft px-2 text-[9px] font-bold text-clinic-primary hover:bg-clinic-primary/10 transition"
-                  >
-                    Gerar Senha
-                  </button>
+                  <input id="senhaTemporariaReset" name="senhaTemporaria" type={showResetPassword ? 'text' : 'password'} minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_BYTES} required className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input pl-3 pr-32 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15" />
+                  <div className="absolute right-1 top-1 flex items-center gap-1">
+                    <button type="button" onClick={() => setShowResetPassword((current) => !current)} className="flex h-8 w-8 items-center justify-center text-clinic-muted hover:text-clinic-text" aria-label={showResetPassword ? 'Ocultar nova senha temporária' : 'Mostrar nova senha temporária'}>
+                      {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                    <button type="button" onClick={() => generateTempPassword('resetPasswordForm', 'senhaTemporaria', () => setShowResetPassword(true))} className="h-7 rounded bg-clinic-soft px-2 text-[9px] font-bold text-clinic-primary hover:bg-clinic-primary/10 transition">
+                      Gerar senha
+                    </button>
+                  </div>
                 </div>
                 <span className="mt-1 block text-[9px] text-clinic-muted">
-                  Mínimo 6 caracteres, contendo letras e números.
+                  {PASSWORD_RULE_MESSAGE}
                 </span>
               </div>
 

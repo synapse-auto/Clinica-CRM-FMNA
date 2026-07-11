@@ -16,6 +16,7 @@ import com.synapse.clinicafemina.service.AtendimentoService;
 import com.synapse.clinicafemina.service.MensagemService;
 import jakarta.persistence.EntityManager;
 import java.time.OffsetDateTime;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -360,7 +363,7 @@ class AuthSecurityIntegrationTest {
     @Test
     void should_change_initial_password_and_allow_crm_access() throws Exception {
         String token = login(trocaObrigatoriaEmail, senha, true);
-        String novaSenha = "Lucas123";
+        String novaSenha = "Senha@123";
 
         String response = mockMvc.perform(patch("/api/auth/change-password")
                         .header("Authorization", "Bearer " + token)
@@ -398,6 +401,73 @@ class AuthSecurityIntegrationTest {
     }
 
     @Test
+    void should_change_password_from_account_update_bcrypt_and_require_exact_new_password() throws Exception {
+        String token = login(recepcionistaEmail, senha, false);
+        Usuario before = usuarioRepository.findByEmail(recepcionistaEmail).orElseThrow();
+        String previousHash = before.getSenhaHash();
+        String newPassword = "Minha@Senha123";
+
+        mockMvc.perform(patch("/api/auth/change-password")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "senhaAtual", senha,
+                                "novaSenha", newPassword,
+                                "confirmacaoNovaSenha", newPassword
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mustChangePassword").value(false))
+                .andExpect(jsonPath("$.senha").doesNotExist())
+                .andExpect(jsonPath("$.novaSenha").doesNotExist())
+                .andExpect(jsonPath("$.senhaHash").doesNotExist());
+
+        entityManager.flush();
+        entityManager.clear();
+        Usuario updated = usuarioRepository.findByEmail(recepcionistaEmail).orElseThrow();
+        assertNotEquals(previousHash, updated.getSenhaHash());
+        assertTrue(passwordEncoder.matches(newPassword, updated.getSenhaHash()));
+
+        login(recepcionistaEmail, newPassword, false);
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", recepcionistaEmail,
+                                "senha", senha
+                        ))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void should_accept_exactly_72_utf8_bytes_and_reject_more_than_bcrypt_limit() throws Exception {
+        String exact72Bytes = "a1" + "x".repeat(70);
+        String over72Bytes = "a1" + "á".repeat(36);
+        String token = login(medicoEmail, senha, false);
+
+        mockMvc.perform(patch("/api/auth/change-password")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "senhaAtual", senha,
+                                "novaSenha", exact72Bytes,
+                                "confirmacaoNovaSenha", exact72Bytes
+                        ))))
+                .andExpect(status().isOk());
+
+        String refreshedToken = login(medicoEmail, exact72Bytes, false);
+
+        mockMvc.perform(patch("/api/auth/change-password")
+                        .header("Authorization", "Bearer " + refreshedToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "senhaAtual", exact72Bytes,
+                                "novaSenha", over72Bytes,
+                                "confirmacaoNovaSenha", over72Bytes
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("A senha deve ter pelo menos 6 caracteres, incluindo uma letra e um número, e no máximo 72 bytes. Caracteres especiais são permitidos."));
+    }
+
+    @Test
     void should_reject_password_change_when_confirmation_differs() throws Exception {
         String token = login(trocaObrigatoriaEmail, senha, true);
 
@@ -415,7 +485,7 @@ class AuthSecurityIntegrationTest {
     }
 
     @Test
-    void should_reject_password_change_with_special_character() throws Exception {
+    void should_accept_password_change_with_special_character_and_login_exactly() throws Exception {
         String token = login(trocaObrigatoriaEmail, senha, true);
 
         mockMvc.perform(patch("/api/auth/change-password")
@@ -424,12 +494,14 @@ class AuthSecurityIntegrationTest {
                         .content("""
                                 {
                                   "senhaAtual":"%s",
-                                  "novaSenha":"abc@123",
-                                  "confirmacaoNovaSenha":"abc@123"
+                                  "novaSenha":"Minha_Senha9",
+                                  "confirmacaoNovaSenha":"Minha_Senha9"
                                 }
                                 """.formatted(senha)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("A senha deve ter no mínimo 6 caracteres, contendo letras e números."));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mustChangePassword").value(false));
+
+        login(trocaObrigatoriaEmail, "Minha_Senha9", false);
     }
 
     @Test

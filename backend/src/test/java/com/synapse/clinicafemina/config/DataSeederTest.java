@@ -53,7 +53,7 @@ class DataSeederTest {
                     "nome": "Atendente Inicial",
                     "email": "atendente@local.test",
                     "perfil": "RECEPCIONISTA",
-                    "password": "SenhaInicial2026",
+                    "password": "Senha@Inicial2026",
                     "mustChangePassword": true
                   },
                   {
@@ -82,8 +82,9 @@ class DataSeederTest {
         assertTrue(users.get(0).getMustChangePassword());
         assertFalse(users.get(0).getAdminInterno());
         assertTrue(users.get(1).getAdminInterno());
-        assertNotEquals("SenhaInicial2026", users.get(0).getSenhaHash());
+        assertNotEquals("Senha@Inicial2026", users.get(0).getSenhaHash());
         assertEquals("$2a$12$hash", users.get(0).getSenhaHash());
+        verify(passwordEncoder).encode("Senha@Inicial2026");
     }
 
     @Test

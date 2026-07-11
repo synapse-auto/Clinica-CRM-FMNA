@@ -65,6 +65,7 @@ class AdminUsuarioSecurityIntegrationTest {
     private String adminEmail;
     private String gestorComumEmail;
     private String recepcionistaEmail;
+    private String medicoEmail;
     private String senha;
 
     @BeforeEach
@@ -82,10 +83,12 @@ class AdminUsuarioSecurityIntegrationTest {
         adminEmail = "admin-" + UUID.randomUUID() + "@clinica.local";
         gestorComumEmail = "gestor-" + UUID.randomUUID() + "@clinica.local";
         recepcionistaEmail = "recepcao-" + UUID.randomUUID() + "@clinica.local";
+        medicoEmail = "medico-" + UUID.randomUUID() + "@clinica.local";
 
         saveUser(new Gestor(), clinica, "Admin Lucas", adminEmail, false, true); // podeGerenciarUsuarios = true
         saveUser(new Gestor(), clinica, "Gestor Comum", gestorComumEmail, false, false); // podeGerenciarUsuarios = false
         saveUser(new Recepcionista(), clinica, "Recepcao Real", recepcionistaEmail, false, false);
+        saveUser(new Medico(), clinica, "Medico Real", medicoEmail, false, false);
 
         entityManager.flush();
         entityManager.clear();
@@ -112,12 +115,37 @@ class AdminUsuarioSecurityIntegrationTest {
                                   "nome":"Medico Novo",
                                   "email":"%s",
                                   "perfil":"MEDICO",
-                                  "senhaTemporaria":"Medico1"
+                                  "senhaTemporaria":"Senha@123"
                                 }
                                 """.formatted(novoEmail)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.perfil").value("MEDICO"))
-                .andExpect(jsonPath("$.mustChangePassword").value(true));
+                .andExpect(jsonPath("$.mustChangePassword").value(true))
+                .andExpect(jsonPath("$.senhaHash").doesNotExist())
+                .andExpect(jsonPath("$.senhaTemporaria").doesNotExist());
+
+        login(novoEmail, "Senha@123");
+
+        String gestorEmail = "gestor-criado-" + UUID.randomUUID() + "@clinica.local";
+        mockMvc.perform(post("/api/admin/usuarios")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nome":"Gestor sem elevacao",
+                                  "email":"%s",
+                                  "perfil":"GESTOR",
+                                  "senhaTemporaria":"Ultra#2026",
+                                  "podeGerenciarUsuarios":true
+                                }
+                                """.formatted(gestorEmail)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.perfil").value("GESTOR"));
+
+        Usuario gestorCriado = usuarioRepository.findByEmail(gestorEmail).orElseThrow();
+        assertFalse(gestorCriado.getPodeGerenciarUsuarios());
+        assertTrue(gestorCriado.getMustChangePassword());
+        assertTrue(gestorCriado.getClinica().getId().equals(clinica.getId()));
     }
 
     @Test
@@ -152,6 +180,46 @@ class AdminUsuarioSecurityIntegrationTest {
     }
 
     @Test
+    void doctor_should_be_forbidden() throws Exception {
+        String token = login(medicoEmail);
+
+        mockMvc.perform(get("/api/admin/usuarios")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void admin_should_not_access_user_from_another_clinic() throws Exception {
+        Clinica outraClinica = new Clinica();
+        outraClinica.setNome("Outra Clinica");
+        outraClinica.setSlug("outra-" + UUID.randomUUID());
+        outraClinica.setRazaoSocial("Outra Clinica LTDA");
+        outraClinica.setCnpj("44.444.444/0001-44");
+        outraClinica.setEmailContato("outra-" + UUID.randomUUID() + "@clinica.local");
+        outraClinica.setTelefoneContato("44888888888");
+        outraClinica = clinicaRepository.save(outraClinica);
+
+        String outroEmail = "outro-" + UUID.randomUUID() + "@clinica.local";
+        saveUser(new Recepcionista(), outraClinica, "Outro Usuario", outroEmail, false, false);
+        Usuario outroUsuario = usuarioRepository.findByEmail(outroEmail).orElseThrow();
+        String token = login(adminEmail);
+
+        mockMvc.perform(patch("/api/admin/usuarios/%d/status".formatted(outroUsuario.getId()))
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ativo\": false}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(patch("/api/admin/usuarios/%d/resetar-senha".formatted(outroUsuario.getId()))
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"senhaTemporaria\": \"Senha@123\"}"))
+                .andExpect(status().isBadRequest());
+
+        assertTrue(usuarioRepository.findById(outroUsuario.getId()).orElseThrow().getAtivo());
+    }
+
+    @Test
     void admin_should_alter_status_and_reset_password() throws Exception {
         String token = login(adminEmail);
 
@@ -183,6 +251,21 @@ class AdminUsuarioSecurityIntegrationTest {
     }
 
     @Test
+    void admin_should_reset_special_password_and_user_should_login_with_exact_value() throws Exception {
+        String token = login(adminEmail);
+        Usuario medico = usuarioRepository.findByEmail(medicoEmail).orElseThrow();
+
+        mockMvc.perform(patch("/api/admin/usuarios/%d/resetar-senha".formatted(medico.getId()))
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"senhaTemporaria\": \"Acesso!123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mustChangePassword").value(true));
+
+        login(medicoEmail, "Acesso!123");
+    }
+
+    @Test
     void admin_cannot_deactivate_self() throws Exception {
         String token = login(adminEmail);
         Usuario admin = usuarioRepository.findByEmail(adminEmail).orElseThrow();
@@ -195,11 +278,15 @@ class AdminUsuarioSecurityIntegrationTest {
     }
 
     private String login(String email) throws Exception {
+        return login(email, senha);
+    }
+
+    private String login(String email, String password) throws Exception {
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email":"%s","senha":"%s"}
-                                """.formatted(email, senha)))
+                                """.formatted(email, password)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()

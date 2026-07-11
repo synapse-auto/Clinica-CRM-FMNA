@@ -61,6 +61,14 @@ describe('AcessosClient', () => {
     expect(screen.getAllByText('Ativo')).toHaveLength(2);
   });
 
+  it('should_show_clear_message_when_backend_returns_forbidden', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 403 })));
+
+    render(<AcessosClient user={currentUser} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Você não tem permissão para gerenciar acessos.');
+  });
+
   it('should_create_user_successfully', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockImplementation((url, init) => {
@@ -96,11 +104,17 @@ describe('AcessosClient', () => {
     await user.type(screen.getByLabelText('Email'), 'recepcao@clinica.local');
     await user.selectOptions(screen.getByLabelText('Perfil'), 'RECEPCIONISTA');
     await user.type(screen.getByLabelText('Telefone'), '44988887777');
-    await user.type(screen.getByLabelText('Senha temporária'), 'Recepcao123');
+    await user.type(screen.getByLabelText('Senha temporária'), 'Senha@123');
+
+    await user.click(screen.getByRole('button', { name: 'Mostrar senha temporária' }));
+    expect(screen.getByLabelText('Senha temporária')).toHaveAttribute('type', 'text');
 
     await user.click(screen.getByRole('button', { name: 'Criar usuário' }));
 
     await waitFor(() => expect(screen.getByText('Novo Recepcionista')).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith('/api/admin/usuarios', expect.objectContaining({
+      body: expect.stringContaining('Senha@123'),
+    }));
   });
 
   it('should_toggle_user_status_with_confirmation', async () => {
@@ -166,13 +180,13 @@ describe('AcessosClient', () => {
     const resetBtn = screen.getAllByTitle('Redefinir senha temporária')[1];
     await user.click(resetBtn);
 
-    await user.type(screen.getByLabelText('Nova Senha Temporária'), 'NovaSenha123');
+    await user.type(screen.getByLabelText('Nova Senha Temporária'), 'Ultra#2026');
     await user.click(screen.getByRole('button', { name: 'Confirmar' }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/admin/usuarios/2/resetar-senha', expect.objectContaining({
         method: 'PATCH',
-        body: JSON.stringify({ senhaTemporaria: 'NovaSenha123' }),
+        body: JSON.stringify({ senhaTemporaria: 'Ultra#2026' }),
       }));
     });
   });

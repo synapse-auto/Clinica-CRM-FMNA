@@ -62,7 +62,7 @@ describe('ChangePasswordForm', () => {
     await user.type(screen.getByLabelText('Confirmar nova senha'), 'ab12');
     await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('A senha deve ter no mínimo 6 caracteres, contendo letras e números.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Caracteres especiais são permitidos.');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -77,8 +77,8 @@ describe('ChangePasswordForm', () => {
     render(<ChangePasswordForm />);
 
     await user.type(screen.getByLabelText('Senha atual'), 'SenhaInicial!2026');
-    await user.type(screen.getByLabelText('Nova senha'), 'Lucas123');
-    await user.type(screen.getByLabelText('Confirmar nova senha'), 'Lucas123');
+    await user.type(screen.getByLabelText('Nova senha'), 'Senha@123');
+    await user.type(screen.getByLabelText('Confirmar nova senha'), 'Senha@123');
     await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/dashboard'));
@@ -88,7 +88,6 @@ describe('ChangePasswordForm', () => {
   it.each([
     ['123456'],
     ['abcdef'],
-    ['abc@123'],
   ])('should_reject_invalid_crm_password_%s_before_request', async (password) => {
     const user = userEvent.setup();
     const fetchMock = vi.fn();
@@ -100,7 +99,44 @@ describe('ChangePasswordForm', () => {
     await user.type(screen.getByLabelText('Confirmar nova senha'), password);
     await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('A senha deve ter no mínimo 6 caracteres, contendo letras e números.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Caracteres especiais são permitidos.');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('should_send_special_password_without_modification', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ redirectTo: '/dashboard' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ChangePasswordForm />);
+
+    await user.type(screen.getByLabelText('Senha atual'), 'Atual@123');
+    await user.type(screen.getByLabelText('Nova senha'), ' Minha_Senha9 ');
+    await user.type(screen.getByLabelText('Confirmar nova senha'), ' Minha_Senha9 ');
+    await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/auth/change-password', expect.objectContaining({
+      body: JSON.stringify({
+        senhaAtual: 'Atual@123',
+        novaSenha: ' Minha_Senha9 ',
+        confirmacaoNovaSenha: ' Minha_Senha9 ',
+      }),
+    })));
+  });
+
+  it('should_allow_toggling_password_visibility', async () => {
+    const user = userEvent.setup();
+    render(<ChangePasswordForm />);
+
+    const passwordInput = screen.getByLabelText('Nova senha');
+    expect(passwordInput).toHaveAttribute('type', 'password');
+
+    await user.click(screen.getByRole('button', { name: 'Mostrar nova senha' }));
+    expect(passwordInput).toHaveAttribute('type', 'text');
+
+    await user.click(screen.getByRole('button', { name: 'Ocultar nova senha' }));
+    expect(passwordInput).toHaveAttribute('type', 'password');
   });
 });

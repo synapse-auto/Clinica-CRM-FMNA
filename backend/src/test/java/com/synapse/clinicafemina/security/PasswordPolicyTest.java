@@ -8,19 +8,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PasswordPolicyTest {
 
     @Test
-    void should_accept_crm_password_with_letters_and_numbers_only() {
+    void should_accept_passwords_with_letters_numbers_and_optional_special_characters() {
         assertTrue(PasswordPolicy.isStrong("abc123"));
-        assertTrue(PasswordPolicy.isStrong("Lucas123"));
-        assertTrue(PasswordPolicy.isStrong("Atendente1"));
-        assertTrue(PasswordPolicy.isStrong("Gestor2026"));
-        assertTrue(PasswordPolicy.isStrong("Ultra123"));
+        assertTrue(PasswordPolicy.isStrong("Senha@123"));
+        assertTrue(PasswordPolicy.isStrong("Ultra#2026"));
+        assertTrue(PasswordPolicy.isStrong("Acesso!123"));
+        assertTrue(PasswordPolicy.isStrong("Minha_Senha9"));
+        assertTrue(PasswordPolicy.isStrong(" Senha1 "));
     }
 
     @Test
-    void should_reject_password_without_required_crm_pattern() {
+    void should_reject_password_without_letter_number_or_minimum_length() {
         assertFalse(PasswordPolicy.isStrong("123456"));
         assertFalse(PasswordPolicy.isStrong("abcdef"));
-        assertFalse(PasswordPolicy.isStrong("abc@123"));
         assertFalse(PasswordPolicy.isStrong("ab12"));
+        assertFalse(PasswordPolicy.isStrong(null));
+    }
+
+    @Test
+    void should_reject_password_over_bcrypt_byte_limit() {
+        assertTrue(PasswordPolicy.isStrong("a1" + "x".repeat(70)));
+        assertFalse(PasswordPolicy.isStrong("a1" + "x".repeat(71)));
+        assertFalse(PasswordPolicy.isStrong("a1" + "á".repeat(36)));
     }
 }

@@ -1,16 +1,19 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { LockKeyhole } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import {
+  isValidPassword,
+  PASSWORD_MAX_BYTES,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_RULE_MESSAGE,
+} from '@/lib/auth/password-policy';
 
 type ChangePasswordResponse = {
   redirectTo?: string;
   message?: string;
 };
-
-const PASSWORD_RULE_MESSAGE = 'A senha deve ter no mínimo 6 caracteres, contendo letras e números.';
-const CRM_PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
 
 export function ChangePasswordForm() {
   const router = useRouter();
@@ -31,7 +34,7 @@ export function ChangePasswordForm() {
       setError('As senhas não coincidem.');
       return;
     }
-    if (!isStrongPassword(payload.novaSenha)) {
+    if (!isValidPassword(payload.novaSenha)) {
       setError(PASSWORD_RULE_MESSAGE);
       return;
     }
@@ -80,13 +83,13 @@ export function ChangePasswordForm() {
         label="Nova senha"
         name="novaSenha"
         autoComplete="new-password"
-        minLength={6}
+        minLength={PASSWORD_MIN_LENGTH}
       />
       <PasswordField
         label="Confirmar nova senha"
         name="confirmacaoNovaSenha"
         autoComplete="new-password"
-        minLength={6}
+        minLength={PASSWORD_MIN_LENGTH}
       />
 
       <p className="text-[10px] leading-4 text-clinic-muted">
@@ -122,6 +125,8 @@ function PasswordField({
   autoComplete: string;
   minLength?: number;
 }) {
+  const [isVisible, setIsVisible] = useState(false);
+
   return (
     <label className="block">
       <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">{label}</span>
@@ -129,18 +134,22 @@ function PasswordField({
         <LockKeyhole className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-clinic-muted" />
         <input
           name={name}
-          type="password"
+          type={isVisible ? 'text' : 'password'}
           autoComplete={autoComplete}
           required
           minLength={minLength}
-          maxLength={72}
-          className="h-11 w-full rounded-lg border border-clinic-border bg-clinic-input pl-10 pr-3 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15"
+          maxLength={PASSWORD_MAX_BYTES}
+          className="h-11 w-full rounded-lg border border-clinic-border bg-clinic-input pl-10 pr-10 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15"
         />
+        <button
+          type="button"
+          className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-clinic-muted hover:text-clinic-text"
+          onClick={() => setIsVisible((current) => !current)}
+          aria-label={isVisible ? `Ocultar ${label.toLowerCase()}` : `Mostrar ${label.toLowerCase()}`}
+        >
+          {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
       </span>
     </label>
   );
-}
-
-function isStrongPassword(password: string) {
-  return CRM_PASSWORD_PATTERN.test(password);
 }

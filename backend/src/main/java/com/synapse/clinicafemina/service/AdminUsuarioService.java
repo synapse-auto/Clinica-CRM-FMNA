@@ -47,10 +47,10 @@ public class AdminUsuarioService {
         String perfil = normalizeProfile(request.perfil());
         String email = normalizeEmail(request.email());
         String nome = normalizeRequired(request.nome(), "Nome é obrigatório.");
-        String senhaTemporaria = normalizeRequired(request.senhaTemporaria(), "Senha temporária é obrigatória.");
+        String senhaTemporaria = requirePassword(request.senhaTemporaria());
 
         if (!PasswordPolicy.isStrong(senhaTemporaria)) {
-            throw new BadRequestException("A senha temporária deve ter no mínimo 6 caracteres, contendo letras e números.");
+            throw new BadRequestException(PasswordPolicy.MESSAGE);
         }
         if (usuarioRepository.findByEmail(email).isPresent()) {
             throw new BadRequestException("Email já cadastrado.");
@@ -106,7 +106,7 @@ public class AdminUsuarioService {
         }
 
         if (!PasswordPolicy.isStrong(senhaTemporaria)) {
-            throw new BadRequestException("A senha temporária deve ter no mínimo 6 caracteres, contendo letras e números.");
+            throw new BadRequestException(PasswordPolicy.MESSAGE);
         }
 
         usuario.setSenhaHash(passwordEncoder.encode(senhaTemporaria));
@@ -153,6 +153,13 @@ public class AdminUsuarioService {
             return null;
         }
         return value.trim();
+    }
+
+    private String requirePassword(String password) {
+        if (password == null || password.isBlank()) {
+            throw new BadRequestException("A senha temporária é obrigatória.");
+        }
+        return password;
     }
 
     private EquipeUsuarioResponse toResponse(Usuario usuario) {

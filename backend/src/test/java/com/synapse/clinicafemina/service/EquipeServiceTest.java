@@ -145,17 +145,23 @@ class EquipeServiceTest {
     }
 
     @Test
-    void should_reject_temporary_password_with_special_character() {
+    void should_preserve_temporary_password_with_special_characters() {
         EquipeUsuarioCreateRequest request = new EquipeUsuarioCreateRequest(
                 "Usuario Especial",
                 "especial@clinica.local",
                 "GESTOR",
                 null,
-                "abc@123"
+                " Senha@123 "
         );
 
-        assertThrows(BadRequestException.class, () -> service.criarUsuario(clinica, request));
-        verify(usuarioRepository, never()).save(any());
+        when(usuarioRepository.findByEmail("especial@clinica.local")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(" Senha@123 ")).thenReturn("$2a$12$special");
+        when(usuarioRepository.save(any(Usuario.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.criarUsuario(clinica, request);
+
+        verify(passwordEncoder).encode(" Senha@123 ");
+        verify(usuarioRepository).save(any(Gestor.class));
     }
 
     @Test

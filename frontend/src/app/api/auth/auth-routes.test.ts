@@ -29,7 +29,7 @@ describe('auth BFF routes', () => {
   });
 
   it('should_store_jwt_only_in_secure_http_only_cookie_when_login_succeeds', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       token: 'jwt-server-only',
       id: 1,
       nome: 'Gestora',
@@ -40,12 +40,13 @@ describe('auth BFF routes', () => {
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-    })));
+    }));
+    vi.stubGlobal('fetch', fetchMock);
 
     const response = await login(new Request('http://localhost/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'gestora@clinica.local', senha: 'segredo-digitado' }),
+      body: JSON.stringify({ email: 'gestora@clinica.local', senha: 'Senha@123' }),
     }));
     const body = await response.json();
 
@@ -62,6 +63,9 @@ describe('auth BFF routes', () => {
       redirectTo: '/dashboard',
     });
     expect(body.token).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith('http://backend.test/api/auth/login', expect.objectContaining({
+      body: JSON.stringify({ email: 'gestora@clinica.local', senha: 'Senha@123' }),
+    }));
     expect(cookieStore.set).toHaveBeenCalledWith(
       SESSION_COOKIE_NAME,
       'jwt-server-only',

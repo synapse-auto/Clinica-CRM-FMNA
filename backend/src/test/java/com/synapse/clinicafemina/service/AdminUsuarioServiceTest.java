@@ -80,11 +80,11 @@ class AdminUsuarioServiceTest {
                 "novo.atendente@clinica.local",
                 "RECEPCIONISTA",
                 "44999998888",
-                "Atendente1"
+                " Senha@123 "
         );
 
         when(usuarioRepository.findByEmail("novo.atendente@clinica.local")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode("Atendente1")).thenReturn("encodedPassword");
+        when(passwordEncoder.encode(" Senha@123 ")).thenReturn("encodedPassword");
         when(usuarioRepository.save(any(Usuario.class))).thenAnswer(inv -> {
             Usuario saved = inv.getArgument(0);
             saved.setId(5L);
@@ -105,6 +105,7 @@ class AdminUsuarioServiceTest {
         assertTrue(saved.getAtivo());
         assertTrue(saved.getMustChangePassword());
         assertFalse(saved.getPodeGerenciarUsuarios());
+        verify(passwordEncoder).encode(" Senha@123 ");
     }
 
     @Test
@@ -179,14 +180,15 @@ class AdminUsuarioServiceTest {
     void should_reset_user_password_temporarily() {
         Medico medico = usuario(new Medico(), 2L, "Medico", "medico@clinica.local", "MEDICO", 10L);
         when(usuarioRepository.findById(2L)).thenReturn(Optional.of(medico));
-        when(passwordEncoder.encode("MedicoTemp123")).thenReturn("newEncodedPassword");
+        when(passwordEncoder.encode("Medico@Temp123")).thenReturn("newEncodedPassword");
         when(usuarioRepository.save(any(Usuario.class))).thenReturn(medico);
 
-        EquipeUsuarioResponse response = service.resetarSenha(clinica, 2L, new ResetPasswordRequest("MedicoTemp123"));
+        EquipeUsuarioResponse response = service.resetarSenha(clinica, 2L, new ResetPasswordRequest("Medico@Temp123"));
 
         assertEquals("newEncodedPassword", medico.getSenhaHash());
         assertTrue(medico.getMustChangePassword());
         assertTrue(response.mustChangePassword());
+        verify(passwordEncoder).encode("Medico@Temp123");
     }
 
     private <T extends Usuario> T usuario(T usuario, Long id, String nome, String email, String perfil, Long clinicaId) {
