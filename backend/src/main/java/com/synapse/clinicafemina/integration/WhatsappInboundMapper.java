@@ -30,6 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -511,26 +513,20 @@ public class WhatsappInboundMapper {
         Optional<Paciente> existente = pacienteRepository.findByClinicaIdAndTelefoneNormalizado(
                 clinica.getId(), telefone
         );
-        if (existente.isPresent()) return new PacienteResolvido(existente.get(), false);
+        if (existente.isPresent()) {
+            Paciente paciente = existente.get();
+            atualizarFotoDoContato(paciente, contato);
+            return new PacienteResolvido(paciente, false);
+        }
         return new PacienteResolvido(
                 pacienteRepository.save(criarPaciente(clinica, telefone, contato)),
                 true
         );
     }
- 
-    @SuppressWarnings("unchecked")
-    private Paciente criarPaciente(Clinica clinica, String telefone, Map<String, Object> contato) {
-        Map<String, Object> perfil = (Map<String, Object>) contato.get("profile");
-        String nome = perfil == null ? "Contato WhatsApp" : String.valueOf(perfil.get("name"));
 
-        String fotoUrl = null;
-        if (perfil != null) {
-            if (perfil.get("picture") != null) {
-                fotoUrl = String.valueOf(perfil.get("picture"));
-            } else if (perfil.get("avatar") != null) {
-                fotoUrl = String.valueOf(perfil.get("avatar"));
-            }
-        }
+    private Paciente criarPaciente(Clinica clinica, String telefone, Map<String, Object> contato) {
+        Map<String, Object> perfil = perfilDoContato(contato);
+        String nome = perfil == null ? "Contato WhatsApp" : String.valueOf(perfil.get("name"));
 
         Paciente paciente = new Paciente();
         paciente.setClinica(clinica);
@@ -540,9 +536,58 @@ public class WhatsappInboundMapper {
         paciente.setTelefoneNormalizado(telefone);
         paciente.setExternalSource(ExternalProviderType.WHATSAPP);
         paciente.setExternalId(telefone);
-        paciente.setFotoUrl(fotoUrl);
+        paciente.setFotoUrl(fotoUrlDoPerfil(perfil));
         paciente.setStatus("EM_ATENDIMENTO");
         return paciente;
+    }
+
+    private void atualizarFotoDoContato(Paciente paciente, Map<String, Object> contato) {
+        if (paciente.getFotoUrl() != null && !paciente.getFotoUrl().isBlank()) {
+            return;
+        }
+        String fotoUrl = fotoUrlDoPerfil(perfilDoContato(contato));
+        if (fotoUrl != null) {
+            paciente.setFotoUrl(fotoUrl);
+            pacienteRepository.save(paciente);
+        }
+    }
+
+    private Map<String, Object> perfilDoContato(Map<String, Object> contato) {
+        Object perfil = contato == null ? null : contato.get("profile");
+        if (perfil instanceof Map<?, ?> mapa) {
+            Map<String, Object> resultado = new LinkedHashMap<>();
+            mapa.forEach((chave, valor) -> resultado.put(String.valueOf(chave), valor));
+            return resultado;
+        }
+        return null;
+    }
+
+    private String fotoUrlDoPerfil(Map<String, Object> perfil) {
+        if (perfil == null) {
+            return null;
+        }
+        Object valor = perfil.get("picture");
+        if (valor == null) {
+            valor = perfil.get("avatar");
+        }
+        return normalizarFotoUrl(valor == null ? null : String.valueOf(valor));
+    }
+
+    private String normalizarFotoUrl(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            URI uri = new URI(value.trim());
+            if (!"https".equalsIgnoreCase(uri.getScheme())
+                    || uri.getQuery() != null
+                    || uri.getFragment() != null) {
+                return null;
+            }
+            return uri.toString();
+        } catch (URISyntaxException exception) {
+            return null;
+        }
     }
  
     private Atendimento resolverOuCriarAtendimento(Clinica clinica, Paciente paciente) {

@@ -141,6 +141,40 @@ class WhatsappInboundMapperTest {
     }
 
     @Test
+    void should_persist_safe_contact_avatar_when_meta_sends_profile_picture() {
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.save(any(Paciente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(atendimentoRepository.findAtivo(2L, null)).thenReturn(Optional.empty());
+        when(atendimentoRepository.existeEncerradoDesde(any(), any(), any())).thenReturn(false);
+        when(atendimentoRepository.save(any(Atendimento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(Map.of(
+                "metadata", Map.of("phone_number_id", "phone-ultra"),
+                "contacts", List.of(Map.of(
+                        "wa_id", "5511999990000",
+                        "profile", Map.of(
+                                "name", "Paciente Teste",
+                                "picture", "https://provider.example/avatar/abc"
+                        )
+                )),
+                "messages", List.of(Map.of(
+                        "id", "wamid-1",
+                        "timestamp", "1781455200",
+                        "text", Map.of("body", "Olá")
+                ))
+        ));
+
+        ArgumentCaptor<Paciente> captor = ArgumentCaptor.forClass(Paciente.class);
+        verify(pacienteRepository, atLeastOnce()).save(captor.capture());
+        assertTrue(captor.getAllValues().stream()
+                .anyMatch(paciente -> "https://provider.example/avatar/abc".equals(paciente.getFotoUrl())));
+    }
+
+    @Test
     void should_emit_n8n_message_received_after_persisting_inbound_message() {
         clinica.setSlug("ultramedical");
         clinica.setUsaN8n(true);
