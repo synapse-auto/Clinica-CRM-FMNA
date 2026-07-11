@@ -47,6 +47,14 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     @Query("""
             SELECT u FROM Usuario u
             WHERE u.clinica.id = :clinicaId
+              AND u.deletadoEm IS NULL
+            ORDER BY u.nome ASC
+            """)
+    List<Usuario> findTodosByClinicaId(@Param("clinicaId") Long clinicaId);
+
+    @Query("""
+            SELECT u FROM Usuario u
+            WHERE u.clinica.id = :clinicaId
               AND u.ativo = true
               AND u.adminInterno = false
               AND u.deletadoEm IS NULL

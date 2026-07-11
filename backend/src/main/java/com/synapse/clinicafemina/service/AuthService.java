@@ -63,6 +63,7 @@ public class AuthService {
         extraClaims.put("clinicaId", usuario.getClinica().getId());
         extraClaims.put("perfil", usuario.getPerfil());
         extraClaims.put("nome", usuario.getNome());
+        extraClaims.put("podeGerenciarUsuarios", usuario.getPodeGerenciarUsuarios());
 
         return LoginResponse.builder()
                 .token(jwtService.generateToken(extraClaims, usuario))
@@ -72,6 +73,7 @@ public class AuthService {
                 .perfil(usuario.getPerfil())
                 .clinicaId(usuario.getClinica().getId())
                 .mustChangePassword(usuario.getMustChangePassword())
+                .podeGerenciarUsuarios(usuario.getPodeGerenciarUsuarios())
                 .build();
     }
 }

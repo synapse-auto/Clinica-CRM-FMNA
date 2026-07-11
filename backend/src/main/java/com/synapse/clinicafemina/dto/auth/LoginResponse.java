@@ -17,4 +17,5 @@ public class LoginResponse {
     private String perfil;
     private Long clinicaId;
     private Boolean mustChangePassword;
+    private Boolean podeGerenciarUsuarios;
 }

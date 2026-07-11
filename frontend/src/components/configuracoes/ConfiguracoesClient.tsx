@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import {
   Activity,
   Building2,
@@ -11,18 +12,22 @@ import {
   Server,
   Settings,
   ShieldCheck,
+  UserCheck2,
+  ArrowRight,
 } from 'lucide-react';
 import { DemoCard } from '@/components/demo/DemoCard';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { StatusBadge } from '@/components/demo/StatusBadge';
 import type { ConfiguracaoResumo } from '@/types/configuracoes';
+import type { AuthUser } from '@/lib/auth/types';
 
 type ConfiguracoesClientProps = {
   resumo: ConfiguracaoResumo | null;
   error?: string | null;
+  user: AuthUser;
 };
 
-export function ConfiguracoesClient({ resumo, error = null }: ConfiguracoesClientProps) {
+export function ConfiguracoesClient({ resumo, error = null, user }: ConfiguracoesClientProps) {
   return (
     <div className="h-full overflow-auto bg-clinic-canvas p-4 custom-scrollbar">
       <PageHeader
@@ -37,12 +42,12 @@ export function ConfiguracoesClient({ resumo, error = null }: ConfiguracoesClien
         </p>
       ) : null}
 
-      {resumo ? <ConfiguracoesResumoView resumo={resumo} /> : <ResumoIndisponivel />}
+      {resumo ? <ConfiguracoesResumoView resumo={resumo} user={user} /> : <ResumoIndisponivel />}
     </div>
   );
 }
 
-function ConfiguracoesResumoView({ resumo }: { resumo: ConfiguracaoResumo }) {
+function ConfiguracoesResumoView({ resumo, user }: { resumo: ConfiguracaoResumo; user: AuthUser }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
@@ -140,6 +145,29 @@ function ConfiguracoesResumoView({ resumo }: { resumo: ConfiguracaoResumo }) {
           </div>
         </DemoCard>
       </div>
+
+      {user?.podeGerenciarUsuarios ? (
+        <div className="mt-3">
+          <DemoCard
+            title="Gerenciamento de acessos"
+            description="Cadastrar novos usuários e gerenciar permissões da clínica"
+            icon={<UserCheck2 className="h-5 w-5" />}
+            actions={
+              <Link
+                href="/configuracoes/acessos"
+                className="flex h-8 items-center gap-2 rounded-lg bg-clinic-primary px-3 text-[10px] font-bold text-white transition hover:bg-clinic-primary-strong"
+              >
+                Gerenciar
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            }
+          >
+            <div className="px-4 pb-4 text-xs font-semibold text-clinic-muted">
+              Você tem permissão para gerenciar os acessos da equipe (Gestores, Médicos e Recepcionistas) desta clínica. Use o link acima para listar usuários cadastrados, criar novos acessos ou redefinir senhas temporárias.
+            </div>
+          </DemoCard>
+        </div>
+      ) : null}
     </div>
   );
 }

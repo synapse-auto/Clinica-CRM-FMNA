@@ -24,8 +24,11 @@ export const AUTH_MENU_ITEMS: readonly AuthMenuItem[] = [
   { name: 'Minha conta', href: '/minha-conta', profiles: ALL_PROFILES },
 ];
 
-export function menuItemsForProfile(profile: AuthProfile): AuthMenuItem[] {
-  return AUTH_MENU_ITEMS.filter((item) => item.profiles.includes(profile));
+export function menuItemsForProfile(profile: AuthProfile, podeGerenciarUsuarios = false): AuthMenuItem[] {
+  return AUTH_MENU_ITEMS.filter((item) => {
+    if (!item.profiles.includes(profile)) return false;
+    return item.href !== '/equipe' || podeGerenciarUsuarios;
+  });
 }
 
 export function isRouteAllowed(profile: AuthProfile, pathname: string): boolean {

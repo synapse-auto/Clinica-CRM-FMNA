@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/equipe")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('GESTOR')")
+@PreAuthorize("@usuarioPermissionService.podeGerenciarUsuarios(authentication)")
 public class EquipeController {
 
     private final ClinicaConfigService clinicaConfigService;

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { EquipeClient } from '@/components/equipe/EquipeClient';
+import { requireSession } from '@/lib/auth/session';
 import { getEquipe, isBackendAuthorizationError } from '@/services/backend';
 import type { EquipeResponse } from '@/types/equipe';
 
@@ -12,6 +13,11 @@ const EMPTY_EQUIPE: EquipeResponse = {
 };
 
 export default async function EquipePage() {
+  const user = await requireSession(['GESTOR']);
+  if (!user.podeGerenciarUsuarios) {
+    redirect('/configuracoes');
+  }
+
   let equipe = EMPTY_EQUIPE;
   let erroCarregamento: string | null = null;
 

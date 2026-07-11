@@ -57,6 +57,9 @@ public abstract class Usuario implements UserDetails {
     @Column(name = "admin_interno", nullable = false)
     private Boolean adminInterno = false;
 
+    @Column(name = "pode_gerenciar_usuarios", nullable = false)
+    private Boolean podeGerenciarUsuarios = false;
+
     @Column(name = "ultimo_login_em")
     private OffsetDateTime ultimoLoginEm;
 

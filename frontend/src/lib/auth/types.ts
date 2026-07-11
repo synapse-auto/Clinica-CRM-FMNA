@@ -9,6 +9,7 @@ export type AuthUser = {
   perfil: AuthProfile;
   clinicaId: number;
   mustChangePassword: boolean;
+  podeGerenciarUsuarios: boolean;
 };
 
 export function isAuthProfile(value: unknown): value is AuthProfile {

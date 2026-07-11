@@ -61,6 +61,7 @@ class EquipeSecurityIntegrationTest {
     private EntityManager entityManager;
 
     private String gestorEmail;
+    private String gestorComumEmail;
     private String recepcionistaEmail;
     private String medicoEmail;
     private String senha;
@@ -78,13 +79,15 @@ class EquipeSecurityIntegrationTest {
 
         senha = UUID.randomUUID() + "!Aa1";
         gestorEmail = "gestor-" + UUID.randomUUID() + "@clinica.local";
+        gestorComumEmail = "gestor-comum-" + UUID.randomUUID() + "@clinica.local";
         recepcionistaEmail = "recepcao-" + UUID.randomUUID() + "@clinica.local";
         medicoEmail = "medico-" + UUID.randomUUID() + "@clinica.local";
 
-        saveUser(new Gestor(), clinica, "Gestora Real", gestorEmail, false, false);
-        saveUser(new Recepcionista(), clinica, "Recepcao Real", recepcionistaEmail, false, false);
-        saveUser(new Medico(), clinica, "Medico Real", medicoEmail, false, false);
-        saveUser(new Gestor(), clinica, "Admin Interno", "interno-" + UUID.randomUUID() + "@clinica.local", false, true);
+        saveUser(new Gestor(), clinica, "Gestora Real", gestorEmail, false, false, true);
+        saveUser(new Gestor(), clinica, "Gestor Comum", gestorComumEmail, false, false, false);
+        saveUser(new Recepcionista(), clinica, "Recepcao Real", recepcionistaEmail, false, false, false);
+        saveUser(new Medico(), clinica, "Medico Real", medicoEmail, false, false, false);
+        saveUser(new Gestor(), clinica, "Admin Interno", "interno-" + UUID.randomUUID() + "@clinica.local", false, true, false);
         entityManager.flush();
         entityManager.clear();
     }
@@ -97,7 +100,7 @@ class EquipeSecurityIntegrationTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.grupos[0].perfil").value("GESTOR"))
-                .andExpect(jsonPath("$.grupos[0].usuarios[0].nome").value("Gestora Real"))
+                .andExpect(jsonPath("$.grupos[0].usuarios[?(@.nome == 'Gestora Real')]").exists())
                 .andExpect(jsonPath("$.grupos[1].perfil").value("MEDICO"))
                 .andExpect(jsonPath("$.grupos[1].usuarios[0].nome").value("Medico Real"))
                 .andExpect(jsonPath("$.grupos[2].perfil").value("RECEPCIONISTA"))
@@ -192,6 +195,28 @@ class EquipeSecurityIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void common_gestor_should_not_access_team_management() throws Exception {
+        String token = login(gestorComumEmail);
+
+        mockMvc.perform(get("/api/equipe")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/equipe/usuarios")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nome":"Usuario Bloqueado",
+                                  "email":"bloqueado-equipe@clinica.local",
+                                  "perfil":"RECEPCIONISTA",
+                                  "senhaTemporaria":"Atendente1"
+                                }
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
     private String login(String email) throws Exception {
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -212,7 +237,8 @@ class EquipeSecurityIntegrationTest {
             String nome,
             String email,
             boolean mustChangePassword,
-            boolean adminInterno
+            boolean adminInterno,
+            boolean podeGerenciarUsuarios
     ) {
         usuario.setClinica(clinica);
         usuario.setNome(nome);
@@ -220,6 +246,7 @@ class EquipeSecurityIntegrationTest {
         usuario.setSenhaHash(passwordEncoder.encode(senha));
         usuario.setMustChangePassword(mustChangePassword);
         usuario.setAdminInterno(adminInterno);
+        usuario.setPodeGerenciarUsuarios(podeGerenciarUsuarios);
         usuario.setAtivo(true);
         usuarioRepository.save(usuario);
     }

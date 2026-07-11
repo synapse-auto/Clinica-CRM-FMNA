@@ -25,6 +25,11 @@ describe('auth permissions', () => {
     }
   });
 
+  it('should_show_team_management_only_for_authorized_manager', () => {
+    expect(menuItemsForProfile('GESTOR', true).map((item) => item.href)).toContain('/equipe');
+    expect(menuItemsForProfile('GESTOR').map((item) => item.href)).not.toContain('/equipe');
+  });
+
   it('should_limit_receptionist_to_operational_routes_and_account', () => {
     expect(isRouteAllowed('RECEPCIONISTA', '/pacientes')).toBe(true);
     expect(isRouteAllowed('RECEPCIONISTA', '/horarios')).toBe(true);

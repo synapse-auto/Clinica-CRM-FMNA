@@ -56,7 +56,7 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join('') || 'US';
-  const menuItems = menuItemsForProfile(user.perfil);
+  const menuItems = menuItemsForProfile(user.perfil, user.podeGerenciarUsuarios);
 
   useEffect(() => {
     function updateBadge(event: Event) {
