@@ -9,6 +9,7 @@ import type {
   NovoAtendimentoLembrete,
 } from '@/types/atendimento';
 import type { TagOperacional } from '@/types/operacional';
+import { ContactAvatar } from './ContactAvatar';
 
 type Props = {
   detail: AtendimentoDetalhe | null;
@@ -65,7 +66,6 @@ export function ContactDetails({
   }
 
   const paciente = detail.paciente;
-  const initials = paciente.nome.split(/\s+/).slice(0, 2).map((part) => part[0]).join('');
   const linkedTagIds = new Set(tags.map((tag) => tag.id));
   const tagsToAdd = availableTags.filter((tag) => !linkedTagIds.has(tag.id));
   const pendingReminders = reminders.filter((reminder) => reminder.status === 'PENDENTE');
@@ -87,25 +87,7 @@ export function ContactDetails({
   return (
     <aside className="flex h-full w-[300px] shrink-0 flex-col overflow-y-auto border-l border-clinic-border bg-clinic-surface custom-scrollbar">
       <div className="border-b border-clinic-border p-4 text-center">
-        {paciente.fotoUrl ? (
-          <img
-            src={paciente.fotoUrl}
-            alt={paciente.nome}
-            className="mx-auto mb-2.5 h-14 w-14 rounded-full object-cover ring-4 ring-clinic-soft"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-              if (e.currentTarget.nextElementSibling) {
-                (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
-              }
-            }}
-          />
-        ) : null}
-        <div
-          className="mx-auto mb-2.5 flex h-14 w-14 items-center justify-center rounded-full bg-clinic-primary/15 text-lg font-extrabold text-clinic-primary ring-4 ring-clinic-soft"
-          style={{ display: paciente.fotoUrl ? 'none' : 'flex' }}
-        >
-          {initials}
-        </div>
+        <ContactAvatar name={paciente.nome} url={paciente.fotoUrl} variant="details" />
         <h2 className="text-[14px] font-extrabold text-clinic-text">{paciente.nome}</h2>
         <p className="mt-1 text-[9px] font-semibold text-clinic-muted">{detail.status}</p>
 

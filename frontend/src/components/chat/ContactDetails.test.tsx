@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ContactDetails } from './ContactDetails';
@@ -18,6 +18,7 @@ const detail: AtendimentoDetalhe = {
     telefone: '44 99999-9999',
     email: null,
     status: 'EM_ATENDIMENTO',
+    fotoUrl: null,
     ultimaInteracaoEm: null,
     requerRevisao: false,
     convenioStatus: null,
@@ -82,6 +83,42 @@ const reminder: AtendimentoLembrete = {
 };
 
 describe('ContactDetails', () => {
+  it('should_show_unicode_safe_initials_in_patient_details', () => {
+    render(
+      <ContactDetails
+        detail={{
+          ...detail,
+          paciente: { ...detail.paciente, nome: '𝑨𝒃𝒊𝒎𝒂𝒆𝒍 𝑴𝒐𝒖𝒓𝒂', fotoUrl: null },
+        }}
+        {...baseProps}
+      />,
+    );
+
+    expect(screen.getByText('AM')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: '𝑨𝒃𝒊𝒎𝒂𝒆𝒍 𝑴𝒐𝒖𝒓𝒂' })).not.toBeInTheDocument();
+  });
+
+  it('should_show_initials_when_patient_image_fails', () => {
+    render(
+      <ContactDetails
+        detail={{
+          ...detail,
+          paciente: {
+            ...detail.paciente,
+            nome: 'Abimael Moura',
+            fotoUrl: 'https://provider.example/avatar/abimael',
+          },
+        }}
+        {...baseProps}
+      />,
+    );
+
+    fireEvent.error(screen.getByRole('img', { name: 'Abimael Moura' }));
+
+    expect(screen.getByText('AM')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Abimael Moura' })).not.toBeInTheDocument();
+  });
+
   it('should_hide_confirmation_when_patient_does_not_require_review', () => {
     render(<ContactDetails detail={detail} {...baseProps} />);
 

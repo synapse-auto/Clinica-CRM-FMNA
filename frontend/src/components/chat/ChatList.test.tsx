@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ChatList } from './ChatList';
 import type { AtendimentoResumo } from '@/types/atendimento';
@@ -16,6 +16,7 @@ const baseConversation: AtendimentoResumo = {
     id: 10,
     nomeBusca: 'PACIENTE TESTE',
     telefoneNormalizado: '5544999999999',
+    fotoUrl: null,
   },
   atendentePrincipal: null,
   tags: [],
@@ -32,6 +33,8 @@ const baseProps = {
 };
 
 describe('ChatList', () => {
+  const unicodeName = '𝑨𝒃𝒊𝒎𝒂𝒆𝒍 𝑴𝒐𝒖𝒓𝒂';
+
   it('should_render_real_tags_and_limit_visual_overflow', () => {
     render(
       <ChatList
@@ -70,6 +73,7 @@ describe('ChatList', () => {
               id: 11,
               nomeBusca: 'OUTRA PACIENTE',
               telefoneNormalizado: '5544888888888',
+              fotoUrl: null,
             },
             atendentePrincipal: {
               id: 50,
@@ -82,5 +86,62 @@ describe('ChatList', () => {
 
     expect(screen.getByText('Atendido por IA')).toBeInTheDocument();
     expect(screen.getByText('Atendido por Ana Lima')).toBeInTheDocument();
+  });
+
+  it.each([null, '', '��', 'http://provider.example/avatar'])(
+    'should_show_unicode_safe_initials_when_avatar_is_invalid: %s',
+    (fotoUrl) => {
+      render(
+        <ChatList
+          {...baseProps}
+          conversations={[{
+            ...baseConversation,
+            paciente: { ...baseConversation.paciente, nomeBusca: unicodeName, fotoUrl },
+          }]}
+        />,
+      );
+
+      expect(screen.getByText('AM')).toBeInTheDocument();
+      expect(screen.queryByRole('img', { name: unicodeName })).not.toBeInTheDocument();
+    },
+  );
+
+  it('should_fallback_after_image_error_and_reset_for_another_contact', () => {
+    const { rerender } = render(
+      <ChatList
+        {...baseProps}
+        conversations={[{
+          ...baseConversation,
+          paciente: {
+            ...baseConversation.paciente,
+            nomeBusca: unicodeName,
+            fotoUrl: 'https://provider.example/avatar/abimael',
+          },
+        }]}
+      />,
+    );
+
+    fireEvent.error(screen.getByRole('img', { name: unicodeName }));
+    expect(screen.getByText('AM')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: unicodeName })).not.toBeInTheDocument();
+
+    rerender(
+      <ChatList
+        {...baseProps}
+        conversations={[{
+          ...baseConversation,
+          paciente: {
+            ...baseConversation.paciente,
+            nomeBusca: 'BRUNA COSTA',
+            fotoUrl: 'https://provider.example/avatar/bruna',
+          },
+        }]}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'BRUNA COSTA' })).toHaveAttribute(
+      'src',
+      'https://provider.example/avatar/bruna',
+    );
   });
 });
