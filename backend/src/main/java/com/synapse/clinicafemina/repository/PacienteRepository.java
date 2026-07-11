@@ -72,6 +72,7 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
                 status AS status,
                 external_source AS "externalSource",
                 external_id AS "externalId",
+                foto_url AS "fotoUrl",
                 criado_em AS "criadoEm",
                 ultima_interacao_em AS "ultimaInteracaoEm"
             FROM paciente
@@ -90,6 +91,7 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
                 status AS status,
                 external_source AS "externalSource",
                 external_id AS "externalId",
+                foto_url AS "fotoUrl",
                 criado_em AS "criadoEm",
                 ultima_interacao_em AS "ultimaInteracaoEm"
             FROM paciente

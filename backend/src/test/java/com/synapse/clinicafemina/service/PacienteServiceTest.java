@@ -84,6 +84,26 @@ class PacienteServiceTest {
     }
 
     @Test
+    void listar_preservaFotoUrlDaProjecaoNaResposta() {
+        PacienteRepository.PacienteResumoProjection paciente = resumoProjection(
+                11L,
+                "ana avatar",
+                "5511999998888",
+                null,
+                null,
+                Instant.parse("2026-07-10T12:00:00Z"),
+                null,
+                "https://provider.example/avatar/ana"
+        );
+        when(pacienteRepository.findResumosDisponiveisByClinicaId(clinica.getId()))
+                .thenReturn(List.of(paciente));
+
+        List<PacienteResumoDTO> result = service.listar(clinica);
+
+        assertEquals("https://provider.example/avatar/ana", result.get(0).fotoUrl());
+    }
+
+    @Test
     void listar_incluiExternalSourceQuandoDisponivel() {
         PacienteRepository.PacienteResumoProjection paciente = resumoProjection(
                 4L,
@@ -203,6 +223,20 @@ class PacienteServiceTest {
             Instant criadoEm,
             Instant ultimaInteracaoEm
     ) {
+        return resumoProjection(id, nomeBusca, telefone, externalSource, externalId,
+                criadoEm, ultimaInteracaoEm, null);
+    }
+
+    private PacienteRepository.PacienteResumoProjection resumoProjection(
+            Long id,
+            String nomeBusca,
+            String telefone,
+            String externalSource,
+            String externalId,
+            Instant criadoEm,
+            Instant ultimaInteracaoEm,
+            String fotoUrl
+    ) {
         return new PacienteRepository.PacienteResumoProjection() {
             @Override
             public Long getId() {
@@ -251,7 +285,7 @@ class PacienteServiceTest {
 
             @Override
             public String getFotoUrl() {
-                return null;
+                return fotoUrl;
             }
         };
     }
