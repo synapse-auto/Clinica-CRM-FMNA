@@ -103,8 +103,8 @@ export function AgendamentoModal({
               className={inputClassName}
             >
               <option value="">Selecione um paciente</option>
-              {options.pacientes.map((paciente) => (
-                <option key={paciente.id} value={paciente.id}>{paciente.nome}</option>
+              {options.pacientes.filter((paciente) => paciente.id !== null).map((paciente) => (
+                <option key={paciente.id} value={paciente.id ?? ''}>{paciente.nome}</option>
               ))}
             </select>
           </Field>
@@ -118,8 +118,8 @@ export function AgendamentoModal({
               className={inputClassName}
             >
               <option value="">Sem profissional definido</option>
-              {options.medicos.map((medico) => (
-                <option key={medico.id} value={medico.id}>{medico.nome}</option>
+              {options.medicos.filter((medico) => medico.id !== null).map((medico) => (
+                <option key={medico.id} value={medico.id ?? ''}>{medico.nome}</option>
               ))}
             </select>
           </Field>

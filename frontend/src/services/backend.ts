@@ -101,8 +101,11 @@ export async function getAgendamentos(
   return getJson<Agendamento[]>(`/api/agendamentos?${params.toString()}`);
 }
 
-export async function getAgendaOptions(): Promise<AgendaOptions> {
-  return getJson<AgendaOptions>('/api/agendamentos/opcoes');
+export async function getAgendaOptions(inicio?: string, fim?: string): Promise<AgendaOptions> {
+  const params = inicio && fim
+    ? `?${new URLSearchParams({ inicio, fim }).toString()}`
+    : '';
+  return getJson<AgendaOptions>(`/api/agendamentos/opcoes${params}`);
 }
 
 export async function getAtendimentosIniciais(): Promise<AtendimentoPage<AtendimentoResumo>> {

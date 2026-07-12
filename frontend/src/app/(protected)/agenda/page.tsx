@@ -12,7 +12,7 @@ export default async function AgendaPage() {
   try {
     [appointments, options] = await Promise.all([
       getAgendamentos(range.inicio, range.fim),
-      getAgendaOptions(),
+      getAgendaOptions(range.inicio, range.fim),
     ]);
   } catch (caughtError) {
     if (isBackendAuthorizationError(caughtError)) {

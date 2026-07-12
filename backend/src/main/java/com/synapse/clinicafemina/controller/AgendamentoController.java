@@ -45,9 +45,14 @@ public class AgendamentoController {
     }
 
     @GetMapping("/opcoes")
-    public AgendaOptionsResponse listarOpcoes() {
+    public AgendaOptionsResponse listarOpcoes(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime inicio,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime fim
+    ) {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
-        return agendamentoService.listarOpcoes(clinica);
+        return inicio == null && fim == null
+                ? agendamentoService.listarOpcoes(clinica)
+                : agendamentoService.listarOpcoes(clinica, inicio, fim);
     }
 
     @PostMapping

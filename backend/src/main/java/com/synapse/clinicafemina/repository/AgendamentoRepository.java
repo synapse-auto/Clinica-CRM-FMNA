@@ -21,6 +21,9 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> 
             OffsetDateTime inicio,
             OffsetDateTime fim);
 
+    @EntityGraph(attributePaths = {"paciente", "medico"})
+    List<Agendamento> findByClinicaIdOrderByDataHoraInicioAsc(Long clinicaId);
+
     Optional<Agendamento> findByClinicaIdAndExternalSourceAndExternalId(
             Long clinicaId,
             ExternalProviderType externalSource,

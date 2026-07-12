@@ -18,8 +18,11 @@ import com.synapse.clinicafemina.repository.AgendamentoRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,6 +39,7 @@ public class AgendamentoService {
     private final AgendamentoRepository agendamentoRepository;
     private final PacienteRepository pacienteRepository;
     private final UsuarioRepository usuarioRepository;
+    private final AgendaExternalDoctorResolver externalDoctorResolver;
 
     @Transactional(readOnly = true)
     public List<AgendamentoResponse> listar(
@@ -54,17 +58,50 @@ public class AgendamentoService {
 
     @Transactional(readOnly = true)
     public AgendaOptionsResponse listarOpcoes(Clinica clinica) {
+        return listarOpcoes(clinica, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public AgendaOptionsResponse listarOpcoes(
+            Clinica clinica,
+            OffsetDateTime inicio,
+            OffsetDateTime fim
+    ) {
         List<AgendaOptionResponse> pacientes = pacienteRepository
                 .findOpcoesDisponiveisByClinicaId(clinica.getId())
                 .stream()
                 .map(paciente -> new AgendaOptionResponse(paciente.getId(), paciente.getNomeBusca()))
                 .toList();
-        List<AgendaOptionResponse> medicos = usuarioRepository
-                .findMedicosAtivosByClinicaId(clinica.getId())
+        List<AgendaOptionResponse> medicos = listarMedicosDaAgenda(clinica, inicio, fim);
+        return new AgendaOptionsResponse(pacientes, medicos);
+    }
+
+    private List<AgendaOptionResponse> listarMedicosDaAgenda(
+            Clinica clinica,
+            OffsetDateTime inicio,
+            OffsetDateTime fim
+    ) {
+        if (clinica.getExternalProvider() == ExternalProviderType.MEDWARE) {
+            Map<String, AgendaExternalDoctorResolver.ExternalDoctor> doctors = new LinkedHashMap<>();
+            List<Agendamento> appointments = inicio != null && fim != null
+                    ? agendamentoRepository
+                    .findByClinicaIdAndDataHoraInicioGreaterThanEqualAndDataHoraInicioLessThanOrderByDataHoraInicioAsc(
+                            clinica.getId(), inicio, fim)
+                    : agendamentoRepository.findByClinicaIdOrderByDataHoraInicioAsc(clinica.getId());
+            appointments
+                    .stream()
+                    .map(externalDoctorResolver::resolve)
+                    .flatMap(Optional::stream)
+                    .forEach(doctor -> doctors.putIfAbsent(externalDoctorResolver.key(doctor), doctor));
+            return doctors.values().stream()
+                    .map(doctor -> new AgendaOptionResponse(
+                            null, doctor.nome(), doctor.codigoExterno(), "MEDWARE"))
+                    .toList();
+        }
+        return usuarioRepository.findMedicosAtivosByClinicaId(clinica.getId())
                 .stream()
                 .map(medico -> new AgendaOptionResponse(medico.getId(), medico.getNome()))
                 .toList();
-        return new AgendaOptionsResponse(pacientes, medicos);
     }
 
     @Transactional
@@ -174,6 +211,28 @@ public class AgendamentoService {
     }
 
     private AgendamentoResponse toResponse(Agendamento agendamento) {
+        if (agendamento.getExternalSource() == ExternalProviderType.MEDWARE) {
+            AgendaExternalDoctorResolver.ExternalDoctor doctor = externalDoctorResolver.resolve(agendamento)
+                    .orElse(null);
+            return new AgendamentoResponse(
+                    agendamento.getId(),
+                    agendamento.getPaciente().getId(),
+                    agendamento.getPaciente().getNome(),
+                    null,
+                    doctor == null ? null : doctor.nome(),
+                    agendamento.getDataHoraInicio(),
+                    agendamento.getDataHoraFim(),
+                    agendamento.getTipo(),
+                    agendamento.getServicoNome(),
+                    agendamento.getStatus(),
+                    agendamento.getOrigem(),
+                    agendamento.getConfirmacaoEnviada(),
+                    agendamento.getCanceladoEm(),
+                    agendamento.getMotivoCancelamento(),
+                    doctor == null ? null : doctor.codigoExterno(),
+                    doctor == null ? null : "MEDWARE"
+            );
+        }
         Usuario medico = agendamento.getMedico();
         return new AgendamentoResponse(
                 agendamento.getId(),
@@ -189,7 +248,9 @@ public class AgendamentoService {
                 agendamento.getOrigem(),
                 agendamento.getConfirmacaoEnviada(),
                 agendamento.getCanceladoEm(),
-                agendamento.getMotivoCancelamento()
+                agendamento.getMotivoCancelamento(),
+                medico == null || medico.getId() == null ? null : medico.getId().toString(),
+                medico == null ? null : "CRM"
         );
     }
 }

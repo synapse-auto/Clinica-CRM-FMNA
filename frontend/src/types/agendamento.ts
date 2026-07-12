@@ -4,6 +4,8 @@ export type Agendamento = {
   pacienteNome: string;
   medicoId: number | null;
   medicoNome: string | null;
+  medicoExternalId: string | null;
+  medicoOrigem: string | null;
   dataHoraInicio: string;
   dataHoraFim: string | null;
   tipo: string;
@@ -16,8 +18,10 @@ export type Agendamento = {
 };
 
 export type AgendaOption = {
-  id: number;
+  id: number | null;
   nome: string;
+  codigoExterno: string | null;
+  origem: string | null;
 };
 
 export type AgendaOptions = {

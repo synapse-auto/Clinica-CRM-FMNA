@@ -42,7 +42,8 @@ export function AgendaClient({
 }: AgendaClientProps) {
   const initialRange = useMemo(() => buildWeekRange(weekStart), [weekStart]);
   const [appointments, setAppointments] = useState(initialAppointments);
-  const [selectedDoctor, setSelectedDoctor] = useState<number | 'all'>('all');
+  const [options, setOptions] = useState(initialOptions);
+  const [selectedDoctor, setSelectedDoctor] = useState<string | 'all'>('all');
   const [range, setRange] = useState<AgendaRange>(initialRange);
   const [error, setError] = useState(initialError);
   const [loading, setLoading] = useState(false);
@@ -52,10 +53,10 @@ export function AgendaClient({
   const activeAppointments = appointments.filter((item) => item.status !== 'CANCELADO');
   const visibleAppointments = selectedDoctor === 'all'
     ? appointments
-    : appointments.filter((item) => item.medicoId === selectedDoctor);
-  const metrics = buildMetrics(activeAppointments, initialOptions);
+    : appointments.filter((item) => appointmentDoctorKey(item) === selectedDoctor);
+  const metrics = buildMetrics(activeAppointments, options);
   const donutItems = buildDonutItems(activeAppointments);
-  const barData = buildBarData(activeAppointments, initialOptions);
+  const barData = buildBarData(activeAppointments, options);
 
   async function loadRange(nextRange: AgendaRange) {
     setLoading(true);
@@ -70,8 +71,18 @@ export function AgendaClient({
       if (!response.ok) {
         throw new Error('Falha ao carregar agenda');
       }
-      const data = await response.json() as Agendamento[];
+      const [data, nextOptions] = await Promise.all([
+        response.json() as Promise<Agendamento[]>,
+        fetch(`/api/agendamentos/opcoes?${search.toString()}`, {
+          headers: { Accept: 'application/json' },
+        }).then(async (optionsResponse) => {
+          if (!optionsResponse.ok) throw new Error('Falha ao carregar profissionais da agenda');
+          return optionsResponse.json() as Promise<AgendaOptions>;
+        }),
+      ]);
       setAppointments(data);
+      setOptions(nextOptions);
+      setSelectedDoctor('all');
       setRange(nextRange);
       setCustomStart(nextRange.startDate);
       setCustomEnd(nextRange.endDate);
@@ -150,7 +161,7 @@ export function AgendaClient({
       <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Stethoscope} title="Consultas Hoje" value={metrics.today} subtitle="agendamentos ativos" tone="cyan" />
         <MetricCard icon={CalendarDays} title="Total no período" value={metrics.period} subtitle="consultas + exames + cirurgias" tone="teal" />
-        <MetricCard icon={UserRoundCheck} title="Médicos Disponíveis" value={metrics.doctors} subtitle="profissionais ativos" tone="teal" />
+        <MetricCard icon={UserRoundCheck} title="Profissionais no período" value={metrics.doctors} subtitle="encontrados na agenda" tone="teal" />
         <MetricCard icon={Activity} title="Confirmações enviadas" value={metrics.confirmations} subtitle="no período selecionado" tone="purple" />
       </div>
 
@@ -163,7 +174,7 @@ export function AgendaClient({
         >
           <div className="px-4 pb-4">
             <DoctorFilters
-              options={initialOptions}
+              options={options}
               selected={selectedDoctor}
               onSelect={setSelectedDoctor}
             />
@@ -217,18 +228,21 @@ function DoctorFilters({
   onSelect,
 }: {
   options: AgendaOptions;
-  selected: number | 'all';
-  onSelect: (id: number | 'all') => void;
+  selected: string | 'all';
+  onSelect: (id: string | 'all') => void;
 }) {
-  const filters = [{ id: 'all' as const, nome: 'Todos' }, ...options.medicos];
+  const filters: Array<DoctorFilter> = [
+    { id: 'all', nome: 'Todos' },
+    ...options.medicos,
+  ];
   return (
     <div className="mb-3 flex flex-wrap gap-1.5">
       {filters.map((doctor) => (
         <button
-          key={doctor.id}
+          key={filterKey(doctor)}
           type="button"
-          onClick={() => onSelect(doctor.id)}
-          className={selected === doctor.id
+          onClick={() => onSelect(filterKey(doctor))}
+          className={selected === filterKey(doctor)
             ? 'rounded-lg bg-clinic-primary px-3 py-1.5 text-[9px] font-bold text-white'
             : 'rounded-lg bg-clinic-surface-muted px-3 py-1.5 text-[9px] font-semibold text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-text'}
         >
@@ -237,6 +251,12 @@ function DoctorFilters({
       ))}
     </div>
   );
+}
+
+type DoctorFilter = { id: 'all'; nome: string } | AgendaOptions['medicos'][number];
+
+function filterKey(doctor: DoctorFilter): string {
+  return doctor.id === 'all' ? 'all' : doctorKey(doctor);
 }
 
 function WeekGrid({
@@ -331,9 +351,7 @@ function buildDonutItems(appointments: Agendamento[]) {
 }
 
 function buildBarData(appointments: Agendamento[], options: AgendaOptions) {
-  const doctors = options.medicos.length > 0
-    ? options.medicos
-    : [{ id: -1, nome: 'Sem profissional' }];
+  const doctors = options.medicos.length > 0 ? options.medicos : [];
   const definitions = [
     { key: 'CONSULTA', label: 'Consultas', color: 'var(--clinic-primary)' },
     { key: 'EXAME', label: 'Exames', color: 'var(--clinic-orange)' },
@@ -346,10 +364,26 @@ function buildBarData(appointments: Agendamento[], options: AgendaOptions) {
       color: definition.color,
       values: doctors.map((doctor) => appointments.filter((item) => (
         item.tipo === definition.key
-        && (doctor.id === -1 ? item.medicoId === null : item.medicoId === doctor.id)
+        && appointmentDoctorKey(item) === doctorKey(doctor)
       )).length),
     })),
   };
+}
+
+function doctorKey(doctor: { id: number | null; nome: string; codigoExterno: string | null; origem: string | null }) {
+  return doctor.origem === 'MEDWARE'
+    ? `external:${doctor.codigoExterno ?? normalizeDoctorName(doctor.nome)}`
+    : `local:${doctor.id}`;
+}
+
+function appointmentDoctorKey(appointment: Agendamento) {
+  return appointment.medicoOrigem === 'MEDWARE'
+    ? `external:${appointment.medicoExternalId ?? normalizeDoctorName(appointment.medicoNome ?? '')}`
+    : `local:${appointment.medicoId}`;
+}
+
+function normalizeDoctorName(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 }
 
 function buildWeekRange(weekStart: string): AgendaRange {

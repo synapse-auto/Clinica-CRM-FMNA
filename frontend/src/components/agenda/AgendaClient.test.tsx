@@ -3,8 +3,8 @@ import { afterEach, beforeEach, vi } from 'vitest';
 import { AgendaClient } from './AgendaClient';
 
 const options = {
-  pacientes: [{ id: 20, nome: 'Maria da Silva' }],
-  medicos: [{ id: 30, nome: 'Dra. Renata' }],
+  pacientes: [{ id: 20, nome: 'Maria da Silva', codigoExterno: null, origem: 'CRM' }],
+  medicos: [{ id: 30, nome: 'Dra. Renata', codigoExterno: null, origem: 'CRM' }],
 };
 
 const existingAppointment = {
@@ -13,6 +13,8 @@ const existingAppointment = {
   pacienteNome: 'Maria da Silva',
   medicoId: 30,
   medicoNome: 'Dra. Renata',
+  medicoExternalId: null,
+  medicoOrigem: 'CRM',
   dataHoraInicio: '2026-06-23T09:00:00-03:00',
   dataHoraFim: '2026-06-23T09:30:00-03:00',
   tipo: 'CONSULTA',
@@ -140,10 +142,10 @@ describe('AgendaClient (somente leitura)', () => {
   });
 
   it('should_load_current_month_period_and_show_period_label', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
+    const fetchMock = vi.fn((path: string) => Promise.resolve({
       ok: true,
-      json: async () => [julyAppointment],
-    });
+      json: async () => path.includes('/opcoes') ? options : [julyAppointment],
+    }));
     vi.stubGlobal('fetch', fetchMock);
 
     render(
@@ -157,7 +159,7 @@ describe('AgendaClient (somente leitura)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /mês atual/i }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(decodeURIComponent(String(fetchMock.mock.calls[0][0]))).toContain('/api/agendamentos?inicio=');
     expect(decodeURIComponent(String(fetchMock.mock.calls[0][0]))).toContain('&fim=');
     expect(await screen.findByText('Paciente Julho')).toBeInTheDocument();
@@ -166,10 +168,10 @@ describe('AgendaClient (somente leitura)', () => {
   });
 
   it('should_load_previous_month_period', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
+    const fetchMock = vi.fn((path: string) => Promise.resolve({
       ok: true,
-      json: async () => [existingAppointment],
-    });
+      json: async () => path.includes('/opcoes') ? options : [existingAppointment],
+    }));
     vi.stubGlobal('fetch', fetchMock);
 
     render(
@@ -183,7 +185,7 @@ describe('AgendaClient (somente leitura)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /mês anterior/i }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('Maria da Silva')).toBeInTheDocument();
     expect(screen.getByText('Agendamentos de 01/06/2026 a 30/06/2026')).toBeInTheDocument();
   });
