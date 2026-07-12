@@ -291,6 +291,27 @@ describe('ChatWindow', () => {
     expect(docLink).toHaveAttribute('href', '/api/atendimentos/30/mensagens/3/midia');
   });
 
+  it('should_keep_24_hour_failure_visible_with_a_friendly_reason', () => {
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[{
+          ...makeMessage(5, 'SAIDA'),
+          whatsappStatus: 'FALHA',
+          motivoFalha: 'A Meta exige template aprovado para responder fora da janela de 24h.',
+        }]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText(/janela de atendimento de 24 horas foi encerrada/i)).toBeInTheDocument();
+    expect(screen.getByText('Mensagem 5')).toBeInTheDocument();
+  });
+
   it('should_show_friendly_error_when_image_loading_fails', () => {
     const mockImageMessage: MensagemAtendimento = {
       id: 4,

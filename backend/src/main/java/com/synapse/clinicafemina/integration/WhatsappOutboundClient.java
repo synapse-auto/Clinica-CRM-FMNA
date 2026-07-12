@@ -302,6 +302,8 @@ public class WhatsappOutboundClient {
         return message.contains("template")
                 || message.contains("24 hour")
                 || message.contains("24-hour")
+                || message.contains("24 horas")
+                || message.contains("janela")
                 || message.contains("outside")
                 || message.contains("re-engagement");
     }

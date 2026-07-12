@@ -279,11 +279,14 @@ function filterQuickMessages(messages: MensagemRapida[], search: string) {
 
 function MessageBubble({ message }: { message: MensagemAtendimento }) {
   const outbound = message.direcao === 'SAIDA';
+  const failed = message.whatsappStatus === 'FALHA';
   return (
     <div className={`flex flex-col ${outbound ? 'items-end' : 'items-start'}`}>
       <div
         className={`max-w-[78%] rounded-2xl px-4 py-3 text-[13px] leading-5 shadow-sm ${
-          outbound
+          failed
+            ? 'rounded-tr-sm border border-clinic-danger/40 bg-clinic-danger/10 text-clinic-text'
+            : outbound
             ? 'rounded-tr-sm bg-clinic-primary text-white'
             : 'rounded-tl-sm border border-clinic-border bg-clinic-surface text-clinic-text'
         }`}
@@ -298,12 +301,20 @@ function MessageBubble({ message }: { message: MensagemAtendimento }) {
         {outbound ? <StatusIcon status={message.whatsappStatus} /> : null}
         {message.whatsappStatus === 'FALHA' ? (
           <span className="font-semibold text-clinic-danger">
-            {message.motivoFalha ?? 'Falha no envio'}
+            {mensagemFalhaAmigavel(message.motivoFalha)}
           </span>
         ) : null}
       </div>
     </div>
   );
+}
+
+function mensagemFalhaAmigavel(reason: string | null) {
+  const normalized = reason?.toLocaleLowerCase('pt-BR') ?? '';
+  if (normalized.includes('24h') || normalized.includes('template')) {
+    return 'Mensagem n\u00e3o enviada. A janela de atendimento de 24 horas foi encerrada pela Meta. Use um template aprovado ou aguarde uma nova mensagem do paciente.';
+  }
+  return reason ?? 'Falha no envio';
 }
 
 function MediaContent({ message }: { message: MensagemAtendimento }) {

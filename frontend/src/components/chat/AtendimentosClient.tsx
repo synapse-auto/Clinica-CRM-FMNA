@@ -188,10 +188,16 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
   async function runAction(action: () => Promise<unknown>) {
     setBusy(true);
     try {
-      await action();
+      const result = await action();
+      const sentMessage = isMensagemAtendimento(result) ? result : null;
+      if (sentMessage && activeId) {
+        setMessages((current) => mergeMensagem(current, sentMessage));
+      }
       if (activeId) await refreshActive(activeId);
       await refreshList();
-      setError(null);
+      setError(sentMessage?.whatsappStatus === 'FALHA'
+        ? mensagemFalhaAmigavel(sentMessage.motivoFalha)
+        : null);
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -300,6 +306,26 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       />
     </div>
   );
+}
+
+function isMensagemAtendimento(value: unknown): value is MensagemAtendimento {
+  return Boolean(value && typeof value === 'object'
+    && 'id' in value && typeof value.id === 'number'
+    && 'whatsappStatus' in value);
+}
+
+function mergeMensagem(current: MensagemAtendimento[], next: MensagemAtendimento) {
+  const existingIndex = current.findIndex((message) => message.id === next.id);
+  if (existingIndex < 0) return [...current, next];
+  return current.map((message) => message.id === next.id ? next : message);
+}
+
+function mensagemFalhaAmigavel(reason: string | null) {
+  if (reason?.toLocaleLowerCase('pt-BR').includes('24h')
+      || reason?.toLocaleLowerCase('pt-BR').includes('template')) {
+    return 'Mensagem n\u00e3o enviada: a janela de atendimento de 24 horas foi encerrada pela Meta. Use um template aprovado ou aguarde uma nova mensagem do paciente.';
+  }
+  return reason ?? 'Mensagem n\u00e3o enviada pelo WhatsApp.';
 }
 
 function errorMessage(cause: unknown) {

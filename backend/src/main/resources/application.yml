@@ -27,6 +27,13 @@ spring:
     properties:
       "[org.quartz.threadPool.threadCount]": 2
 
+resilience4j:
+  retry:
+    instances:
+      whatsapp-send:
+        ignore-exceptions:
+          - com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException
+
 app:
   environment: ${APP_ENV:${APP_ENVIRONMENT:producao}}
   clinic:

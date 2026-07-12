@@ -10,6 +10,13 @@ spring:
     hibernate:
       ddl-auto: none
 
+resilience4j:
+  retry:
+    instances:
+      whatsapp-send:
+        ignore-exceptions:
+          - com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException
+
 app:
   environment: teste
   clinic:

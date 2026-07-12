@@ -372,6 +372,11 @@ public class MensagemService {
                 mensagem.getId(),
                 exception.getClass().getSimpleName()
         );
+        WhatsappTemplateRequiredException templateRequired = findTemplateRequired(exception);
+        if (templateRequired != null) {
+            log.info("Retry automatico ignorado para mensagem {}: janela Meta exige template", mensagem.getId());
+            return;
+        }
         try {
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.EXCHANGE_WHATSAPP_SAIDA,

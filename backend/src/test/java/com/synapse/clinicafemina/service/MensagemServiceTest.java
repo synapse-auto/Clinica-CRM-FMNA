@@ -320,6 +320,7 @@ class MensagemServiceTest {
                 "A Meta exige template aprovado para iniciar conversa ativa ou responder fora da janela de 24h.",
                 mensagemFinal.getMotivoFalha()
         );
+        org.mockito.Mockito.verifyNoInteractions(rabbitTemplate);
     }
 
     @Test
