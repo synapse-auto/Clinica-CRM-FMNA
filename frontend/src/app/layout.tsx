@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
+import { publicDocumentTitle } from '@/config/public-branding';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -15,8 +16,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'CRM Clínico',
-  description: 'Sistema de gestão clínica e CRM WhatsApp',
+  title: {
+    default: publicDocumentTitle,
+    template: `%s | ${publicDocumentTitle}`,
+  },
+  description: `Sistema de atendimento e gestão clínica${publicDocumentTitle === 'CRM de Atendimento Clínico' ? '' : ` da ${publicDocumentTitle.replace(/^CRM /, '')}`}`,
 };
 
 const themeInitializationScript = `

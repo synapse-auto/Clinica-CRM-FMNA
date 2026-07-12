@@ -10,6 +10,8 @@ const DEFAULT_BRANDING = {
   ],
 } as const;
 
+const DEFAULT_DOCUMENT_TITLE = 'CRM de Atendimento Clínico';
+
 function publicValue(name: string, fallback: string) {
   const value = process.env[name]?.trim();
   return value || fallback;
@@ -27,6 +29,18 @@ export const publicBranding = {
   description: publicValue('NEXT_PUBLIC_LOGIN_DESCRIPTION', DEFAULT_BRANDING.description),
   benefits: DEFAULT_BRANDING.benefits,
 } as const;
+
+export function buildDocumentTitle(clinicName: string) {
+  const normalized = clinicName.trim();
+  if (!normalized || normalized.toLocaleLowerCase('pt-BR') === 'crm clínico') {
+    return DEFAULT_DOCUMENT_TITLE;
+  }
+  return normalized.toLocaleLowerCase('pt-BR').startsWith('crm ')
+    ? normalized
+    : `CRM ${normalized}`;
+}
+
+export const publicDocumentTitle = buildDocumentTitle(publicBranding.clinicName);
 
 export function brandingInitials(name: string) {
   return name
