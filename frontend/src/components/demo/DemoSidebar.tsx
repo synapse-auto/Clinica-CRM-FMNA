@@ -85,9 +85,9 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
   }
 
   return (
-    <aside className="flex h-screen w-[244px] shrink-0 flex-col bg-sidebar text-sidebar-foreground">
-      <div className="flex h-[80px] items-center gap-3 border-b border-sidebar-border px-5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white p-1">
+    <aside className="flex h-screen w-[256px] shrink-0 flex-col bg-sidebar text-sidebar-foreground">
+      <div className="flex h-[84px] items-center gap-3 border-b border-sidebar-border px-6">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm">
           <Image src="/ultramedical-logo.png" alt="UltraMedical" width={32} height={32} className="object-contain" />
         </div>
         <div className="min-w-0">
@@ -96,8 +96,8 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-4 custom-scrollbar">
-        <p className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/45">
+      <div className="flex-1 overflow-y-auto px-4 py-5 custom-scrollbar">
+        <p className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/55">
           Menu
         </p>
         <nav className="space-y-1">
@@ -109,9 +109,9 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group flex h-[46px] items-center justify-between rounded-lg px-3 text-[15px] font-semibold transition ${
+                className={`group flex h-[46px] items-center justify-between rounded-xl px-3 text-[14px] font-semibold transition ${
                   active
-                    ? 'bg-sidebar-accent text-white'
+                    ? 'bg-sidebar-accent text-white shadow-sm'
                     : 'text-sidebar-foreground hover:bg-sidebar-accent/55 hover:text-white'
                 }`}
               >
@@ -132,12 +132,12 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
         </nav>
       </div>
 
-      <div className="border-t border-sidebar-border p-3">
+      <div className="border-t border-sidebar-border p-4">
         <button
           type="button"
           onClick={toggleTheme}
           aria-label={`Ativar tema ${theme === 'dark' ? 'claro' : 'escuro'}`}
-          className="mb-2 flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[15px] font-semibold text-sidebar-foreground transition hover:bg-sidebar-accent/55 hover:text-white"
+          className="mb-3 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-semibold text-sidebar-foreground transition hover:bg-sidebar-accent/55 hover:text-white"
         >
           {theme === 'dark' ? (
             <Sun className="h-4 w-4 text-sidebar-foreground/65" />
@@ -146,13 +146,13 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
           )}
           Tema {theme === 'dark' ? 'Claro' : 'Escuro'}
         </button>
-        <div className="flex items-center justify-between gap-2 rounded-lg p-2 transition hover:bg-sidebar-accent/55">
+        <div className="flex items-center justify-between gap-2 rounded-xl p-2 transition hover:bg-sidebar-accent/55">
           <Link href="/minha-conta" className="flex min-w-0 flex-1 items-center gap-3 rounded-md focus:outline-none focus:ring-2 focus:ring-sidebar-primary/45">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-sm font-bold text-sidebar-primary-foreground ring-2 ring-sidebar-primary/20">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-sm font-bold text-sidebar-primary-foreground ring-2 ring-sidebar-primary/20">
               {initials}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-[15px] font-bold text-white">{user.nome}</p>
+              <p className="truncate text-[14px] font-bold text-white">{user.nome}</p>
               <p className="truncate text-xs text-sidebar-foreground/65">{formatProfile(user.perfil)}</p>
             </div>
           </Link>

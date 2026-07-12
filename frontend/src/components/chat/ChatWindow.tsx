@@ -18,6 +18,7 @@ import type {
   MensagemAtendimento,
 } from '@/types/atendimento';
 import type { MensagemRapida } from '@/types/operacional';
+import { ContactAvatar } from './ContactAvatar';
 
 type Props = {
   detail: AtendimentoDetalhe | null;
@@ -98,29 +99,35 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
   }
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-clinic-surface-muted">
-      <header className="flex h-[58px] shrink-0 items-center border-b border-clinic-border bg-clinic-surface px-4">
+    <section className="flex min-w-0 flex-1 flex-col bg-clinic-canvas">
+      <header className="flex min-h-[76px] shrink-0 items-center justify-between gap-4 border-b border-clinic-border bg-clinic-surface px-6">
         {detail ? (
-          <div className="min-w-0">
-            <h2 className="truncate text-[13px] font-extrabold text-clinic-text">
+          <div className="flex min-w-0 items-center gap-3">
+            <ContactAvatar name={detail.paciente.nome} url={detail.paciente.fotoUrl} />
+            <div className="min-w-0">
+            <h2 className="truncate text-[15px] font-extrabold text-clinic-text">
               {detail.paciente.nome}
             </h2>
-            <p className="truncate text-[9px] text-clinic-muted">
+            <p className="mt-1 truncate text-[11px] text-clinic-muted">
               {detail.paciente.telefone} · {detail.tratadoPorIa ? 'Atendido por IA' : (
                 detail.atendentePrincipal
                   ? `Atendido por ${detail.atendentePrincipal.nome}`
                   : 'Humano sem responsável'
               )}
             </p>
+            </div>
+            <span className="hidden rounded-full bg-clinic-blue/10 px-2.5 py-1 text-[10px] font-bold text-clinic-blue sm:inline-flex">
+              {detail.tratadoPorIa ? 'IA ativa' : 'Humano'}
+            </span>
           </div>
         ) : (
-          <p className="text-[11px] text-clinic-muted">Selecione um atendimento</p>
+          <p className="text-[12px] text-clinic-muted">Selecione um atendimento</p>
         )}
       </header>
 
       {error ? (
-        <div role="alert" className="flex items-center gap-2 border-b border-clinic-danger/30 bg-clinic-danger/10 px-4 py-2 text-[10px] font-semibold text-clinic-danger">
-          <AlertCircle className="h-3.5 w-3.5" />
+        <div role="alert" className="flex items-center gap-2 border-b border-clinic-danger/30 bg-clinic-danger/10 px-6 py-2.5 text-[11px] font-semibold text-clinic-danger">
+          <AlertCircle className="h-4 w-4" />
           {error}
         </div>
       ) : null}
@@ -128,10 +135,11 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
       <div className="relative min-h-0 flex-1">
         <div
           ref={messageScrollContainer}
-          className="h-full space-y-4 overflow-y-auto p-5 custom-scrollbar"
+          className="h-full overflow-y-auto px-6 py-7 custom-scrollbar"
           data-testid="message-scroll-container"
           onScroll={handleMessageScroll}
         >
+          <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5">
         {detail && messages.length === 0 ? (
           <p className="text-center text-[11px] text-clinic-muted">
             Ainda não há mensagens nesta conversa.
@@ -140,6 +148,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
           <MessageBubble key={message.id} message={message} />
         ))}
           <div ref={messageEnd} aria-hidden="true" data-testid="message-scroll-end" />
+          </div>
         </div>
         {showNewMessagesNotice ? (
           <button
@@ -153,7 +162,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
         ) : null}
       </div>
 
-      <div className="shrink-0 border-t border-clinic-border bg-clinic-surface p-3">
+      <div className="shrink-0 border-t border-clinic-border bg-clinic-surface px-6 py-4">
         <input
           ref={fileInput}
           type="file"
@@ -166,7 +175,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
           }}
         />
         {quickOpen && detail ? (
-          <div className="mb-2 rounded-lg border border-clinic-border bg-clinic-surface p-2 shadow-lg">
+          <div className="mx-auto mb-3 max-w-[880px] rounded-xl border border-clinic-border bg-clinic-surface p-3 shadow-lg shadow-clinic-primary/5">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-clinic-muted" />
               <input
@@ -174,7 +183,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
                 onChange={(event) => setQuickSearch(event.target.value)}
                 placeholder="Buscar mensagem rápida"
                 aria-label="Buscar mensagens rápidas"
-                className="h-8 w-full rounded-lg border border-clinic-border bg-clinic-input pl-8 pr-3 text-[10px] text-clinic-text outline-none focus:border-clinic-primary"
+                className="h-9 w-full rounded-lg border border-clinic-border bg-clinic-input pl-8 pr-3 text-[11px] text-clinic-text outline-none focus:border-clinic-primary"
               />
             </label>
             <div className="mt-2 max-h-52 space-y-1 overflow-y-auto custom-scrollbar">
@@ -191,7 +200,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
                     setQuickOpen(false);
                     setQuickSearch('');
                   }}
-                  className="w-full rounded-md px-2 py-2 text-left hover:bg-clinic-hover"
+                  className="w-full rounded-lg px-3 py-2.5 text-left hover:bg-clinic-hover"
                 >
                   <span className="block truncate text-[10px] font-extrabold text-clinic-text">
                     {message.titulo}
@@ -207,13 +216,13 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
             </div>
           </div>
         ) : null}
-        <div className="flex items-center gap-2">
+        <div className="mx-auto flex w-full max-w-[880px] items-center gap-2.5">
           <button
             type="button"
             aria-label="Mensagens rápidas"
             disabled={!detail || busy || quickMessages.length === 0}
             onClick={() => setQuickOpen((current) => !current)}
-            className="rounded-full p-2 text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary disabled:opacity-40"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary disabled:opacity-40"
           >
             <MessageSquareText className="h-4 w-4" />
           </button>
@@ -222,7 +231,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
             aria-label="Anexar"
             disabled={!detail || busy}
             onClick={() => fileInput.current?.click()}
-            className="rounded-full p-2 text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary disabled:opacity-40"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary disabled:opacity-40"
           >
             <Paperclip className="h-4 w-4 -rotate-45" />
           </button>
@@ -237,14 +246,14 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
               }
             }}
             placeholder="Digite uma mensagem..."
-            className="h-10 flex-1 rounded-full border border-clinic-border bg-clinic-input px-4 text-[11px] text-clinic-text outline-none placeholder:text-clinic-muted focus:border-clinic-primary disabled:opacity-50"
+            className="h-11 flex-1 rounded-xl border border-clinic-border bg-clinic-input px-4 text-[12px] text-clinic-text outline-none placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10 disabled:opacity-50"
           />
           <button
             type="button"
             aria-label="Enviar"
             disabled={!detail || busy || !content.trim()}
             onClick={() => void submit()}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-clinic-primary text-white transition hover:bg-clinic-primary-strong disabled:opacity-40"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-clinic-primary text-white transition hover:bg-clinic-primary-strong disabled:opacity-40"
           >
             <Send className="ml-0.5 h-4 w-4" />
           </button>
@@ -273,7 +282,7 @@ function MessageBubble({ message }: { message: MensagemAtendimento }) {
   return (
     <div className={`flex flex-col ${outbound ? 'items-end' : 'items-start'}`}>
       <div
-        className={`max-w-[72%] rounded-xl px-3.5 py-2.5 text-[11px] leading-5 shadow-sm ${
+        className={`max-w-[78%] rounded-2xl px-4 py-3 text-[13px] leading-5 shadow-sm ${
           outbound
             ? 'rounded-tr-sm bg-clinic-primary text-white'
             : 'rounded-tl-sm border border-clinic-border bg-clinic-surface text-clinic-text'
@@ -281,7 +290,7 @@ function MessageBubble({ message }: { message: MensagemAtendimento }) {
       >
         {message.midia ? <MediaContent message={message} /> : message.conteudo}
       </div>
-      <div className="mt-1 flex items-center gap-1 text-[8px] text-clinic-muted">
+      <div className="mt-1 flex items-center gap-1 text-[10px] text-clinic-muted">
         {new Intl.DateTimeFormat('pt-BR', {
           hour: '2-digit',
           minute: '2-digit',

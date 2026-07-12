@@ -85,14 +85,14 @@ export function ContactDetails({
   }
 
   return (
-    <aside className="flex h-full w-[300px] shrink-0 flex-col overflow-y-auto border-l border-clinic-border bg-clinic-surface custom-scrollbar">
-      <div className="border-b border-clinic-border p-4 text-center">
+    <aside aria-label="Detalhes do atendimento" className="flex h-full w-[336px] shrink-0 flex-col overflow-y-auto border-l border-clinic-border bg-clinic-surface custom-scrollbar">
+      <div className="border-b border-clinic-border px-6 py-6 text-center">
         <ContactAvatar name={paciente.nome} url={paciente.fotoUrl} variant="details" />
-        <h2 className="text-[14px] font-extrabold text-clinic-text">{paciente.nome}</h2>
-        <p className="mt-1 text-[9px] font-semibold text-clinic-muted">{detail.status}</p>
+        <h2 className="text-[16px] font-extrabold text-clinic-text">{paciente.nome}</h2>
+        <p className="mt-1 text-[11px] font-semibold text-clinic-muted">{detail.status}</p>
 
         {paciente.requerRevisao && canManage ? (
-          <div className="mt-3 rounded-lg border border-clinic-warning/30 bg-clinic-warning/5 p-2.5">
+          <div className="mt-4 rounded-xl border border-clinic-warning/30 bg-clinic-warning/5 p-3">
             <p className="mb-2 flex items-center justify-center gap-1 text-[9px] font-extrabold text-clinic-warning">
               <CalendarCheck className="h-3.5 w-3.5" />
               Verificar convênio
@@ -106,7 +106,7 @@ export function ContactDetails({
         ) : null}
       </div>
 
-      <div className="space-y-5 p-4">
+      <div className="space-y-6 p-6">
         <Section title="Contato">
           <DetailRow icon={Phone} text={paciente.telefone} />
           <DetailRow icon={Mail} text={paciente.email ?? 'E-mail não informado'} />
@@ -129,7 +129,7 @@ export function ContactDetails({
             <button
               disabled={busy}
               onClick={() => void onAssume()}
-              className="h-8 w-full rounded-lg bg-clinic-primary text-[10px] font-extrabold text-white disabled:opacity-50"
+              className="h-9 w-full rounded-lg bg-clinic-primary text-[11px] font-extrabold text-white disabled:opacity-50"
             >
               Assumir atendimento
             </button>
@@ -139,7 +139,7 @@ export function ContactDetails({
               type="button"
               disabled={busy}
               onClick={() => void onActivateIa()}
-              className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-clinic-primary/40 bg-clinic-primary/10 text-[10px] font-extrabold text-clinic-primary hover:bg-clinic-primary/15 disabled:opacity-50"
+              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-clinic-primary/40 bg-clinic-primary/10 text-[11px] font-extrabold text-clinic-primary hover:bg-clinic-primary/15 disabled:opacity-50"
             >
               <Bot className="h-3.5 w-3.5" />
               Voltar para IA
@@ -154,7 +154,7 @@ export function ContactDetails({
                 onChange={(event) => {
                   if (event.target.value) void onTransfer(Number(event.target.value));
                 }}
-                className="mt-1 h-9 w-full rounded-lg border border-clinic-border bg-clinic-input px-2 text-[10px] text-clinic-text"
+                className="mt-1 h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-[11px] text-clinic-text"
               >
                 <option value="">Selecione...</option>
                 {atendentes.map((atendente) => (
@@ -175,7 +175,7 @@ export function ContactDetails({
               {tags.map((tag) => (
                 <span
                   key={tag.id}
-                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[9px] font-bold text-clinic-text"
+                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-clinic-border bg-clinic-soft px-2.5 py-1.5 text-[10px] font-bold text-clinic-text"
                 >
                   <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: tag.cor }} />
                   <span className="truncate">{tag.nome}</span>
@@ -201,7 +201,7 @@ export function ContactDetails({
                 type="button"
                 disabled={busy || tagsToAdd.length === 0}
                 onClick={() => setAddingTag((current) => !current)}
-                className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-clinic-border text-[10px] font-extrabold text-clinic-text hover:bg-clinic-hover disabled:opacity-50"
+                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-clinic-border text-[11px] font-extrabold text-clinic-text hover:bg-clinic-hover disabled:opacity-50"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Adicionar tag
@@ -363,8 +363,8 @@ function ReviewButton({
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section>
-      <h3 className="mb-2.5 text-[9px] font-extrabold uppercase text-clinic-muted">{title}</h3>
+    <section className="border-t border-clinic-border pt-5 first:border-t-0 first:pt-0">
+      <h3 className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.1em] text-clinic-muted">{title}</h3>
       <div className="space-y-2">{children}</div>
     </section>
   );

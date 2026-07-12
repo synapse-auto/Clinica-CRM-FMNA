@@ -18,8 +18,8 @@ export function ContactAvatar({ name, url, variant = 'list' }: Props) {
   return (
     <div
       className={details
-        ? 'relative mx-auto mb-2.5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-clinic-primary/15 text-lg font-extrabold text-clinic-primary ring-4 ring-clinic-soft'
-        : 'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-clinic-primary/15 text-xs font-extrabold text-clinic-primary'}
+        ? 'relative mx-auto mb-3 flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-clinic-primary/15 text-xl font-extrabold text-clinic-primary ring-4 ring-clinic-soft'
+        : 'relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-clinic-primary/15 text-sm font-extrabold text-clinic-primary'}
     >
       {showImage && safeUrl ? (
         <img

@@ -34,33 +34,44 @@ const filters = [
 
 export function ChatList(props: Props) {
   return (
-    <aside className="flex h-full w-[300px] shrink-0 flex-col border-r border-clinic-border bg-clinic-surface">
-      <div className="space-y-3 border-b border-clinic-border p-3">
-        <div>
-          <h1 className="text-[16px] font-extrabold text-clinic-text">Atendimentos</h1>
-          <p className="text-[9px] text-clinic-muted">Conversas reais do WhatsApp</p>
+    <aside
+      aria-label="Lista de atendimentos"
+      className="flex h-full w-[336px] shrink-0 flex-col border-r border-clinic-border bg-clinic-surface"
+      data-testid="chat-list"
+    >
+      <div className="space-y-4 border-b border-clinic-border px-4 py-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-clinic-primary">CRM · WhatsApp</p>
+            <h1 className="text-[19px] font-extrabold tracking-tight text-clinic-text">Atendimentos</h1>
+            <p className="mt-1 text-[11px] text-clinic-muted">Conversas reais da clínica</p>
+          </div>
+          <span className="rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[10px] font-bold text-clinic-primary">
+            Ao vivo
+          </span>
         </div>
         <label className="relative block">
-          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-clinic-muted" />
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clinic-muted" />
           <input
             type="search"
             value={props.search}
             onChange={(event) => props.onSearchChange(event.target.value)}
             placeholder="Buscar paciente ou telefone..."
-            className="h-9 w-full rounded-lg border border-clinic-border bg-clinic-input pl-9 pr-3 text-[11px] text-clinic-text outline-none focus:border-clinic-primary"
+            className="h-10 w-full rounded-xl border border-clinic-border bg-clinic-input pl-10 pr-3 text-[12px] text-clinic-text outline-none transition placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10"
           />
         </label>
-        <div className="flex gap-1 overflow-x-auto text-[9px] font-bold hide-scrollbar">
+        <div className="flex gap-1.5 overflow-x-auto text-[10px] font-bold hide-scrollbar" aria-label="Filtros de atendimentos">
           {filters.map((item) => {
             const active = props.filter === item.filter && props.type === item.type;
             return (
               <button
+                type="button"
                 key={item.label}
                 onClick={() => props.onFilterChange(item.filter, item.type)}
-                className={`shrink-0 rounded-md px-2.5 py-1.5 ${
+                className={`shrink-0 rounded-lg border px-3 py-2 transition ${
                   active
-                    ? 'bg-clinic-primary text-white'
-                    : 'text-clinic-muted hover:bg-clinic-hover'
+                    ? 'border-clinic-primary bg-clinic-primary text-white shadow-sm'
+                    : 'border-clinic-border bg-clinic-surface text-clinic-muted hover:border-clinic-primary/40 hover:bg-clinic-hover hover:text-clinic-text'
                 }`}
               >
                 {item.label}
@@ -72,9 +83,10 @@ export function ChatList(props: Props) {
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {props.conversations.length === 0 ? (
-          <p className="p-5 text-center text-[11px] text-clinic-muted">
-            Nenhum atendimento encontrado.
-          </p>
+            <div className="m-4 rounded-xl border border-dashed border-clinic-border bg-clinic-surface-muted px-4 py-10 text-center">
+              <p className="text-[12px] font-bold text-clinic-text">Nenhum atendimento encontrado.</p>
+              <p className="mt-1 text-[11px] text-clinic-muted">Ajuste a busca ou selecione outro filtro.</p>
+            </div>
         ) : props.conversations.map((chat) => {
           const active = chat.id === props.activeId;
           const attendanceLabel = getAttendanceLabel(chat);
@@ -85,59 +97,59 @@ export function ChatList(props: Props) {
               type="button"
               key={chat.id}
               onClick={() => props.onSelect(chat.id)}
-              className={`relative block w-full border-b border-clinic-border/70 p-3 text-left transition hover:bg-clinic-hover ${
-                active ? 'bg-clinic-soft' : ''
+              className={`relative block w-full border-b border-clinic-border/70 px-4 py-4 text-left transition hover:bg-clinic-hover ${
+                active ? 'bg-clinic-soft' : 'bg-clinic-surface'
               }`}
             >
-              {active ? <span className="absolute inset-y-0 left-0 w-1 bg-clinic-primary" /> : null}
-              <div className="flex gap-2.5">
+              {active ? <span className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-clinic-primary" /> : null}
+              <div className="flex gap-3">
                 <ContactAvatar name={chat.paciente.nomeBusca} url={chat.paciente.fotoUrl} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <h2 className="truncate text-[11px] font-extrabold text-clinic-text">
+                    <h2 className="truncate text-[13px] font-extrabold text-clinic-text">
                       {chat.paciente.nomeBusca}
                     </h2>
-                    <span className="shrink-0 text-[8px] text-clinic-muted">
+                    <span className="shrink-0 text-[10px] text-clinic-muted">
                       {formatTime(chat.ultimaMensagemEm)}
                     </span>
                   </div>
-                  <p className="truncate text-[9px] leading-4 text-clinic-muted">
+                  <p className="mt-1 truncate text-[11px] leading-4 text-clinic-muted">
                     {chat.ultimaMensagemPrevia || 'Sem mensagens'}
                   </p>
-                  <p className="mt-0.5 truncate text-[8px] font-semibold text-clinic-muted">
+                  <p className="mt-1 truncate text-[10px] font-semibold text-clinic-muted">
                     {attendanceLabel}
                   </p>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[8px]">
-                    <span className="rounded bg-clinic-blue/10 px-1.5 py-0.5 font-bold text-clinic-blue">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+                    <span className="rounded-full bg-clinic-blue/10 px-2 py-1 font-bold text-clinic-blue">
                       {chat.tratadoPorIa ? 'IA' : 'Humano'}
                     </span>
                     {chat.requerRevisao ? (
-                      <span className="rounded bg-clinic-warning/10 px-1.5 py-0.5 font-bold text-clinic-warning">
+                      <span className="rounded-full bg-clinic-warning/10 px-2 py-1 font-bold text-clinic-warning">
                         Convênio
                       </span>
                     ) : null}
                     {chat.naoLidas > 0 ? (
-                      <span className="ml-auto min-w-4 rounded-full bg-clinic-primary px-1 py-0.5 text-center font-bold text-white">
+                      <span className="ml-auto min-w-5 rounded-full bg-clinic-primary px-1.5 py-1 text-center font-bold text-white">
                         {chat.naoLidas}
                       </span>
                     ) : null}
                   </div>
                   {visibleTags.length > 0 ? (
-                    <div className="mt-1.5 flex max-w-full flex-wrap gap-1 overflow-hidden">
+                    <div className="mt-2 flex max-w-full flex-wrap gap-1.5 overflow-hidden">
                       {visibleTags.map((tag) => (
                         <span
                           key={tag.id}
-                          className="inline-flex max-w-[92px] items-center gap-1 rounded-full border border-clinic-border bg-clinic-soft px-1.5 py-0.5 text-[8px] font-bold text-clinic-text"
+                          className="inline-flex max-w-[112px] items-center gap-1 rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[10px] font-bold text-clinic-text"
                         >
                           <span
-                            className="h-1.5 w-1.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: tag.cor ?? '#64748b' }}
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: tag.cor ?? 'var(--clinic-muted)' }}
                           />
                           <span className="truncate">{tag.nome}</span>
                         </span>
                       ))}
                       {hiddenTags > 0 ? (
-                        <span className="rounded-full border border-clinic-border bg-clinic-soft px-1.5 py-0.5 text-[8px] font-bold text-clinic-muted">
+                        <span className="rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[10px] font-bold text-clinic-muted">
                           +{hiddenTags}
                         </span>
                       ) : null}
