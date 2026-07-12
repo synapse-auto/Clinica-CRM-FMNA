@@ -25,6 +25,32 @@ describe('LoginForm', () => {
     expect(screen.queryByText(/registrar/i)).not.toBeInTheDocument();
   });
 
+  it('should_keep_accessible_login_fields_and_neutral_placeholder', () => {
+    render(<LoginForm />);
+
+    expect(screen.getByLabelText('Email')).toHaveAttribute('autocomplete', 'email');
+    expect(screen.getByLabelText('Email')).toHaveAttribute('inputmode', 'email');
+    expect(screen.getByLabelText('Email')).toHaveAttribute('placeholder', 'nome@empresa.com');
+    expect(screen.getByLabelText('Senha')).toHaveAttribute('autocomplete', 'current-password');
+    expect(screen.getByRole('button', { name: 'Entrar' })).toHaveAttribute('type', 'submit');
+  });
+
+  it('should_show_backend_error_without_exposing_credentials', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ message: 'Credenciais inválidas.' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+    render(<LoginForm />);
+
+    await user.type(screen.getByLabelText('Email'), 'nome@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'senha-secreta');
+    await user.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Credenciais inválidas.');
+    expect(screen.queryByText('senha-secreta')).not.toBeInTheDocument();
+  });
+
   it('should_redirect_to_profile_default_route_after_login', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({

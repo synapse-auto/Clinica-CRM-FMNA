@@ -44,27 +44,27 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-7 space-y-4">
+    <form onSubmit={handleSubmit} className="login-form" aria-busy={loading}>
       {error ? (
-        <div role="alert" className="rounded-lg border border-clinic-danger/30 bg-clinic-danger/10 px-3 py-2 text-[11px] font-semibold text-clinic-danger">
+        <div id="login-error" role="alert" className="login-error">
           {error}
         </div>
       ) : null}
-      <label className="block">
-        <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Email</span>
-        <span className="relative block">
-          <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-clinic-muted" />
-          <input name="email" type="email" autoComplete="username" required className="h-11 w-full rounded-lg border border-clinic-border bg-clinic-input pl-10 pr-3 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15" />
+      <label className="login-field">
+        <span className="login-label">Email</span>
+        <span className="login-control">
+          <Mail className="login-input-icon" aria-hidden="true" />
+          <input name="email" type="email" inputMode="email" autoComplete="email" required aria-describedby={error ? 'login-error' : undefined} placeholder="nome@empresa.com" className="login-input" />
         </span>
       </label>
-      <label className="block">
-        <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Senha</span>
-        <span className="relative block">
-          <LockKeyhole className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-clinic-muted" />
-          <input name="senha" type="password" autoComplete="current-password" required className="h-11 w-full rounded-lg border border-clinic-border bg-clinic-input pl-10 pr-3 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15" />
+      <label className="login-field">
+        <span className="login-label">Senha</span>
+        <span className="login-control">
+          <LockKeyhole className="login-input-icon" aria-hidden="true" />
+          <input name="senha" type="password" autoComplete="current-password" required aria-describedby={error ? 'login-error' : undefined} className="login-input" />
         </span>
       </label>
-      <button type="submit" disabled={loading} className="flex h-11 w-full items-center justify-center rounded-lg bg-clinic-primary text-sm font-extrabold text-white transition hover:bg-clinic-primary-strong disabled:cursor-wait disabled:opacity-70">
+      <button type="submit" disabled={loading} className="login-submit">
         {loading ? 'Entrando...' : 'Entrar'}
       </button>
     </form>
