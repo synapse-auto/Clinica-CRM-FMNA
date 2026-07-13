@@ -18,7 +18,10 @@ describe('integracoes sincronizar BFF route', () => {
   });
 
   it('should_forward_one_post_to_the_expected_backend_path_when_period_is_valid', async () => {
-    const response = await POST(postRequest(VALID_URL));
+    const request = postRequest(VALID_URL);
+    expect(request.body).toBeNull();
+
+    const response = await POST(request);
 
     expect(response.status).toBe(200);
     expect(forwardBackendRequestMock).toHaveBeenCalledTimes(1);
@@ -26,6 +29,56 @@ describe('integracoes sincronizar BFF route', () => {
       '/api/integracoes/sincronizar?dataInicio=01%2F06%2F2026&dataFim=31%2F07%2F2026',
       { method: 'POST' },
     );
+  });
+
+  it('should_accept_a_non_null_empty_stream_like_a_real_browser_request', async () => {
+    const request = emptyStreamRequest(VALID_URL);
+    expect(request.body).not.toBeNull();
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(forwardBackendRequestMock).toHaveBeenCalledTimes(1);
+    expect(forwardBackendRequestMock).toHaveBeenCalledWith(
+      '/api/integracoes/sincronizar?dataInicio=01%2F06%2F2026&dataFim=31%2F07%2F2026',
+      { method: 'POST' },
+    );
+  });
+
+  it('should_accept_an_empty_uint8array_body', async () => {
+    const request = new Request(VALID_URL, {
+      method: 'POST',
+      body: new Uint8Array(0),
+    });
+    expect(request.body).not.toBeNull();
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(forwardBackendRequestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should_accept_an_empty_text_body', async () => {
+    const request = new Request(VALID_URL, { method: 'POST', body: '' });
+    expect(request.body).not.toBeNull();
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(forwardBackendRequestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should_validate_dates_after_accepting_an_empty_stream', async () => {
+    const response = await POST(emptyStreamRequest(
+      'http://localhost/api/integracoes/sincronizar'
+      + '?dataInicio=2026-06-01&dataFim=2026-07-31',
+    ));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      message: 'Informe um período válido no formato dd/MM/yyyy.',
+    });
+    expect(forwardBackendRequestMock).not.toHaveBeenCalled();
   });
 
   it('should_not_forward_unexpected_query_parameters', async () => {
@@ -55,6 +108,36 @@ describe('integracoes sincronizar BFF route', () => {
     }));
 
     expect(response.status).toBe(400);
+    expect(forwardBackendRequestMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['um espaço', ' '],
+    ['objeto JSON vazio', '{}'],
+    ['JSON real', JSON.stringify({ unexpected: 'value' })],
+  ])('should_reject_a_body_containing_%s', async (_scenario, body) => {
+    const response = await POST(new Request(VALID_URL, {
+      method: 'POST',
+      body,
+    }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      message: 'Esta operação não aceita corpo de requisição.',
+    });
+    expect(forwardBackendRequestMock).not.toHaveBeenCalled();
+  });
+
+  it('should_return_a_sanitized_error_when_the_body_cannot_be_read', async () => {
+    const request = postRequest(VALID_URL);
+    vi.spyOn(request, 'arrayBuffer').mockRejectedValue(new Error('stream failure'));
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      message: 'Não foi possível validar a requisição.',
+    });
     expect(forwardBackendRequestMock).not.toHaveBeenCalled();
   });
 
@@ -120,4 +203,18 @@ describe('integracoes sincronizar BFF route', () => {
 
 function postRequest(url: string) {
   return new Request(url, { method: 'POST' });
+}
+
+function emptyStreamRequest(url: string) {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.close();
+    },
+  });
+
+  return new Request(url, {
+    method: 'POST',
+    body,
+    duplex: 'half',
+  } as RequestInit & { duplex: 'half' });
 }

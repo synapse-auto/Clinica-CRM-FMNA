@@ -4,7 +4,7 @@ const DATE_PATTERN = /^(\d{2})\/(\d{2})\/(\d{4})$/;
 const INVALID_PERIOD_MESSAGE = 'Informe um período válido no formato dd/MM/yyyy.';
 
 export async function POST(request: Request) {
-  const period = validateRequest(request);
+  const period = await validateRequest(request);
   if (period instanceof Response) return period;
 
   const query = new URLSearchParams(period);
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   }
 }
 
-function validateRequest(request: Request) {
+async function validateRequest(request: Request) {
   const params = new URL(request.url).searchParams;
   if (hasUnexpectedParameters(params)) {
     return Response.json(
@@ -31,7 +31,16 @@ function validateRequest(request: Request) {
       { status: 400 },
     );
   }
-  if (request.body !== null) {
+  let bodyBytes: ArrayBuffer;
+  try {
+    bodyBytes = await request.arrayBuffer();
+  } catch {
+    return Response.json(
+      { message: 'Não foi possível validar a requisição.' },
+      { status: 400 },
+    );
+  }
+  if (bodyBytes.byteLength > 0) {
     return Response.json(
       { message: 'Esta operação não aceita corpo de requisição.' },
       { status: 400 },
