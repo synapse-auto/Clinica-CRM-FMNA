@@ -1,12 +1,12 @@
 const DEFAULT_BRANDING = {
   clinicName: 'CRM Clínico',
   logoUrl: null,
-  headline: 'Conecte atendimento, equipe e operação em um só lugar.',
-  description: 'Centralize conversas, automações e informações para oferecer um atendimento mais ágil e organizado.',
+  headline: 'Seu atendimento. Sua operação. Sob controle.',
+  description: 'Conversas, equipe e rotinas organizadas com mais clareza.',
   benefits: [
-    'Atendimentos organizados em tempo real',
-    'Automações e integrações em um único fluxo',
-    'Dados isolados e acessos por perfil',
+    'Atendimento organizado',
+    'Equipe alinhada',
+    'Acessos seguros',
   ],
 } as const;
 

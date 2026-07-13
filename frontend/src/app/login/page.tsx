@@ -2,7 +2,7 @@ import Image from 'next/image';
 import { redirect } from 'next/navigation';
 import { Activity, MessageCircle, ShieldCheck } from 'lucide-react';
 import { LoginForm } from '@/components/auth/LoginForm';
-import { brandingInitials, publicBranding } from '@/config/public-branding';
+import { brandingInitials, publicBranding, publicDocumentTitle } from '@/config/public-branding';
 import { routeAfterAuthentication } from '@/lib/auth/permissions';
 import { getSession } from '@/lib/auth/session';
 import styles from './login.module.css';
@@ -24,7 +24,7 @@ export default async function LoginPage() {
           </div>
           <div>
             <p className={styles.brandName}>{publicBranding.clinicName}</p>
-            <p className={styles.brandType}>CRM clínico</p>
+            <p className={styles.brandType}>{publicDocumentTitle}</p>
           </div>
         </header>
 
