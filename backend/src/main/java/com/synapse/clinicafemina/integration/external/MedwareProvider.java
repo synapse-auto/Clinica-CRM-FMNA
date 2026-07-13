@@ -2,7 +2,6 @@ package com.synapse.clinicafemina.integration.external;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.MissingNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,6 +31,8 @@ public class MedwareProvider implements ExternalClinicProvider {
     private static final ZoneId MEDWARE_ZONE = ZoneId.of("America/Sao_Paulo");
     private static final DateTimeFormatter BR_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final int DEFAULT_TOKEN_LIFETIME_HOURS = 24;
+    private static final String AUTH_MODE_USUARIO = "USUARIO";
+    private static final String AUTH_MODE_IDENTIFICACAO_HASH = "IDENTIFICACAO_HASH";
     private static final String INVALID_URL_MESSAGE =
             "MEDWARE_API_URL invalida ou endpoint nao retornou JSON. Verifique se a URL termina com /api.";
     private static final String INVALID_CREDENTIALS_MESSAGE =
@@ -45,6 +46,7 @@ public class MedwareProvider implements ExternalClinicProvider {
     private final String username;
     private final String password;
     private final boolean passwordIsHash;
+    private final String authMode;
     private final long tokenRefreshMarginSeconds;
     private final int defaultStartDaysBack;
     private final int defaultEndDaysForward;
@@ -59,6 +61,7 @@ public class MedwareProvider implements ExternalClinicProvider {
             @Value("${app.medware.username:}") String username,
             @Value("${app.medware.password:}") String password,
             @Value("${app.medware.password-is-hash:false}") boolean passwordIsHash,
+            @Value("${app.medware.auth-mode:USUARIO}") String authMode,
             @Value("${app.medware.token-refresh-margin-seconds:300}") long tokenRefreshMarginSeconds,
             @Value("${app.medware.timeout-seconds:30}") int timeoutSeconds,
             @Value("${app.medware.default-start-days-back:90}") int defaultStartDaysBack,
@@ -72,6 +75,7 @@ public class MedwareProvider implements ExternalClinicProvider {
                 username,
                 password,
                 passwordIsHash,
+                authMode,
                 tokenRefreshMarginSeconds,
                 timeoutSeconds,
                 defaultStartDaysBack,
@@ -88,6 +92,7 @@ public class MedwareProvider implements ExternalClinicProvider {
             String username,
             String password,
             boolean passwordIsHash,
+            String authMode,
             long tokenRefreshMarginSeconds,
             int timeoutSeconds,
             int defaultStartDaysBack,
@@ -99,6 +104,7 @@ public class MedwareProvider implements ExternalClinicProvider {
         this.username = username;
         this.password = password;
         this.passwordIsHash = passwordIsHash;
+        this.authMode = normalizeAuthMode(authMode);
         this.tokenRefreshMarginSeconds = tokenRefreshMarginSeconds;
         this.defaultStartDaysBack = defaultStartDaysBack;
         this.defaultEndDaysForward = defaultEndDaysForward;
@@ -128,6 +134,7 @@ public class MedwareProvider implements ExternalClinicProvider {
                 .map(mapper::toPatient)
                 .filter(patient -> patient.externalId() != null)
                 .toList();
+        log.info("Medware pacientes: endpoint=/Medware/Paciente/Listar, itens={}", patients.size());
         return page(patients, cursor, limit);
     }
 
@@ -155,7 +162,7 @@ public class MedwareProvider implements ExternalClinicProvider {
         );
         Map<String, JsonNode> medicos = loadCatalog(
                 "/Medware/Medico/Listar",
-                dateParams,
+                Map.of(),
                 "codMedico",
                 "codmedico"
         );
@@ -164,6 +171,12 @@ public class MedwareProvider implements ExternalClinicProvider {
                 .map(node -> mapper.toAppointment(node, procedimentos, medicos))
                 .filter(appointment -> appointment.externalId() != null && appointment.externalPatientId() != null)
                 .toList();
+        log.info(
+                "Medware agendamentos: periodo={}-{}, itens={}",
+                dateWindow.start(),
+                dateWindow.end(),
+                appointments.size()
+        );
         return page(appointments, cursor, limit);
     }
 
@@ -173,30 +186,44 @@ public class MedwareProvider implements ExternalClinicProvider {
     }
 
     private Map<String, JsonNode> loadCatalog(String path, Map<String, String> params, String... indexFields) {
-        try {
-            return mapper.indexBy(get(path, params), indexFields);
-        } catch (Exception e) {
-            log.warn("Falha ao ler catalogo Medware path={}, tipoErro={}", path, e.getClass().getSimpleName());
-            return Map.of();
-        }
+        JsonNode response = get(path, params);
+        Map<String, JsonNode> catalog = mapper.indexBy(response, indexFields);
+        log.info("Medware catalogo: endpoint={}, itens={}", path, catalog.size());
+        return catalog;
     }
 
     private JsonNode get(String path, Map<String, String> queryParams) {
+        return get(path, queryParams, true);
+    }
+
+    private JsonNode get(String path, Map<String, String> queryParams, boolean retryUnauthorized) {
         String uri = uri(path, queryParams);
-        ResponseEntity<String> response = restClient.get()
-                .uri(uri)
-                .header("Authorization", "Bearer " + bearerToken())
-                .accept(MediaType.APPLICATION_JSON)
-                .retrieve()
-                .onStatus(HttpStatusCode::isError, (request, errorResponse) -> {
-                    int status = errorResponse.getStatusCode().value();
-                    if (status == 401) {
-                        tokenState.set(null);
-                    }
-                    throw new IllegalStateException("Medware retornou status " + status + " em endpoint read-only " + path);
-                })
-                .toEntity(String.class);
-        return readJson(response.getBody(), path, response.getHeaders().getContentType());
+        try {
+            long startedAt = System.nanoTime();
+            ResponseEntity<String> response = restClient.get()
+                    .uri(uri)
+                    .header("Authorization", "Bearer " + bearerToken())
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, (request, errorResponse) ->
+                            { throw new MedwareHttpException(errorResponse.getStatusCode().value(), path); })
+                    .toEntity(String.class);
+            log.info(
+                    "Medware resposta: endpoint={}, status={}, contentType={}, duracaoMs={}",
+                    path,
+                    response.getStatusCode().value(),
+                    response.getHeaders().getContentType(),
+                    elapsedMillis(startedAt)
+            );
+            return readJson(response.getBody(), path, response.getHeaders().getContentType());
+        } catch (MedwareHttpException e) {
+            if (e.status() == 401 && retryUnauthorized) {
+                tokenState.set(null);
+                log.warn("Token Medware rejeitado; novo login sera realizado uma unica vez. endpoint={}", path);
+                return get(path, queryParams, false);
+            }
+            throw e;
+        }
     }
 
     private String bearerToken() {
@@ -238,26 +265,45 @@ public class MedwareProvider implements ExternalClinicProvider {
     }
 
     private TokenState login() {
+        long startedAt = System.nanoTime();
         ResponseEntity<String> response = restClient.post()
                 .uri("/Acesso/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
-                .body(Map.of(
-                        "identificacao", username,
-                        "senha", password,
-                        "isHash", passwordIsHash
-                ))
+                .body(loginPayload())
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, (request, result) -> {
                     throw new IllegalStateException("Falha de autenticacao Medware. Status " + result.getStatusCode().value());
                 })
                 .toEntity(String.class);
-        return parseToken(response.getBody(), response.getHeaders().getContentType());
+        TokenState token = parseToken(response.getBody(), response.getHeaders().getContentType());
+        log.info(
+                "Autenticacao Medware concluida: endpoint=/Acesso/login, status={}, contentType={}, duracaoMs={}, authMode={}",
+                response.getStatusCode().value(),
+                response.getHeaders().getContentType(),
+                elapsedMillis(startedAt),
+                authMode
+        );
+        return token;
+    }
+
+    private Map<String, Object> loginPayload() {
+        if (AUTH_MODE_IDENTIFICACAO_HASH.equals(authMode)) {
+            return Map.of(
+                    "identificacao", username,
+                    "senha", password,
+                    "isHash", passwordIsHash
+            );
+        }
+        return Map.of(
+                "usuario", username,
+                "senha", password
+        );
     }
 
     private JsonNode readJson(String body, String path, MediaType contentType) {
         if (body == null || body.isBlank()) {
-            return MissingNode.getInstance();
+            throw new IllegalStateException("Medware endpoint " + path + " retornou corpo vazio");
         }
         rejectHtmlResponse(body, contentType);
         try {
@@ -400,6 +446,20 @@ public class MedwareProvider implements ExternalClinicProvider {
         return value.replaceAll("/+$", "");
     }
 
+    private String normalizeAuthMode(String value) {
+        String normalized = value == null || value.isBlank()
+                ? AUTH_MODE_USUARIO
+                : value.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!AUTH_MODE_USUARIO.equals(normalized) && !AUTH_MODE_IDENTIFICACAO_HASH.equals(normalized)) {
+            throw new IllegalStateException("MEDWARE_AUTH_MODE deve ser USUARIO ou IDENTIFICACAO_HASH");
+        }
+        return normalized;
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
+    }
+
     private String text(JsonNode node, String... names) {
         if (node == null) {
             return null;
@@ -419,6 +479,19 @@ public class MedwareProvider implements ExternalClinicProvider {
     private record TokenState(String token, String refreshToken, OffsetDateTime expiresAt) {
         private boolean shouldRefresh(Clock clock, long marginSeconds) {
             return expiresAt.minusSeconds(Math.max(0, marginSeconds)).isBefore(OffsetDateTime.now(clock));
+        }
+    }
+
+    private static final class MedwareHttpException extends IllegalStateException {
+        private final int status;
+
+        private MedwareHttpException(int status, String path) {
+            super("Medware retornou status " + status + " em endpoint read-only " + path);
+            this.status = status;
+        }
+
+        private int status() {
+            return status;
         }
     }
 }

@@ -47,7 +47,9 @@ public class ExternalSyncService {
             "MEDWARE_API_URL invalida",
             "Credenciais Medware invalidas",
             "Medware retornou status",
-            "Falha de autenticacao Medware"
+            "Falha de autenticacao Medware",
+            "Medware endpoint",
+            "MEDWARE_AUTH_MODE"
     );
 
     private final ExternalProviderFactory providerFactory;

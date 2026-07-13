@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.http.HttpMethod.GET;
 import static org.springframework.http.HttpMethod.POST;
 import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
@@ -47,12 +48,12 @@ class MedwareProviderTest {
     void should_login_and_read_patients_with_bearer_token_without_real_network_call() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        MedwareProvider provider = createProvider(builder, "https://medware.example/api", "usuario", "senha", true);
+        MedwareProvider provider = createProvider(builder, "https://medware.example/api", "usuario", "senha", false);
 
         server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
                 .andExpect(method(POST))
                 .andExpect(content().json("""
-                        {"identificacao":"usuario","senha":"senha","isHash":true}
+                        {"usuario":"usuario","senha":"senha"}
                         """))
                 .andRespond(withSuccess("""
                         {"token":"jwt-token","refreshToken":"refresh-token"}
@@ -148,6 +149,50 @@ class MedwareProviderTest {
     }
 
     @Test
+    void should_use_legacy_auth_contract_only_when_explicitly_configured() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        MedwareProvider provider = createProvider(
+                builder, "https://medware.example/api", "usuario", "senha", true,
+                "IDENTIFICACAO_HASH", 30, 60
+        );
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andExpect(method(POST))
+                .andExpect(content().json("""
+                        {"identificacao":"usuario","senha":"senha","isHash":true}
+                        """))
+                .andRespond(withSuccess("{\"token\":\"jwt-token\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Paciente/Listar"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        assertTrue(provider.getPatients(null, null, 50).data().isEmpty());
+        server.verify();
+    }
+
+    @Test
+    void should_reauthenticate_once_after_unauthorized_read_request() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).ignoreExpectOrder(true).build();
+        MedwareProvider provider = createProvider(builder, "https://medware.example/api", "usuario", "senha", false);
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andRespond(withSuccess("{\"token\":\"jwt-old\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Paciente/Listar"))
+                .andExpect(header("Authorization", "Bearer jwt-old"))
+                .andRespond(withStatus(UNAUTHORIZED));
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andRespond(withSuccess("{\"token\":\"jwt-new\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Paciente/Listar"))
+                .andExpect(header("Authorization", "Bearer jwt-new"))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        assertTrue(provider.getPatients(null, null, 50).data().isEmpty());
+        server.verify();
+    }
+
+    @Test
     void should_reject_login_json_without_valid_token_with_clear_credentials_message() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
@@ -181,7 +226,7 @@ class MedwareProviderTest {
                 .andRespond(withSuccess("""
                         [{"codProcedimento":15,"descricaoProcedimento":"Ultrassom","duracao":30,"consulta":false}]
                         """, MediaType.APPLICATION_JSON));
-        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar?dataInicio=15/06/2026&dataFim=14/08/2026"))
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar"))
                 .andExpect(method(GET))
                 .andExpect(header("Authorization", "Bearer jwt-token"))
                 .andRespond(withSuccess("""
@@ -217,7 +262,7 @@ class MedwareProviderTest {
         server.expect(once(), requestTo("https://medware.example/api/Medware/ProcedPlanoOp/Listar?dataInicio=15/06/2026&dataFim=14/08/2026"))
                 .andExpect(method(GET))
                 .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
-        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar?dataInicio=15/06/2026&dataFim=14/08/2026"))
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar"))
                 .andExpect(method(GET))
                 .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
         server.expect(once(), requestTo("https://medware.example/api/Medware/Agendamento/Listar?dataInicio=15/06/2026&dataFim=14/08/2026"))
@@ -254,7 +299,7 @@ class MedwareProviderTest {
         server.expect(once(), requestTo("https://medware.example/api/Medware/ProcedPlanoOp/Listar?dataInicio=17/03/2026&dataFim=13/09/2026"))
                 .andExpect(method(GET))
                 .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
-        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar?dataInicio=17/03/2026&dataFim=13/09/2026"))
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar"))
                 .andExpect(method(GET))
                 .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
         server.expect(once(), requestTo("https://medware.example/api/Medware/Agendamento/Listar?dataInicio=17/03/2026&dataFim=13/09/2026"))
@@ -280,7 +325,7 @@ class MedwareProviderTest {
                 .andExpect(method(GET))
                 .andExpect(header("Authorization", "Bearer jwt-token"))
                 .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
-        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar?dataInicio=01/07/2026&dataFim=03/07/2026"))
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar"))
                 .andExpect(method(GET))
                 .andExpect(header("Authorization", "Bearer jwt-token"))
                 .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
@@ -332,6 +377,13 @@ class MedwareProviderTest {
     private MedwareProvider createProvider(RestClient.Builder builder, String apiUrl, String username,
                                            String password, boolean passwordIsHash,
                                            int defaultStartDaysBack, int defaultEndDaysForward) {
+        return createProvider(builder, apiUrl, username, password, passwordIsHash, "USUARIO",
+                defaultStartDaysBack, defaultEndDaysForward);
+    }
+
+    private MedwareProvider createProvider(RestClient.Builder builder, String apiUrl, String username,
+                                           String password, boolean passwordIsHash, String authMode,
+                                           int defaultStartDaysBack, int defaultEndDaysForward) {
         return new MedwareProvider(
                 builder,
                 objectMapper,
@@ -341,6 +393,7 @@ class MedwareProviderTest {
                 username,
                 password,
                 passwordIsHash,
+                authMode,
                 300,
                 5,
                 defaultStartDaysBack,

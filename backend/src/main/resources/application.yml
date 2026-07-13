@@ -81,7 +81,9 @@ app:
     api-url: ${MEDWARE_API_URL:}
     username: ${MEDWARE_USERNAME:}
     password: ${MEDWARE_PASSWORD:}
+    # Compatibilidade somente para MEDWARE_AUTH_MODE=IDENTIFICACAO_HASH.
     password-is-hash: ${MEDWARE_PASSWORD_IS_HASH:false}
+    auth-mode: ${MEDWARE_AUTH_MODE:USUARIO}
     token-refresh-margin-seconds: ${MEDWARE_TOKEN_REFRESH_MARGIN_SECONDS:300}
     timeout-seconds: ${MEDWARE_TIMEOUT_SECONDS:30}
     default-start-days-back: ${MEDWARE_DEFAULT_START_DAYS_BACK:90}
