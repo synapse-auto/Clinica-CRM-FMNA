@@ -22,7 +22,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 @Slf4j
 @Component
@@ -130,11 +132,15 @@ public class MedwareProvider implements ExternalClinicProvider {
     public PageResult<ExternalPatientDTO> getPatients(OffsetDateTime updatedAfter, String cursor, int limit) {
         assertConfigured();
         JsonNode response = get("/Medware/Paciente/Listar", Map.of());
-        List<ExternalPatientDTO> patients = mapper.extractItems(response).stream()
-                .map(mapper::toPatient)
+        List<JsonNode> items = mapAtStage("PACIENTE_MAP", () -> mapper.extractItems(response));
+        List<ExternalPatientDTO> patients = items.stream()
+                .map(node -> mapAtStage("PACIENTE_MAP", () -> mapper.toPatient(node)))
+                .filter(Objects::nonNull)
                 .filter(patient -> patient.externalId() != null)
                 .toList();
-        log.info("Medware pacientes: endpoint=/Medware/Paciente/Listar, itens={}", patients.size());
+        log.info(
+                "Medware pacientes: endpoint=/Medware/Paciente/Listar, recebidos={}, validos={}, ignorados={}",
+                items.size(), patients.size(), items.size() - patients.size());
         return page(patients, cursor, limit);
     }
 
@@ -167,15 +173,21 @@ public class MedwareProvider implements ExternalClinicProvider {
                 "codmedico"
         );
         JsonNode response = get("/Medware/Agendamento/Listar", dateParams);
-        List<ExternalAppointmentDTO> appointments = mapper.extractItems(response).stream()
-                .map(node -> mapper.toAppointment(node, procedimentos, medicos))
+        List<JsonNode> items = mapAtStage("AGENDAMENTO_MAP", () -> mapper.extractItems(response));
+        List<ExternalAppointmentDTO> appointments = items.stream()
+                .map(node -> mapAtStage(
+                        "AGENDAMENTO_MAP",
+                        () -> mapper.toAppointment(node, procedimentos, medicos)))
+                .filter(Objects::nonNull)
                 .filter(appointment -> appointment.externalId() != null && appointment.externalPatientId() != null)
                 .toList();
         log.info(
-                "Medware agendamentos: periodo={}-{}, itens={}",
+                "Medware agendamentos: periodo={}-{}, recebidos={}, validos={}, ignorados={}",
                 dateWindow.start(),
                 dateWindow.end(),
-                appointments.size()
+                items.size(),
+                appointments.size(),
+                items.size() - appointments.size()
         );
         return page(appointments, cursor, limit);
     }
@@ -187,9 +199,25 @@ public class MedwareProvider implements ExternalClinicProvider {
 
     private Map<String, JsonNode> loadCatalog(String path, Map<String, String> params, String... indexFields) {
         JsonNode response = get(path, params);
-        Map<String, JsonNode> catalog = mapper.indexBy(response, indexFields);
+        Map<String, JsonNode> catalog = mapAtStage(
+                "AGENDAMENTO_MAP",
+                () -> mapper.indexBy(response, indexFields));
         log.info("Medware catalogo: endpoint={}, itens={}", path, catalog.size());
         return catalog;
+    }
+
+    private <T> T mapAtStage(String stage, Supplier<T> action) {
+        try {
+            return action.get();
+        } catch (RuntimeException e) {
+            if (e.getMessage() != null && e.getMessage().startsWith("na etapa ")) {
+                throw e;
+            }
+            throw new IllegalStateException(
+                    "na etapa " + stage + ": " + e.getClass().getSimpleName(),
+                    e
+            );
+        }
     }
 
     private JsonNode get(String path, Map<String, String> queryParams) {

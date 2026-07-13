@@ -34,9 +34,11 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 @Slf4j
 @Service
@@ -49,7 +51,8 @@ public class ExternalSyncService {
             "Medware retornou status",
             "Falha de autenticacao Medware",
             "Medware endpoint",
-            "MEDWARE_AUTH_MODE"
+            "MEDWARE_AUTH_MODE",
+            "Resposta Medware com envelope nao reconhecido"
     );
 
     private final ExternalProviderFactory providerFactory;
@@ -112,7 +115,7 @@ public class ExternalSyncService {
         } catch (Exception e) {
             String erroResumo = safeExternalErrorSummary(e);
             runLog.setStatus("FALHA_TOTAL");
-            runLog.setMensagemErro("Falha na sincronizacao externa: " + erroResumo);
+            runLog.setMensagemErro(formatPersistedError(erroResumo));
             log.error("Falha na sincronizacao externa clinica={}, provider={}, erroResumo={}",
                     clinica.getId(), providerType, erroResumo);
         } finally {
@@ -135,9 +138,20 @@ public class ExternalSyncService {
         String cursor = null;
         boolean hasMore = true;
         while (hasMore) {
-            PageResult<ExternalPatientDTO> page = provider.getPatients(updatedAfter, cursor, pageSize);
+            String pageCursor = cursor;
+            PageResult<ExternalPatientDTO> page = executeAtStage(
+                    SyncStage.PACIENTES_FETCH,
+                    () -> provider.getPatients(updatedAfter, pageCursor, pageSize));
             for (ExternalPatientDTO dto : page.data()) {
-                boolean created = upsertPatient(clinica, provider.getType(), provider, dto);
+                if (dto.externalId() == null || dto.externalId().isBlank()) {
+                    log.warn(
+                            "Paciente externo ignorado: clinica={}, provider={}, motivo=externalId ausente",
+                            clinica.getId(), provider.getType());
+                    continue;
+                }
+                boolean created = executeAtStage(
+                        SyncStage.PACIENTE_PERSIST,
+                        () -> upsertPatient(clinica, provider.getType(), provider, dto));
                 counters.pacientesProcessados++;
                 if (created) {
                     counters.pacientesCriados++;
@@ -156,14 +170,28 @@ public class ExternalSyncService {
         String cursor = null;
         boolean hasMore = true;
         while (hasMore) {
-            PageResult<ExternalAppointmentDTO> page = dataInicio == null
-                    ? provider.getAppointments(updatedAfter, cursor, pageSize)
-                    : provider.getAppointments(updatedAfter, dataInicio, dataFim, cursor, pageSize);
+            String pageCursor = cursor;
+            PageResult<ExternalAppointmentDTO> page = executeAtStage(
+                    SyncStage.AGENDAMENTOS_FETCH,
+                    () -> dataInicio == null
+                            ? provider.getAppointments(updatedAfter, pageCursor, pageSize)
+                            : provider.getAppointments(
+                                    updatedAfter, dataInicio, dataFim, pageCursor, pageSize));
             log.info(
                     "Pagina de agendamentos externos recebida: clinica={}, provider={}, dataInicio={}, dataFim={}, cursor={}, quantidade={}",
                     clinica.getId(), provider.getType(), dataInicio, dataFim, cursor, page.data().size());
             for (ExternalAppointmentDTO dto : page.data()) {
-                Optional<Paciente> paciente = resolverPacienteDoAgendamento(clinica, provider.getType(), dto, counters);
+                if (dto.externalId() == null || dto.externalId().isBlank()
+                        || dto.externalPatientId() == null || dto.externalPatientId().isBlank()) {
+                    counters.agendamentosIgnorados++;
+                    log.warn(
+                            "Agendamento externo ignorado: clinica={}, provider={}, motivo=identificador ausente",
+                            clinica.getId(), provider.getType());
+                    continue;
+                }
+                Optional<Paciente> paciente = executeAtStage(
+                        SyncStage.AGENDAMENTO_MAP,
+                        () -> resolverPacienteDoAgendamento(clinica, provider.getType(), dto, counters));
                 if (paciente.isEmpty()) {
                     counters.agendamentosIgnorados++;
                     log.warn(
@@ -172,7 +200,9 @@ public class ExternalSyncService {
                     continue;
                 }
 
-                boolean created = upsertAppointment(clinica, provider.getType(), paciente.get(), dto);
+                boolean created = executeAtStage(
+                        SyncStage.AGENDAMENTO_PERSIST,
+                        () -> upsertAppointment(clinica, provider.getType(), paciente.get(), dto));
                 counters.agendamentosProcessados++;
                 if (created) {
                     counters.agendamentosCriados++;
@@ -196,7 +226,9 @@ public class ExternalSyncService {
         if (paciente.isPresent() || providerType != ExternalProviderType.MEDWARE) {
             return paciente;
         }
-        Paciente criado = criarPacienteMinimoMedware(clinica, dto);
+        Paciente criado = executeAtStage(
+                SyncStage.PACIENTE_PERSIST,
+                () -> criarPacienteMinimoMedware(clinica, dto));
         counters.pacientesCriados++;
         log.info(
                 "Paciente minimo Medware criado a partir de agendamento: clinica={}, externalPatientId={}, externalAppointmentId={}",
@@ -218,11 +250,44 @@ public class ExternalSyncService {
     }
 
     private String safeExternalErrorSummary(Exception e) {
-        String message = e.getMessage();
-        if (message != null && SAFE_EXTERNAL_ERROR_PREFIXES.stream().anyMatch(message::startsWith)) {
-            return message.replaceAll("[\\r\\n\\t]+", " ").trim();
+        if (e instanceof SyncStageException stageException) {
+            return "na etapa " + stageException.stage().name() + ": "
+                    + safeExternalCauseSummary(stageException.getCause());
         }
-        return e.getClass().getSimpleName();
+        return safeExternalCauseSummary(e);
+    }
+
+    private String safeExternalCauseSummary(Throwable error) {
+        String message = error.getMessage();
+        if (message != null && message.startsWith("na etapa ")) {
+            return sanitizeSingleLine(message);
+        }
+        if (message != null && SAFE_EXTERNAL_ERROR_PREFIXES.stream().anyMatch(message::startsWith)) {
+            return sanitizeSingleLine(message);
+        }
+        return error.getClass().getSimpleName();
+    }
+
+    private String formatPersistedError(String errorSummary) {
+        return errorSummary.startsWith("na etapa ")
+                ? "Falha na sincronizacao externa " + errorSummary
+                : "Falha na sincronizacao externa: " + errorSummary;
+    }
+
+    private String sanitizeSingleLine(String value) {
+        return value.replaceAll("[\\r\\n\\t]+", " ").trim();
+    }
+
+    private <T> T executeAtStage(SyncStage stage, Supplier<T> action) {
+        try {
+            return action.get();
+        } catch (RuntimeException e) {
+            if (e instanceof SyncStageException
+                    || (e.getMessage() != null && e.getMessage().startsWith("na etapa "))) {
+                throw e;
+            }
+            throw new SyncStageException(stage, e);
+        }
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -252,10 +317,10 @@ public class ExternalSyncService {
         paciente.setDataNascimento(dto.birthDate());
         paciente.setTelefone(nullToFallback(dto.phone(), "00000000000"));
         paciente.setTelefoneNormalizado(normalizarTelefone(dto.phone(), dto.externalId()));
-        paciente.setExternalPayload(toJson(Map.of(
-                "patient", dto.payload(),
-                "clinicalNotes", fetchNotes(provider, dto.externalId())
-        )));
+        Map<String, Object> externalPayload = new LinkedHashMap<>();
+        externalPayload.put("patient", payloadOrEmpty(dto.payload()));
+        externalPayload.put("clinicalNotes", fetchNotes(provider, dto.externalId()));
+        paciente.setExternalPayload(toJson(externalPayload));
 
         if (created) {
             paciente.setStatus("EM_ATENDIMENTO");
@@ -284,10 +349,10 @@ public class ExternalSyncService {
         paciente.setCpfHash(gerarSha256(cpfLimpo));
         paciente.setStatus("EM_ATENDIMENTO");
         paciente.setChaveCriptografiaId("v1");
-        paciente.setExternalPayload(toJson(Map.of(
-                "source", "MEDWARE_APPOINTMENT",
-                "appointment", dto.payload()
-        )));
+        Map<String, Object> externalPayload = new LinkedHashMap<>();
+        externalPayload.put("source", "MEDWARE_APPOINTMENT");
+        externalPayload.put("appointment", payloadOrEmpty(dto.payload()));
+        paciente.setExternalPayload(toJson(externalPayload));
         return pacienteRepository.save(paciente);
     }
 
@@ -310,7 +375,7 @@ public class ExternalSyncService {
         agendamento.setConfirmadoEm(dto.confirmedAt());
         agendamento.setCanceladoEm(dto.canceledAt());
         agendamento.setMotivoCancelamento(dto.cancellationReason());
-        agendamento.setExternalPayload(toJson(dto.payload()));
+        agendamento.setExternalPayload(toJson(payloadOrEmpty(dto.payload())));
 
         associarMedicoLocal(clinica, agendamento, dto.payload());
 
@@ -338,17 +403,25 @@ public class ExternalSyncService {
         try {
             PageResult<ExternalClinicalNoteDTO> notes = provider.getPatientNotes(externalPatientId, null, pageSize);
             return notes.data().stream()
-                    .map(note -> Map.of(
-                            "externalId", (Object) nullToFallback(note.externalId(), ""),
-                            "content", nullToFallback(note.content(), ""),
-                            "createdAt", note.createdAt() != null ? note.createdAt().toString() : "",
-                            "payload", note.payload()
-                    ))
+                    .map(this::clinicalNotePayload)
                     .toList();
         } catch (Exception e) {
             log.warn("Falha ao buscar notas clínicas externas para provider={}", provider.getType());
             return List.of();
         }
+    }
+
+    private Map<String, Object> clinicalNotePayload(ExternalClinicalNoteDTO note) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("externalId", nullToFallback(note.externalId(), ""));
+        payload.put("content", nullToFallback(note.content(), ""));
+        payload.put("createdAt", note.createdAt() != null ? note.createdAt().toString() : "");
+        payload.put("payload", payloadOrEmpty(note.payload()));
+        return payload;
+    }
+
+    private Map<String, Object> payloadOrEmpty(Map<String, Object> payload) {
+        return payload == null ? Map.of() : payload;
     }
 
     private void applyCounters(IntegrationSyncLog log, SyncCounters counters) {
@@ -468,6 +541,27 @@ public class ExternalSyncService {
                     agendamentosIgnorados,
                     status
             );
+        }
+    }
+
+    private enum SyncStage {
+        PACIENTES_FETCH,
+        PACIENTE_PERSIST,
+        AGENDAMENTOS_FETCH,
+        AGENDAMENTO_MAP,
+        AGENDAMENTO_PERSIST
+    }
+
+    private static final class SyncStageException extends RuntimeException {
+        private final SyncStage stage;
+
+        private SyncStageException(SyncStage stage, RuntimeException cause) {
+            super(cause);
+            this.stage = stage;
+        }
+
+        private SyncStage stage() {
+            return stage;
         }
     }
 }

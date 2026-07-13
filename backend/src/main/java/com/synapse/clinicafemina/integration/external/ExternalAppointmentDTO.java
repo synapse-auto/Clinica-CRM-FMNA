@@ -17,6 +17,6 @@ public record ExternalAppointmentDTO(
         Map<String, Object> payload
 ) {
     public ExternalAppointmentDTO {
-        payload = payload == null ? Map.of() : Map.copyOf(payload);
+        payload = ExternalPayloads.immutableNullSafeCopy(payload);
     }
 }

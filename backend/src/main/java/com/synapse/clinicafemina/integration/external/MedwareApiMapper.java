@@ -26,6 +26,8 @@ public class MedwareApiMapper {
     private static final ZoneId MEDWARE_ZONE = ZoneId.of("America/Sao_Paulo");
     private static final DateTimeFormatter BR_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter BR_DATE_TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm[:ss]");
+    private static final String UNKNOWN_ENVELOPE_MESSAGE =
+            "Resposta Medware com envelope nao reconhecido.";
 
     private final ObjectMapper objectMapper;
 
@@ -38,11 +40,17 @@ public class MedwareApiMapper {
         }
         for (String field : List.of("data", "dados", "items", "itens", "lista", "result", "resultado", "value")) {
             JsonNode child = find(response, field);
+            if (child != null && (child.isNull() || child.isMissingNode())) {
+                return List.of();
+            }
             if (child != null && child.isArray()) {
                 return toList(child);
             }
         }
-        return List.of(response);
+        if (response.isObject() && response.isEmpty()) {
+            return List.of();
+        }
+        throw new IllegalStateException(UNKNOWN_ENVELOPE_MESSAGE);
     }
 
     public ExternalPatientDTO toPatient(JsonNode node) {
@@ -297,7 +305,11 @@ public class MedwareApiMapper {
     }
 
     private Map<String, Object> toMap(JsonNode node) {
-        return objectMapper.convertValue(node, new TypeReference<>() {});
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return Map.of();
+        }
+        Map<String, Object> converted = objectMapper.convertValue(node, new TypeReference<>() {});
+        return converted == null ? Map.of() : new LinkedHashMap<>(converted);
     }
 
     private void putIfNotBlank(Map<String, Object> payload, String key, String value) {

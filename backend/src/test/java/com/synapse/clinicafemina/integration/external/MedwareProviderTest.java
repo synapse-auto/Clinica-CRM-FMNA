@@ -84,6 +84,45 @@ class MedwareProviderTest {
     }
 
     @Test
+    void should_filter_invalid_patient_and_preserve_null_optional_payload_fields() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        MedwareProvider provider = createProvider(builder, "https://medware.example/api", "usuario", "senha", false);
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andExpect(method(POST))
+                .andRespond(withSuccess("{\"token\":\"jwt-token\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Paciente/Listar"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("""
+                        [
+                          {"nome":"Sem identificador"},
+                          {
+                            "codPaciente":1023,
+                            "nome":null,
+                            "cpf":null,
+                            "email":null,
+                            "numeroCelular":null,
+                            "observacao":null
+                          }
+                        ]
+                        """, MediaType.APPLICATION_JSON));
+
+        PageResult<ExternalPatientDTO> page = provider.getPatients(null, null, 50);
+
+        assertEquals(1, page.data().size());
+        ExternalPatientDTO patient = page.data().getFirst();
+        assertEquals("1023", patient.externalId());
+        assertEquals(null, patient.fullName());
+        assertEquals(null, patient.documentNumber());
+        assertEquals(null, patient.email());
+        assertEquals(null, patient.phone());
+        assertTrue(patient.payload().containsKey("observacao"));
+        assertEquals(null, patient.payload().get("observacao"));
+        server.verify();
+    }
+
+    @Test
     void should_reject_html_login_response_with_clear_medware_url_message() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

@@ -9,6 +9,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MedwareApiMapperTest {
 
@@ -38,6 +40,43 @@ class MedwareApiMapperTest {
         assertEquals("61998877665", dto.phone());
         assertEquals("25/08/1990", dto.birthDate());
         assertEquals("Maria Oliveira", dto.payload().get("nome"));
+    }
+
+    @Test
+    void should_map_patient_when_medware_payload_contains_null_values() throws Exception {
+        JsonNode payload = objectMapper.readTree("""
+                {
+                  "codPaciente": 1023,
+                  "nome": null,
+                  "cpf": null,
+                  "email": null,
+                  "numeroCelular": null,
+                  "observacao": null
+                }
+                """);
+
+        ExternalPatientDTO dto = mapper.toPatient(payload);
+
+        assertEquals("1023", dto.externalId());
+        assertNull(dto.fullName());
+        assertNull(dto.documentNumber());
+        assertNull(dto.email());
+        assertNull(dto.phone());
+        assertNull(dto.payload().get("observacao"));
+    }
+
+    @Test
+    void should_reject_unrecognized_medware_envelope() throws Exception {
+        JsonNode payload = objectMapper.readTree("""
+                {"sucesso":true,"mensagem":"resposta sem lista reconhecida"}
+                """);
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> mapper.extractItems(payload)
+        );
+
+        assertEquals("Resposta Medware com envelope nao reconhecido.", exception.getMessage());
     }
 
     @Test

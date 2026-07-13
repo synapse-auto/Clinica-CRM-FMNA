@@ -14,6 +14,6 @@ public record ExternalPatientDTO(
         Map<String, Object> payload
 ) {
     public ExternalPatientDTO {
-        payload = payload == null ? Map.of() : Map.copyOf(payload);
+        payload = ExternalPayloads.immutableNullSafeCopy(payload);
     }
 }

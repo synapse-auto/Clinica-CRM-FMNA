@@ -7,6 +7,7 @@ import com.synapse.clinicafemina.domain.IntegrationSyncLog;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.integration.external.ExternalAppointmentDTO;
 import com.synapse.clinicafemina.integration.external.ExternalClinicProvider;
+import com.synapse.clinicafemina.integration.external.ExternalClinicalNoteDTO;
 import com.synapse.clinicafemina.integration.external.ExternalPatientDTO;
 import com.synapse.clinicafemina.integration.external.ExternalProviderFactory;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
@@ -24,12 +25,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -126,6 +129,70 @@ class ExternalSyncServiceTest {
         assertEquals("MARIA DA SILVA", saved.getNomeBusca());
         assertEquals(1, result.pacientesCriados());
         assertEquals(0, result.pacientesAtualizados());
+    }
+
+    @Test
+    void should_persist_medware_patient_when_optional_fields_and_note_payload_are_null() {
+        clinica.setSlug("ultramedical");
+        clinica.setExternalProvider(ExternalProviderType.MEDWARE);
+        when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
+
+        Map<String, Object> rawPayload = new LinkedHashMap<>();
+        rawPayload.put("campoOpcional", null);
+        ExternalPatientDTO externalPatient = new ExternalPatientDTO(
+                "1023", null, null, null, null, null, null, rawPayload);
+        ExternalClinicalNoteDTO note = new ExternalClinicalNoteDTO(
+                "nota-1", "1023", null, null, null);
+
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(externalPatient), false, null));
+        when(provider.getAppointments(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getPatientNotes("1023", null, 100))
+                .thenReturn(new PageResult<>(List.of(note), false, null));
+        when(pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                7L, ExternalProviderType.MEDWARE, "1023"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.save(any(Paciente.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        ArgumentCaptor<Paciente> pacienteCaptor = ArgumentCaptor.forClass(Paciente.class);
+        ArgumentCaptor<IntegrationSyncLog> logCaptor = ArgumentCaptor.forClass(IntegrationSyncLog.class);
+        verify(pacienteRepository).save(pacienteCaptor.capture());
+        verify(syncLogRepository, times(2)).save(logCaptor.capture());
+
+        Paciente saved = pacienteCaptor.getValue();
+        IntegrationSyncLog finalLog = logCaptor.getAllValues().getLast();
+        assertEquals("Paciente sem nome", saved.getNome());
+        assertEquals("PACIENTE SEM NOME", saved.getNomeBusca());
+        assertEquals("00000000000", saved.getTelefone());
+        assertNotNull(saved.getExternalPayload());
+        assertTrue(saved.getExternalPayload().contains("\"campoOpcional\":null"));
+        assertTrue(saved.getExternalPayload().contains("\"payload\":{}"));
+        assertEquals(1, result.pacientesProcessados());
+        assertEquals(1, result.pacientesCriados());
+        assertEquals(1, finalLog.getPacientesProcessados());
+        assertEquals("SUCESSO", finalLog.getStatus());
+    }
+
+    @Test
+    void should_ignore_external_patient_without_external_id() {
+        when(provider.getType()).thenReturn(ExternalProviderType.DARWIN);
+        ExternalPatientDTO invalidPatient = new ExternalPatientDTO(
+                null, "Paciente Ficticio", null, null, null, null, null, null);
+
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(invalidPatient), false, null));
+        when(provider.getAppointments(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        assertEquals("SUCESSO", result.status());
+        assertEquals(0, result.pacientesProcessados());
+        verifyNoInteractions(pacienteRepository);
     }
 
     @Test
@@ -299,6 +366,57 @@ class ExternalSyncServiceTest {
     }
 
     @Test
+    void should_create_minimal_medware_patient_and_appointment_when_payload_is_null() {
+        clinica.setSlug("ultramedical");
+        clinica.setExternalProvider(ExternalProviderType.MEDWARE);
+        when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
+
+        ExternalAppointmentDTO appointment = new ExternalAppointmentDTO(
+                "98767",
+                "1024",
+                OffsetDateTime.parse("2026-07-03T18:00:00-03:00"),
+                null,
+                "EXAME",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(appointment), false, null));
+        when(pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                7L, ExternalProviderType.MEDWARE, "1024"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.save(any(Paciente.class))).thenAnswer(invocation -> {
+            Paciente paciente = invocation.getArgument(0);
+            paciente.setId(21L);
+            return paciente;
+        });
+        when(agendamentoRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                7L, ExternalProviderType.MEDWARE, "98767"))
+                .thenReturn(Optional.empty());
+        when(agendamentoRepository.save(any(Agendamento.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        ArgumentCaptor<Paciente> pacienteCaptor = ArgumentCaptor.forClass(Paciente.class);
+        ArgumentCaptor<Agendamento> agendamentoCaptor = ArgumentCaptor.forClass(Agendamento.class);
+        verify(pacienteRepository).save(pacienteCaptor.capture());
+        verify(agendamentoRepository).save(agendamentoCaptor.capture());
+        assertTrue(pacienteCaptor.getValue().getExternalPayload().contains("\"appointment\":{}"));
+        assertEquals("{}", agendamentoCaptor.getValue().getExternalPayload());
+        assertEquals(1, result.pacientesCriados());
+        assertEquals(1, result.agendamentosProcessados());
+        assertEquals(1, result.agendamentosCriados());
+    }
+
+    @Test
     void should_update_existing_medware_appointment_without_creating_duplicate() {
         clinica.setExternalProvider(ExternalProviderType.MEDWARE);
         when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
@@ -410,7 +528,10 @@ class ExternalSyncServiceTest {
 
         assertEquals("FALHA_TOTAL", result.status());
         assertEquals("FALHA_TOTAL", finalLog.getStatus());
-        assertEquals("Falha na sincronizacao externa: IllegalStateException", finalLog.getMensagemErro());
+        assertEquals(
+                "Falha na sincronizacao externa na etapa PACIENTES_FETCH: IllegalStateException",
+                finalLog.getMensagemErro()
+        );
         assertFalse(finalLog.getMensagemErro().contains("detalhe interno simulado"));
         verifyNoInteractions(agendamentoRepository);
     }
@@ -432,8 +553,40 @@ class ExternalSyncServiceTest {
 
         assertEquals("FALHA_TOTAL", result.status());
         assertEquals(
-                "Falha na sincronizacao externa: MEDWARE_API_URL invalida ou endpoint nao retornou JSON. Verifique se a URL termina com /api.",
+                "Falha na sincronizacao externa na etapa PACIENTES_FETCH: MEDWARE_API_URL invalida ou endpoint nao retornou JSON. Verifique se a URL termina com /api.",
                 finalLog.getMensagemErro()
         );
+    }
+
+    @Test
+    void should_record_sanitized_stage_without_patient_data_when_persistence_fails() {
+        clinica.setSlug("ultramedical");
+        clinica.setExternalProvider(ExternalProviderType.MEDWARE);
+        when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
+        ExternalPatientDTO externalPatient = new ExternalPatientDTO(
+                "1025", "Paciente Ficticio", null, null, null, null, null, null);
+
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(externalPatient), false, null));
+        when(provider.getPatientNotes("1025", null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                7L, ExternalProviderType.MEDWARE, "1025"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.save(any(Paciente.class)))
+                .thenThrow(new IllegalStateException("Paciente Ficticio documento 11122233344"));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        ArgumentCaptor<IntegrationSyncLog> logCaptor = ArgumentCaptor.forClass(IntegrationSyncLog.class);
+        verify(syncLogRepository, times(2)).save(logCaptor.capture());
+        IntegrationSyncLog finalLog = logCaptor.getAllValues().getLast();
+        assertEquals("FALHA_TOTAL", result.status());
+        assertEquals(
+                "Falha na sincronizacao externa na etapa PACIENTE_PERSIST: IllegalStateException",
+                finalLog.getMensagemErro()
+        );
+        assertFalse(finalLog.getMensagemErro().contains("Paciente Ficticio"));
+        assertFalse(finalLog.getMensagemErro().contains("11122233344"));
     }
 }
