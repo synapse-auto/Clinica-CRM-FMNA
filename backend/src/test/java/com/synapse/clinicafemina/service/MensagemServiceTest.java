@@ -78,7 +78,7 @@ class MensagemServiceTest {
 
         Clinica clinica = new Clinica();
         clinica.setId(9L);
-        clinica.setSlug("ultramedical");
+        clinica.setSlug("fmna");
 
         Paciente paciente = new Paciente();
         paciente.setId(20L);
@@ -90,6 +90,7 @@ class MensagemServiceTest {
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
         atendimento.setStatus("ATIVO");
+        atendimento.setTratadoPorIa(true);
 
         remetente = new Recepcionista();
         remetente.setId(99L);
@@ -98,7 +99,7 @@ class MensagemServiceTest {
 
     @Test
     void should_persist_ai_response_and_send_whatsapp_without_human_sender() {
-        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
             Mensagem mensagem = invocation.getArgument(0);
             if (mensagem.getId() == null) {
@@ -111,6 +112,7 @@ class MensagemServiceTest {
 
         MensagemService.RespostaIaResultado resultado = service.responderIa(
                 30L,
+                9L,
                 new N8nResponderRequest(20L, "Resposta gerada pela IA", "TEXTO", "N8N", true)
         );
 
@@ -132,11 +134,12 @@ class MensagemServiceTest {
     @Test
     void should_register_ai_response_without_sending_whatsapp_when_requested() {
         OffsetDateTime enviadoEm = OffsetDateTime.parse("2026-07-03T12:00:00Z");
-        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.responderIa(
                 30L,
+                9L,
                 new N8nResponderRequest(
                         20L,
                         "Resposta ja enviada pelo N8N",
@@ -174,12 +177,13 @@ class MensagemServiceTest {
         existente.setWhatsappMessageId(META_WAMID_LONGO);
         existente.setDataHora(enviadoEm);
 
-        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(9L, META_WAMID_LONGO))
                 .thenReturn(Optional.of(existente));
 
         MensagemService.RespostaIaResultado resultado = service.responderIa(
                 30L,
+                9L,
                 new N8nResponderRequest(
                         20L,
                         "Resposta ja registrada",
@@ -200,11 +204,12 @@ class MensagemServiceTest {
     @Test
     void should_register_each_ai_response_callback_when_whatsapp_message_id_is_absent() {
         OffsetDateTime enviadoEm = OffsetDateTime.parse("2026-07-03T12:00:00Z");
-        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         MensagemService.RespostaIaResultado primeira = service.responderIa(
                 30L,
+                9L,
                 new N8nResponderRequest(
                         20L,
                         "Resposta sem chave externa",
@@ -217,6 +222,7 @@ class MensagemServiceTest {
         );
         MensagemService.RespostaIaResultado segunda = service.responderIa(
                 30L,
+                9L,
                 new N8nResponderRequest(
                         20L,
                         "Resposta sem chave externa",
@@ -237,11 +243,12 @@ class MensagemServiceTest {
 
     @Test
     void should_keep_ai_response_preview_within_column_limit_when_message_is_long() {
-        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.responderIa(
                 30L,
+                9L,
                 new N8nResponderRequest(
                         20L,
                         "Resposta automatica com texto maior que sessenta caracteres para validar previa.",
@@ -261,15 +268,34 @@ class MensagemServiceTest {
 
     @Test
     void should_reject_ai_response_for_patient_not_linked_to_attendance() {
-        when(atendimentoRepository.findById(30L)).thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
 
         org.junit.jupiter.api.Assertions.assertThrows(
                 BadRequestException.class,
                 () -> service.responderIa(
                         30L,
+                        9L,
                         new N8nResponderRequest(999L, "Resposta", "TEXTO", "N8N", true)
                 )
         );
+    }
+
+    @Test
+    void should_reject_ai_response_when_attendance_is_in_human_mode() {
+        atendimento.setTratadoPorIa(false);
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
+
+        IllegalStateException error = org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalStateException.class,
+                () -> service.responderIa(
+                        30L,
+                        9L,
+                        new N8nResponderRequest(20L, "Resposta", "TEXTO", "N8N", true)
+                )
+        );
+
+        assertEquals("Atendimento esta em modo humano", error.getMessage());
+        verify(mensagemRepository, never()).save(any(Mensagem.class));
     }
 
     @Test

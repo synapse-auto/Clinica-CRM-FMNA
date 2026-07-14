@@ -89,10 +89,13 @@ public class MensagemService {
     }
 
     @Transactional
-    public RespostaIaResultado responderIa(Long atendimentoId, N8nResponderRequest request) {
+    public RespostaIaResultado responderIa(
+            Long atendimentoId,
+            Long clinicaId,
+            N8nResponderRequest request
+    ) {
         validarRespostaN8n(request);
-        Atendimento atendimento = buscarAtendimentoAtivoParaN8n(atendimentoId);
-        validarClinicaUltraMedical(atendimento);
+        Atendimento atendimento = buscarAtendimentoAtivoParaN8n(atendimentoId, clinicaId);
         validarPacienteDoAtendimento(atendimento, request.pacienteId());
         Optional<Mensagem> existente = buscarMensagemN8nExistente(atendimento, request.whatsappMessageId());
         if (existente.isPresent()) {
@@ -244,11 +247,14 @@ public class MensagemService {
         return atendimento;
     }
 
-    private Atendimento buscarAtendimentoAtivoParaN8n(Long atendimentoId) {
-        Atendimento atendimento = atendimentoRepository.findById(atendimentoId)
+    private Atendimento buscarAtendimentoAtivoParaN8n(Long atendimentoId, Long clinicaId) {
+        Atendimento atendimento = atendimentoRepository.findByIdAndClinicaId(atendimentoId, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento nao encontrado"));
         if (!"ATIVO".equals(atendimento.getStatus())) {
             throw new IllegalStateException("So e possivel responder atendimentos ativos");
+        }
+        if (!Boolean.TRUE.equals(atendimento.getTratadoPorIa())) {
+            throw new IllegalStateException("Atendimento esta em modo humano");
         }
         return atendimento;
     }
@@ -308,13 +314,6 @@ public class MensagemService {
         if (request.whatsappMessageId() != null
                 && request.whatsappMessageId().trim().length() > TAMANHO_MAXIMO_WHATSAPP_MESSAGE_ID) {
             throw new BadRequestException("whatsappMessageId excede 255 caracteres");
-        }
-    }
-
-    private void validarClinicaUltraMedical(Atendimento atendimento) {
-        String slug = atendimento.getClinica() == null ? null : atendimento.getClinica().getSlug();
-        if (!"ultramedical".equalsIgnoreCase(slug)) {
-            throw new BadRequestException("Atendimento nao pertence a clinica UltraMedical");
         }
     }
 

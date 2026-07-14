@@ -14,6 +14,7 @@ import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import com.synapse.clinicafemina.service.AtendimentoService;
 import com.synapse.clinicafemina.service.MensagemService;
+import com.synapse.clinicafemina.service.N8nCallbackAuthorizationService;
 import jakarta.persistence.EntityManager;
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -83,6 +84,9 @@ class AuthSecurityIntegrationTest {
 
     @MockBean
     private AtendimentoService atendimentoService;
+
+    @MockBean
+    private N8nCallbackAuthorizationService n8nCallbackAuthorizationService;
 
     private String gestorEmail;
     private String recepcionistaEmail;
@@ -258,7 +262,9 @@ class AuthSecurityIntegrationTest {
 
     @Test
     void should_allow_n8n_response_endpoint_with_secret_without_jwt() throws Exception {
-        when(mensagemService.responderIa(eq(30L), any(N8nResponderRequest.class)))
+        when(n8nCallbackAuthorizationService.autorizar("test-secret", 30L))
+                .thenReturn(new N8nCallbackAuthorizationService.Autorizacao(clinicaId));
+        when(mensagemService.responderIa(eq(30L), eq(clinicaId), any(N8nResponderRequest.class)))
                 .thenReturn(new MensagemService.RespostaIaResultado(
                         new MensagemDTO(
                                 77L,
@@ -295,6 +301,8 @@ class AuthSecurityIntegrationTest {
 
     @Test
     void should_allow_n8n_ai_mode_endpoint_with_secret_without_jwt() throws Exception {
+        when(n8nCallbackAuthorizationService.autorizar("test-secret", 30L))
+                .thenReturn(new N8nCallbackAuthorizationService.Autorizacao(clinicaId));
         when(atendimentoService.ativarModoIa(30L, clinicaId))
                 .thenReturn(atendimentoIaDto());
 

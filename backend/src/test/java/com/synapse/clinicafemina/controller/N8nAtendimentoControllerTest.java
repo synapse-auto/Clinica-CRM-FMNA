@@ -1,6 +1,5 @@
 package com.synapse.clinicafemina.controller;
 
-import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
@@ -8,8 +7,8 @@ import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.security.JwtService;
 import com.synapse.clinicafemina.service.AtendimentoService;
-import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.MensagemService;
+import com.synapse.clinicafemina.service.N8nCallbackAuthorizationService;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,8 +16,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.authentication.BadCredentialsException;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -32,7 +31,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(N8nAtendimentoController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@TestPropertySource(properties = "app.n8n.callback-secret=test-secret")
 class N8nAtendimentoControllerTest {
 
     private static final String META_WAMID_LONGO =
@@ -48,7 +46,7 @@ class N8nAtendimentoControllerTest {
     private AtendimentoService atendimentoService;
 
     @MockBean
-    private ClinicaConfigService clinicaConfigService;
+    private N8nCallbackAuthorizationService authorizationService;
 
     @MockBean
     private JwtService jwtService;
@@ -58,7 +56,8 @@ class N8nAtendimentoControllerTest {
 
     @Test
     void should_accept_valid_n8n_secret_without_jwt_and_delegate_response() throws Exception {
-        when(mensagemService.responderIa(eq(30L), any(N8nResponderRequest.class)))
+        autorizar("test-secret");
+        when(mensagemService.responderIa(eq(30L), eq(7L), any(N8nResponderRequest.class)))
                 .thenReturn(new MensagemService.RespostaIaResultado(
                         mensagemDto(77L, "Resposta gerada pela IA", "ENVIADA"),
                         false
@@ -81,12 +80,13 @@ class N8nAtendimentoControllerTest {
                 .andExpect(jsonPath("$.direcao").value("SAIDA"))
                 .andExpect(jsonPath("$.remetente").value("IA"));
 
-        verify(mensagemService).responderIa(eq(30L), any(N8nResponderRequest.class));
+        verify(mensagemService).responderIa(eq(30L), eq(7L), any(N8nResponderRequest.class));
     }
 
     @Test
     void should_return_ok_when_n8n_retries_existing_whatsapp_message_id() throws Exception {
-        when(mensagemService.responderIa(eq(30L), any(N8nResponderRequest.class)))
+        autorizar("test-secret");
+        when(mensagemService.responderIa(eq(30L), eq(7L), any(N8nResponderRequest.class)))
                 .thenReturn(new MensagemService.RespostaIaResultado(
                         mensagemDto(88L, "Resposta ja registrada", "REGISTRADA"),
                         true
@@ -133,11 +133,13 @@ class N8nAtendimentoControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.details.whatsappMessageId").exists());
 
-        verify(mensagemService, never()).responderIa(any(), any());
+        verify(mensagemService, never()).responderIa(any(), any(), any());
     }
 
     @Test
     void should_reject_request_without_n8n_secret() throws Exception {
+        rejeitarSecret(null);
+
         mockMvc.perform(post("/api/n8n/atendimentos/30/responder")
                         .contentType("application/json")
                         .content("""
@@ -151,13 +153,12 @@ class N8nAtendimentoControllerTest {
                                 """))
                 .andExpect(status().isUnauthorized());
 
-        verify(mensagemService, never()).responderIa(any(), any());
+        verify(mensagemService, never()).responderIa(any(), any(), any());
     }
 
     @Test
     void should_transfer_to_human_with_valid_n8n_secret_without_jwt() throws Exception {
-        Clinica clinica = clinic();
-        when(clinicaConfigService.obterClinicaAtual()).thenReturn(clinica);
+        autorizar("test-secret");
         when(atendimentoService.transferir(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L), eq(1L)))
                 .thenReturn(atendimentoHumano());
 
@@ -181,6 +182,8 @@ class N8nAtendimentoControllerTest {
 
     @Test
     void should_reject_transfer_to_human_without_n8n_secret() throws Exception {
+        rejeitarSecret(null);
+
         mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-humano")
                         .contentType("application/json")
                         .content("""
@@ -196,6 +199,8 @@ class N8nAtendimentoControllerTest {
 
     @Test
     void should_reject_transfer_to_human_with_invalid_n8n_secret() throws Exception {
+        rejeitarSecret("wrong-secret");
+
         mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-humano")
                         .header("X-N8N-SECRET", "wrong-secret")
                         .contentType("application/json")
@@ -212,8 +217,7 @@ class N8nAtendimentoControllerTest {
 
     @Test
     void should_return_clear_error_when_n8n_transfer_target_attendant_is_invalid() throws Exception {
-        Clinica clinica = clinic();
-        when(clinicaConfigService.obterClinicaAtual()).thenReturn(clinica);
+        autorizar("test-secret");
         when(atendimentoService.transferir(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L), eq(999L)))
                 .thenThrow(new NotFoundException("Usuário não encontrado"));
 
@@ -232,8 +236,7 @@ class N8nAtendimentoControllerTest {
 
     @Test
     void should_not_allow_n8n_transfer_when_atendimento_is_closed() throws Exception {
-        Clinica clinica = clinic();
-        when(clinicaConfigService.obterClinicaAtual()).thenReturn(clinica);
+        autorizar("test-secret");
         when(atendimentoService.transferir(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L), eq(1L)))
                 .thenThrow(new IllegalStateException("Não é possível transferir um atendimento encerrado"));
 
@@ -252,8 +255,7 @@ class N8nAtendimentoControllerTest {
 
     @Test
     void should_return_to_ai_mode_with_valid_n8n_secret_without_jwt() throws Exception {
-        Clinica clinica = clinic();
-        when(clinicaConfigService.obterClinicaAtual()).thenReturn(clinica);
+        autorizar("test-secret");
         when(atendimentoService.ativarModoIa(30L, 7L)).thenReturn(atendimentoIa());
 
         mockMvc.perform(patch("/api/n8n/atendimentos/30/modo-ia")
@@ -284,11 +286,14 @@ class N8nAtendimentoControllerTest {
         );
     }
 
-    private Clinica clinic() {
-        Clinica clinica = new Clinica();
-        clinica.setId(7L);
-        clinica.setSlug("ultramedical");
-        return clinica;
+    private void autorizar(String secret) {
+        when(authorizationService.autorizar(secret, 30L))
+                .thenReturn(new N8nCallbackAuthorizationService.Autorizacao(7L));
+    }
+
+    private void rejeitarSecret(String secret) {
+        when(authorizationService.autorizar(secret, 30L))
+                .thenThrow(new BadCredentialsException("Credencial N8N invalida."));
     }
 
     private AtendimentoDetalheDTO atendimentoHumano() {
