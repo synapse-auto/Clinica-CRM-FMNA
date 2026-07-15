@@ -34,6 +34,7 @@ public class MedwareProvider implements ExternalClinicProvider {
     private static final DateTimeFormatter BR_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final int DEFAULT_TOKEN_LIFETIME_HOURS = 24;
     private static final String AUTH_MODE_USUARIO = "USUARIO";
+    private static final String AUTH_MODE_IDENTIFICACAO = "IDENTIFICACAO";
     private static final String AUTH_MODE_IDENTIFICACAO_HASH = "IDENTIFICACAO_HASH";
     private static final String INVALID_URL_MESSAGE =
             "MEDWARE_API_URL invalida ou endpoint nao retornou JSON. Verifique se a URL termina com /api.";
@@ -63,7 +64,7 @@ public class MedwareProvider implements ExternalClinicProvider {
             @Value("${app.medware.username:}") String username,
             @Value("${app.medware.password:}") String password,
             @Value("${app.medware.password-is-hash:false}") boolean passwordIsHash,
-            @Value("${app.medware.auth-mode:USUARIO}") String authMode,
+            @Value("${app.medware.auth-mode:IDENTIFICACAO}") String authMode,
             @Value("${app.medware.token-refresh-margin-seconds:300}") long tokenRefreshMarginSeconds,
             @Value("${app.medware.timeout-seconds:30}") int timeoutSeconds,
             @Value("${app.medware.default-start-days-back:90}") int defaultStartDaysBack,
@@ -323,6 +324,12 @@ public class MedwareProvider implements ExternalClinicProvider {
                     "isHash", passwordIsHash
             );
         }
+        if (AUTH_MODE_IDENTIFICACAO.equals(authMode)) {
+            return Map.of(
+                    "identificacao", username,
+                    "senha", password
+            );
+        }
         return Map.of(
                 "usuario", username,
                 "senha", password
@@ -476,10 +483,14 @@ public class MedwareProvider implements ExternalClinicProvider {
 
     private String normalizeAuthMode(String value) {
         String normalized = value == null || value.isBlank()
-                ? AUTH_MODE_USUARIO
+                ? AUTH_MODE_IDENTIFICACAO
                 : value.trim().toUpperCase(java.util.Locale.ROOT);
-        if (!AUTH_MODE_USUARIO.equals(normalized) && !AUTH_MODE_IDENTIFICACAO_HASH.equals(normalized)) {
-            throw new IllegalStateException("MEDWARE_AUTH_MODE deve ser USUARIO ou IDENTIFICACAO_HASH");
+        if (!AUTH_MODE_USUARIO.equals(normalized)
+                && !AUTH_MODE_IDENTIFICACAO.equals(normalized)
+                && !AUTH_MODE_IDENTIFICACAO_HASH.equals(normalized)) {
+            throw new IllegalStateException(
+                    "MEDWARE_AUTH_MODE deve ser USUARIO, IDENTIFICACAO ou IDENTIFICACAO_HASH"
+            );
         }
         return normalized;
     }

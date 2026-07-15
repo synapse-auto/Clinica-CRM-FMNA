@@ -54,7 +54,7 @@ class MedwareProviderTest {
                 .andExpect(method(POST))
                 .andExpect(content().json("""
                         {"usuario":"usuario","senha":"senha"}
-                        """))
+                        """, true))
                 .andRespond(withSuccess("""
                         {"token":"jwt-token","refreshToken":"refresh-token"}
                         """, MediaType.APPLICATION_JSON));
@@ -200,7 +200,7 @@ class MedwareProviderTest {
                 .andExpect(method(POST))
                 .andExpect(content().json("""
                         {"identificacao":"usuario","senha":"senha","isHash":true}
-                        """))
+                        """, true))
                 .andRespond(withSuccess("{\"token\":\"jwt-token\"}", MediaType.APPLICATION_JSON));
         server.expect(once(), requestTo("https://medware.example/api/Medware/Paciente/Listar"))
                 .andExpect(method(GET))
@@ -208,6 +208,75 @@ class MedwareProviderTest {
 
         assertTrue(provider.getPatients(null, null, 50).data().isEmpty());
         server.verify();
+    }
+
+    @Test
+    void should_use_identification_auth_contract_without_is_hash_when_configured() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        MedwareProvider provider = createProvider(
+                builder, "https://medware.example/api", "usuario", "senha", true,
+                "IDENTIFICACAO", 30, 60
+        );
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andExpect(method(POST))
+                .andExpect(content().json("""
+                        {"identificacao":"usuario","senha":"senha"}
+                        """, true))
+                .andRespond(withSuccess("{\"token\":\"jwt-token\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Paciente/Listar"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        assertTrue(provider.getPatients(null, null, 50).data().isEmpty());
+        server.verify();
+    }
+
+    @Test
+    void should_normalize_identification_mode_and_ignore_false_password_is_hash() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        MedwareProvider provider = createProvider(
+                builder, "https://medware.example/api", "usuario", "senha", false,
+                "identificacao", 30, 60
+        );
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andExpect(method(POST))
+                .andExpect(content().json("""
+                        {"identificacao":"usuario","senha":"senha"}
+                        """, true))
+                .andRespond(withSuccess("{\"token\":\"jwt-token\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Paciente/Listar"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        assertTrue(provider.getPatients(null, null, 50).data().isEmpty());
+        server.verify();
+    }
+
+    @Test
+    void should_reject_invalid_auth_mode_with_clear_message() {
+        IllegalStateException ex = assertThrows(
+                IllegalStateException.class,
+                () -> createProvider(
+                        RestClient.builder(),
+                        "https://medware.example/api",
+                        "usuario",
+                        "senha-secreta",
+                        false,
+                        "desconhecido",
+                        30,
+                        60
+                )
+        );
+
+        assertEquals(
+                "MEDWARE_AUTH_MODE deve ser USUARIO, IDENTIFICACAO ou IDENTIFICACAO_HASH",
+                ex.getMessage()
+        );
+        assertTrue(!ex.getMessage().contains("senha-secreta"));
     }
 
     @Test

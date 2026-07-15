@@ -53,7 +53,8 @@ app:
     password: senha-ou-hash-configurado-fora-do-git
     # Compatibilidade somente para auth-mode=IDENTIFICACAO_HASH.
     password-is-hash: false
-    auth-mode: USUARIO
+    # IDENTIFICACAO envia somente identificacao/senha.
+    auth-mode: IDENTIFICACAO
     token-refresh-margin-seconds: 300
     timeout-seconds: 30
     default-start-days-back: 90
