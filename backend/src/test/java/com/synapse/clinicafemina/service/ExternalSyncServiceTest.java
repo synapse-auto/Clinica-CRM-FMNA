@@ -3,7 +3,6 @@ package com.synapse.clinicafemina.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.domain.Agendamento;
 import com.synapse.clinicafemina.domain.Clinica;
-import com.synapse.clinicafemina.domain.IntegrationSyncLog;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.integration.external.ExternalAppointmentDTO;
 import com.synapse.clinicafemina.integration.external.ExternalClinicProvider;
@@ -16,6 +15,7 @@ import com.synapse.clinicafemina.domain.Medico;
 import com.synapse.clinicafemina.repository.AgendamentoRepository;
 import com.synapse.clinicafemina.repository.IntegrationSyncLogRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,8 +37,9 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -64,19 +65,30 @@ class ExternalSyncServiceTest {
     @Mock
     private com.synapse.clinicafemina.repository.UsuarioRepository usuarioRepository;
 
+    @Mock
+    private IntegrationSyncLogService integrationSyncLogService;
+
+    @Mock
+    private EntityManager entityManager;
+
     private ExternalSyncService service;
     private Clinica clinica;
 
     @BeforeEach
     void setUp() {
-        service = new ExternalSyncService(
-                providerFactory,
-                syncLogRepository,
+        ExternalSyncTransactionService transactionService = new ExternalSyncTransactionService(
                 pacienteRepository,
                 agendamentoRepository,
                 usuarioRepository,
                 new ObjectMapper(),
+                entityManager,
                 100
+        );
+        service = new ExternalSyncService(
+                providerFactory,
+                syncLogRepository,
+                transactionService,
+                integrationSyncLogService
         );
 
         clinica = new Clinica();
@@ -88,7 +100,8 @@ class ExternalSyncServiceTest {
         lenient().when(providerFactory.getProvider(ExternalProviderType.MEDWARE)).thenReturn(provider);
         lenient().when(syncLogRepository.findUltimoSucesso(7L, ExternalProviderType.DARWIN)).thenReturn(Optional.empty());
         lenient().when(syncLogRepository.findUltimoSucesso(7L, ExternalProviderType.MEDWARE)).thenReturn(Optional.empty());
-        lenient().when(syncLogRepository.save(any(IntegrationSyncLog.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(integrationSyncLogService.iniciar(any(), any(), any(), any(), any()))
+                .thenReturn(99L);
     }
 
     @Test
@@ -159,12 +172,13 @@ class ExternalSyncServiceTest {
         ExternalSyncResult result = service.sincronizar(clinica);
 
         ArgumentCaptor<Paciente> pacienteCaptor = ArgumentCaptor.forClass(Paciente.class);
-        ArgumentCaptor<IntegrationSyncLog> logCaptor = ArgumentCaptor.forClass(IntegrationSyncLog.class);
+        ArgumentCaptor<ExternalSyncProgress> progressCaptor = ArgumentCaptor.forClass(ExternalSyncProgress.class);
         verify(pacienteRepository).save(pacienteCaptor.capture());
-        verify(syncLogRepository, times(2)).save(logCaptor.capture());
+        verify(integrationSyncLogService).finalizar(
+                eq(99L), eq("SUCESSO"), progressCaptor.capture(), isNull());
 
         Paciente saved = pacienteCaptor.getValue();
-        IntegrationSyncLog finalLog = logCaptor.getAllValues().getLast();
+        ExternalSyncProgress finalProgress = progressCaptor.getValue();
         assertEquals("Paciente sem nome", saved.getNome());
         assertEquals("PACIENTE SEM NOME", saved.getNomeBusca());
         assertEquals("00000000000", saved.getTelefone());
@@ -173,8 +187,7 @@ class ExternalSyncServiceTest {
         assertTrue(saved.getExternalPayload().contains("\"payload\":{}"));
         assertEquals(1, result.pacientesProcessados());
         assertEquals(1, result.pacientesCriados());
-        assertEquals(1, finalLog.getPacientesProcessados());
-        assertEquals("SUCESSO", finalLog.getStatus());
+        assertEquals(1, finalProgress.getPacientesProcessados());
     }
 
     @Test
@@ -287,19 +300,19 @@ class ExternalSyncServiceTest {
         ExternalSyncResult result = service.sincronizar(clinica, dataInicio, dataFim);
 
         ArgumentCaptor<Agendamento> agendamentoCaptor = ArgumentCaptor.forClass(Agendamento.class);
-        ArgumentCaptor<IntegrationSyncLog> logCaptor = ArgumentCaptor.forClass(IntegrationSyncLog.class);
         verify(provider).getAppointments(null, dataInicio, dataFim, null, 100);
         verify(agendamentoRepository).save(agendamentoCaptor.capture());
-        verify(syncLogRepository, times(2)).save(logCaptor.capture());
+        verify(integrationSyncLogService).iniciar(
+                7L,
+                ExternalProviderType.MEDWARE,
+                OffsetDateTime.parse("2026-07-01T00:00:00-03:00"),
+                dataInicio,
+                dataFim
+        );
 
         Agendamento saved = agendamentoCaptor.getValue();
-        IntegrationSyncLog finalLog = logCaptor.getAllValues().getLast();
         assertEquals(ExternalProviderType.MEDWARE, saved.getExternalSource());
         assertEquals("98765", saved.getExternalId());
-        assertEquals(dataInicio, finalLog.getDataInicio());
-        assertEquals(dataFim, finalLog.getDataFim());
-        assertEquals(OffsetDateTime.parse("2026-07-01T00:00:00-03:00"), finalLog.getUpdatedAfterUtilizado());
-        assertEquals(1, finalLog.getAgendamentosProcessados());
         assertEquals(1, result.agendamentosCriados());
     }
 
@@ -522,17 +535,16 @@ class ExternalSyncServiceTest {
 
         ExternalSyncResult result = service.sincronizar(clinica);
 
-        ArgumentCaptor<IntegrationSyncLog> logCaptor = ArgumentCaptor.forClass(IntegrationSyncLog.class);
-        verify(syncLogRepository, times(2)).save(logCaptor.capture());
-        IntegrationSyncLog finalLog = logCaptor.getAllValues().getLast();
+        ArgumentCaptor<String> errorCaptor = ArgumentCaptor.forClass(String.class);
+        verify(integrationSyncLogService).finalizar(
+                eq(99L), eq("FALHA_TOTAL"), any(ExternalSyncProgress.class), errorCaptor.capture());
 
         assertEquals("FALHA_TOTAL", result.status());
-        assertEquals("FALHA_TOTAL", finalLog.getStatus());
         assertEquals(
                 "Falha na sincronizacao externa na etapa PACIENTES_FETCH: IllegalStateException",
-                finalLog.getMensagemErro()
+                errorCaptor.getValue()
         );
-        assertFalse(finalLog.getMensagemErro().contains("detalhe interno simulado"));
+        assertFalse(errorCaptor.getValue().contains("detalhe interno simulado"));
         verifyNoInteractions(agendamentoRepository);
     }
 
@@ -547,14 +559,14 @@ class ExternalSyncServiceTest {
 
         ExternalSyncResult result = service.sincronizar(clinica);
 
-        ArgumentCaptor<IntegrationSyncLog> logCaptor = ArgumentCaptor.forClass(IntegrationSyncLog.class);
-        verify(syncLogRepository, times(2)).save(logCaptor.capture());
-        IntegrationSyncLog finalLog = logCaptor.getAllValues().getLast();
+        ArgumentCaptor<String> errorCaptor = ArgumentCaptor.forClass(String.class);
+        verify(integrationSyncLogService).finalizar(
+                eq(99L), eq("FALHA_TOTAL"), any(ExternalSyncProgress.class), errorCaptor.capture());
 
         assertEquals("FALHA_TOTAL", result.status());
         assertEquals(
-                "Falha na sincronizacao externa na etapa PACIENTES_FETCH: MEDWARE_API_URL invalida ou endpoint nao retornou JSON. Verifique se a URL termina com /api.",
-                finalLog.getMensagemErro()
+                "Falha na sincronizacao externa na etapa PACIENTES_FETCH: IllegalStateException",
+                errorCaptor.getValue()
         );
     }
 
@@ -578,15 +590,48 @@ class ExternalSyncServiceTest {
 
         ExternalSyncResult result = service.sincronizar(clinica);
 
-        ArgumentCaptor<IntegrationSyncLog> logCaptor = ArgumentCaptor.forClass(IntegrationSyncLog.class);
-        verify(syncLogRepository, times(2)).save(logCaptor.capture());
-        IntegrationSyncLog finalLog = logCaptor.getAllValues().getLast();
+        ArgumentCaptor<String> errorCaptor = ArgumentCaptor.forClass(String.class);
+        verify(integrationSyncLogService).finalizar(
+                eq(99L), eq("FALHA_TOTAL"), any(ExternalSyncProgress.class), errorCaptor.capture());
         assertEquals("FALHA_TOTAL", result.status());
         assertEquals(
                 "Falha na sincronizacao externa na etapa PACIENTE_PERSIST: IllegalStateException",
-                finalLog.getMensagemErro()
+                errorCaptor.getValue()
         );
-        assertFalse(finalLog.getMensagemErro().contains("Paciente Ficticio"));
-        assertFalse(finalLog.getMensagemErro().contains("11122233344"));
+        assertFalse(errorCaptor.getValue().contains("Paciente Ficticio"));
+        assertFalse(errorCaptor.getValue().contains("11122233344"));
+    }
+
+    @Test
+    void should_ignore_appointment_without_start_at_before_creating_minimal_patient() {
+        clinica.setSlug("ultramedical");
+        clinica.setExternalProvider(ExternalProviderType.MEDWARE);
+        when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
+        ExternalAppointmentDTO appointment = new ExternalAppointmentDTO(
+                "appt-without-start",
+                "patient-not-imported",
+                null,
+                null,
+                "EXAME",
+                "Procedimento ficticio",
+                "AGENDADO",
+                null,
+                null,
+                null,
+                Map.of("codAgendamento", "appt-without-start")
+        );
+
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(appointment), false, null));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        assertEquals("SUCESSO", result.status());
+        assertEquals(1, result.agendamentosIgnorados());
+        assertEquals(0, result.pacientesCriados());
+        verify(pacienteRepository, never()).save(any(Paciente.class));
+        verify(agendamentoRepository, never()).save(any(Agendamento.class));
     }
 }
