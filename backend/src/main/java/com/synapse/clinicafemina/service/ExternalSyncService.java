@@ -102,7 +102,8 @@ public class ExternalSyncService {
 
     private String safeErrorSummary(Exception error) {
         if (error instanceof ExternalSyncTransactionService.SyncStageException stageException) {
-            return "na etapa " + stageException.getStage() + ": " + stageException.getCauseType();
+            return "na etapa " + stageException.getStage() + ": "
+                    + stageException.getCauseType() + stageException.getTechnicalDetails();
         }
         return "na etapa TRANSACAO_PRINCIPAL: " + error.getClass().getSimpleName();
     }

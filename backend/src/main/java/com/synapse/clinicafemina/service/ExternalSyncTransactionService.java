@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.SQLException;
 import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -36,6 +37,12 @@ import java.util.function.Supplier;
 @Slf4j
 @Service
 public class ExternalSyncTransactionService {
+
+    private static final int EXTERNAL_ID_MAX_LENGTH = 100;
+    private static final int TELEFONE_NORMALIZADO_MAX_LENGTH = 20;
+    private static final int NOME_BUSCA_MAX_LENGTH = 200;
+    private static final int STATUS_MAX_LENGTH = 20;
+    private static final int CHAVE_CRIPTOGRAFIA_MAX_LENGTH = 20;
 
     private final PacienteRepository pacienteRepository;
     private final AgendamentoRepository agendamentoRepository;
@@ -133,8 +140,8 @@ public class ExternalSyncTransactionService {
                 if (invalidReason != null) {
                     progress.registrarAgendamentoIgnorado();
                     log.warn(
-                            "Agendamento externo ignorado: clinica={}, provider={}, externalAppointmentId={}, motivo={}",
-                            clinica.getId(), provider.getType(), dto.externalId(), invalidReason);
+                            "Agendamento externo ignorado: clinica={}, provider={}, motivo={}",
+                            clinica.getId(), provider.getType(), invalidReason);
                     continue;
                 }
                 persistAppointment(clinica, provider, dto, progress);
@@ -163,14 +170,19 @@ public class ExternalSyncTransactionService {
             ExternalAppointmentDTO dto,
             ExternalSyncProgress progress
     ) {
+        executeAtStage(SyncStage.AGENDAMENTO_MAP, () -> {
+            validarTamanho("externalId", dto.externalId(), EXTERNAL_ID_MAX_LENGTH);
+            validarTamanho("externalPatientId", dto.externalPatientId(), EXTERNAL_ID_MAX_LENGTH);
+            return null;
+        });
         Optional<Paciente> paciente = executeAtStage(
                 SyncStage.AGENDAMENTO_MAP,
                 () -> resolverPacienteDoAgendamento(clinica, provider.getType(), dto, progress));
         if (paciente.isEmpty()) {
             progress.registrarAgendamentoIgnorado();
             log.warn(
-                    "Agendamento externo ignorado por paciente ausente: clinica={}, provider={}, externalAppointmentId={}",
-                    clinica.getId(), provider.getType(), dto.externalId());
+                    "Agendamento externo ignorado por paciente ausente: clinica={}, provider={}",
+                    clinica.getId(), provider.getType());
             return;
         }
 
@@ -186,18 +198,41 @@ public class ExternalSyncTransactionService {
             ExternalAppointmentDTO dto,
             ExternalSyncProgress progress
     ) {
-        Optional<Paciente> paciente = pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
-                clinica.getId(), providerType, dto.externalPatientId());
-        if (paciente.isPresent() || providerType != ExternalProviderType.MEDWARE) {
-            return paciente;
+        if (providerType != ExternalProviderType.MEDWARE) {
+            return pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                    clinica.getId(), providerType, dto.externalPatientId());
         }
+
+        String cpfLimpo = onlyDigits(
+                payloadText(dto.payload(), "cpfPaciente", "cpf", "documentoPaciente"));
+        String cpfHash = gerarCpfHashSeguro(cpfLimpo);
+        Optional<PatientMatch> existente = localizarPacienteExistente(
+                clinica.getId(), providerType, dto.externalPatientId(), cpfHash);
+        if (existente.isPresent()) {
+            Paciente paciente = existente.get().paciente();
+            if (existente.get().tipo() == PatientMatchType.CPF) {
+                executeAtStage(SyncStage.PACIENTE_PERSIST, () -> {
+                    vincularPacienteAoProvider(paciente, providerType, dto.externalPatientId());
+                    if (paciente.getExternalPayload() == null) {
+                        paciente.setExternalPayload(toJson(minimalPatientPayload(dto)));
+                    }
+                    validarPacienteAntesDePersistir(paciente);
+                    return pacienteRepository.save(paciente);
+                });
+                log.info(
+                        "Paciente existente reutilizado por identidade segura: clinica={}, provider={}, criterio=cpf_hash",
+                        clinica.getId(), providerType);
+            }
+            return Optional.of(paciente);
+        }
+
         Paciente criado = executeAtStage(
                 SyncStage.PACIENTE_PERSIST,
-                () -> criarPacienteMinimoMedware(clinica, dto));
+                () -> criarPacienteMinimoMedware(clinica, dto, cpfLimpo, cpfHash));
         progress.registrarPacienteMinimoCriado();
         log.info(
-                "Paciente minimo Medware criado a partir de agendamento: clinica={}, externalPatientId={}, externalAppointmentId={}",
-                clinica.getId(), dto.externalPatientId(), dto.externalId());
+                "Paciente minimo Medware criado a partir de agendamento: clinica={}, provider={}",
+                clinica.getId(), providerType);
         return Optional.of(criado);
     }
 
@@ -207,21 +242,18 @@ public class ExternalSyncTransactionService {
             ExternalClinicProvider provider,
             ExternalPatientDTO dto
     ) {
+        validarTamanho("externalId", dto.externalId(), EXTERNAL_ID_MAX_LENGTH);
         String cpfLimpo = onlyDigits(dto.documentNumber());
-        String cpfHash = gerarSha256(cpfLimpo);
+        String cpfHash = gerarCpfHashSeguro(cpfLimpo);
         String emailHash = gerarSha256(dto.email());
 
-        Optional<Paciente> existing = pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
-                clinica.getId(), providerType, dto.externalId());
-        if (existing.isEmpty() && cpfHash != null) {
-            existing = pacienteRepository.findByClinicaIdAndCpfHash(clinica.getId(), cpfHash);
-        }
+        Optional<PatientMatch> match = localizarPacienteExistente(
+                clinica.getId(), providerType, dto.externalId(), cpfHash);
 
-        boolean created = existing.isEmpty();
-        Paciente paciente = existing.orElseGet(Paciente::new);
+        boolean created = match.isEmpty();
+        Paciente paciente = match.map(PatientMatch::paciente).orElseGet(Paciente::new);
         paciente.setClinica(clinica);
-        paciente.setExternalSource(providerType);
-        paciente.setExternalId(dto.externalId());
+        vincularPacienteAoProvider(paciente, providerType, dto.externalId());
         paciente.setNome(nullToFallback(dto.fullName(), "Paciente sem nome"));
         paciente.setNomeBusca(normalizarBusca(dto.fullName()));
         paciente.setCpf(cpfLimpo);
@@ -240,18 +272,22 @@ public class ExternalSyncTransactionService {
             paciente.setStatus("EM_ATENDIMENTO");
             paciente.setChaveCriptografiaId("v1");
         }
+        validarPacienteAntesDePersistir(paciente);
         pacienteRepository.save(paciente);
         return created;
     }
 
-    private Paciente criarPacienteMinimoMedware(Clinica clinica, ExternalAppointmentDTO dto) {
+    private Paciente criarPacienteMinimoMedware(
+            Clinica clinica,
+            ExternalAppointmentDTO dto,
+            String cpfLimpo,
+            String cpfHash
+    ) {
         String nome = nullToFallback(
                 payloadText(dto.payload(), "nomePaciente", "pacienteNome", "nomePacienteAgenda"),
                 "Paciente Medware " + dto.externalPatientId());
         String telefone = payloadText(
                 dto.payload(), "telefonePaciente", "celularPaciente", "telefone", "celular");
-        String cpfLimpo = onlyDigits(
-                payloadText(dto.payload(), "cpfPaciente", "cpf", "documentoPaciente"));
 
         Paciente paciente = new Paciente();
         paciente.setClinica(clinica);
@@ -262,14 +298,94 @@ public class ExternalSyncTransactionService {
         paciente.setTelefone(nullToFallback(telefone, "00000000000"));
         paciente.setTelefoneNormalizado(normalizarTelefone(telefone, dto.externalPatientId()));
         paciente.setCpf(cpfLimpo);
-        paciente.setCpfHash(gerarSha256(cpfLimpo));
+        paciente.setCpfHash(cpfHash);
         paciente.setStatus("EM_ATENDIMENTO");
         paciente.setChaveCriptografiaId("v1");
+        paciente.setExternalPayload(toJson(minimalPatientPayload(dto)));
+        validarPacienteAntesDePersistir(paciente);
+        return pacienteRepository.save(paciente);
+    }
+
+    private Map<String, Object> minimalPatientPayload(ExternalAppointmentDTO dto) {
         Map<String, Object> externalPayload = new LinkedHashMap<>();
         externalPayload.put("source", "MEDWARE_APPOINTMENT");
         externalPayload.put("appointment", payloadOrEmpty(dto.payload()));
-        paciente.setExternalPayload(toJson(externalPayload));
-        return pacienteRepository.save(paciente);
+        return externalPayload;
+    }
+
+    private Optional<PatientMatch> localizarPacienteExistente(
+            Long clinicaId,
+            ExternalProviderType providerType,
+            String externalId,
+            String cpfHash
+    ) {
+        validarTamanho("externalId", externalId, EXTERNAL_ID_MAX_LENGTH);
+        Optional<Paciente> porExternalId = pacienteRepository
+                .findByClinicaIdAndExternalSourceAndExternalId(clinicaId, providerType, externalId);
+        if (porExternalId.isPresent()) {
+            return porExternalId.map(paciente -> new PatientMatch(paciente, PatientMatchType.EXTERNAL_ID));
+        }
+        if (cpfHash == null) {
+            return Optional.empty();
+        }
+        return pacienteRepository.findByClinicaIdAndCpfHash(clinicaId, cpfHash)
+                .map(paciente -> new PatientMatch(paciente, PatientMatchType.CPF));
+    }
+
+    private void vincularPacienteAoProvider(
+            Paciente paciente,
+            ExternalProviderType providerType,
+            String externalId
+    ) {
+        validarTamanho("externalId", externalId, EXTERNAL_ID_MAX_LENGTH);
+        boolean providerAlterado = paciente.getExternalSource() != null
+                && paciente.getExternalSource() != providerType;
+        boolean externalIdAlterado = paciente.getExternalId() != null
+                && !java.util.Objects.equals(paciente.getExternalId(), externalId);
+        if (providerAlterado || externalIdAlterado) {
+            log.warn(
+                    "Vinculo externo de paciente atualizado por identidade segura: clinica={}, providerAnterior={}, providerNovo={}",
+                    paciente.getClinica().getId(), paciente.getExternalSource(), providerType);
+        }
+        paciente.setExternalSource(providerType);
+        paciente.setExternalId(externalId);
+    }
+
+    private void validarPacienteAntesDePersistir(Paciente paciente) {
+        validarTamanho("externalId", paciente.getExternalId(), EXTERNAL_ID_MAX_LENGTH);
+        validarTamanho(
+                "telefoneNormalizado", paciente.getTelefoneNormalizado(), TELEFONE_NORMALIZADO_MAX_LENGTH);
+        validarTamanho("nomeBusca", paciente.getNomeBusca(), NOME_BUSCA_MAX_LENGTH);
+        validarTamanho("status", paciente.getStatus(), STATUS_MAX_LENGTH);
+        validarTamanho(
+                "chaveCriptografiaId", paciente.getChaveCriptografiaId(), CHAVE_CRIPTOGRAFIA_MAX_LENGTH);
+    }
+
+    private void validarTamanho(String campo, String valor, int maximo) {
+        if (valor != null && valor.codePointCount(0, valor.length()) > maximo) {
+            throw new ExternalFieldValidationException(campo);
+        }
+    }
+
+    private String gerarCpfHashSeguro(String cpfLimpo) {
+        return cpfValido(cpfLimpo) ? gerarSha256(cpfLimpo) : null;
+    }
+
+    private boolean cpfValido(String cpf) {
+        if (cpf == null || cpf.length() != 11 || cpf.chars().distinct().count() == 1) {
+            return false;
+        }
+        return digitoCpf(cpf, 9) == cpf.charAt(9) - '0'
+                && digitoCpf(cpf, 10) == cpf.charAt(10) - '0';
+    }
+
+    private int digitoCpf(String cpf, int quantidade) {
+        int soma = 0;
+        for (int i = 0; i < quantidade; i++) {
+            soma += (cpf.charAt(i) - '0') * (quantidade + 1 - i);
+        }
+        int resto = 11 - (soma % 11);
+        return resto >= 10 ? 0 : resto;
     }
 
     private boolean upsertAppointment(
@@ -454,11 +570,19 @@ public class ExternalSyncTransactionService {
     static final class SyncStageException extends RuntimeException {
         private final SyncStage stage;
         private final String causeType;
+        private final String sqlState;
+        private final String constraintName;
+        private final String fieldName;
 
         SyncStageException(SyncStage stage, RuntimeException cause) {
             super(cause);
             this.stage = stage;
             this.causeType = cause.getClass().getSimpleName();
+            this.sqlState = findSqlState(cause);
+            this.constraintName = findConstraintName(cause);
+            this.fieldName = cause instanceof ExternalFieldValidationException validation
+                    ? validation.getFieldName()
+                    : null;
         }
 
         SyncStage getStage() {
@@ -468,5 +592,65 @@ public class ExternalSyncTransactionService {
         String getCauseType() {
             return causeType;
         }
+
+        String getTechnicalDetails() {
+            List<String> details = new java.util.ArrayList<>();
+            if (fieldName != null) {
+                details.add("field=" + fieldName);
+            }
+            if (sqlState != null) {
+                details.add("sqlState=" + sqlState);
+            }
+            if (constraintName != null) {
+                details.add("constraint=" + constraintName);
+            }
+            return details.isEmpty() ? "" : " [" + String.join(", ", details) + "]";
+        }
+
+        private static String findSqlState(Throwable error) {
+            for (Throwable current = error; current != null; current = current.getCause()) {
+                if (current instanceof SQLException sqlException) {
+                    return safeSqlState(sqlException.getSQLState());
+                }
+            }
+            return null;
+        }
+
+        private static String findConstraintName(Throwable error) {
+            for (Throwable current = error; current != null; current = current.getCause()) {
+                if (current instanceof org.hibernate.exception.ConstraintViolationException violation) {
+                    return safeTechnicalName(violation.getConstraintName());
+                }
+            }
+            return null;
+        }
+
+        private static String safeSqlState(String sqlState) {
+            return sqlState != null && sqlState.matches("[A-Za-z0-9]{5}") ? sqlState : null;
+        }
+
+        private static String safeTechnicalName(String name) {
+            return name != null && name.matches("[A-Za-z0-9_.-]{1,128}") ? name : null;
+        }
+    }
+
+    static final class ExternalFieldValidationException extends RuntimeException {
+        private final String fieldName;
+
+        ExternalFieldValidationException(String fieldName) {
+            this.fieldName = fieldName;
+        }
+
+        String getFieldName() {
+            return fieldName;
+        }
+    }
+
+    private enum PatientMatchType {
+        EXTERNAL_ID,
+        CPF
+    }
+
+    private record PatientMatch(Paciente paciente, PatientMatchType tipo) {
     }
 }
