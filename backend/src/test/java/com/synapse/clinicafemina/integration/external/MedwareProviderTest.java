@@ -458,6 +458,53 @@ class MedwareProviderTest {
     }
 
     @Test
+    void should_keep_appointment_with_patient_code_nested_in_current_medware_contract() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).ignoreExpectOrder(true).build();
+        MedwareProvider provider = createProvider(builder, "https://medware.example/api", "usuario", "senha", false);
+
+        server.expect(once(), requestTo("https://medware.example/api/Acesso/login"))
+                .andExpect(method(POST))
+                .andRespond(withSuccess("{\"token\":\"jwt-token\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/ProcedPlanoOp/Listar?dataInicio=15/07/2026&dataFim=15/07/2026"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Medico/Listar"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://medware.example/api/Medware/Agendamento/Listar?dataInicio=15/07/2026&dataFim=15/07/2026"))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("""
+                        [{
+                          "codAgendamento":70001,
+                          "dataHoraAgendada":"15/07/2026 08:15",
+                          "codStatusAgendamento":2,
+                          "intervalo":15,
+                          "paciente":{"codPaciente":80001},
+                          "medico":{"codMedico":9,"nome":"Dra. Exemplo"},
+                          "procedimentoPlanoOperadora":{
+                            "codProcedimento":23,
+                            "descricaoProcedimento":"Procedimento ficticio"
+                          }
+                        }]
+                        """, MediaType.APPLICATION_JSON));
+
+        PageResult<ExternalAppointmentDTO> page = provider.getAppointments(
+                null,
+                LocalDate.of(2026, 7, 15),
+                LocalDate.of(2026, 7, 15),
+                null,
+                50
+        );
+
+        assertEquals(1, page.data().size());
+        assertEquals("70001", page.data().getFirst().externalId());
+        assertEquals("80001", page.data().getFirst().externalPatientId());
+        assertEquals("Procedimento ficticio", page.data().getFirst().serviceName());
+        server.verify();
+    }
+
+    @Test
     void should_translate_medware_http_errors_without_sensitive_values() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

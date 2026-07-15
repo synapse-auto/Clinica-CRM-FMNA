@@ -152,6 +152,45 @@ class MedwareApiMapperTest {
     }
 
     @Test
+    void should_map_nested_patient_procedure_and_doctor_from_current_medware_contract() throws Exception {
+        JsonNode payload = objectMapper.readTree("""
+                {
+                  "codAgendamento": 70001,
+                  "codAgenda": 3,
+                  "dataHoraAgendada": "15/07/2026 08:15",
+                  "dataHoraReferencia": "15/07/2026 07:45",
+                  "dataHoraConfirmado": "14/07/2026 08:07",
+                  "codStatusAgendamento": 2,
+                  "intervalo": 15,
+                  "medico": {
+                    "codMedico": 9,
+                    "nome": "Dra. Exemplo"
+                  },
+                  "paciente": {
+                    "codPaciente": 80001
+                  },
+                  "procedimentoPlanoOperadora": {
+                    "codProcedimento": 23,
+                    "descricaoProcedimento": "Procedimento ficticio"
+                  }
+                }
+                """);
+
+        ExternalAppointmentDTO dto = mapper.toAppointment(payload, Map.of(), Map.of());
+
+        assertEquals("70001", dto.externalId());
+        assertEquals("80001", dto.externalPatientId());
+        assertEquals(OffsetDateTime.parse("2026-07-15T08:15:00-03:00"), dto.startAt());
+        assertEquals(OffsetDateTime.parse("2026-07-15T08:30:00-03:00"), dto.endAt());
+        assertEquals(OffsetDateTime.parse("2026-07-14T08:07:00-03:00"), dto.confirmedAt());
+        assertEquals("CONFIRMADO", dto.status());
+        assertEquals("Procedimento ficticio", dto.serviceName());
+        assertEquals("9", dto.payload().get("codMedico"));
+        assertEquals("Dra. Exemplo", dto.payload().get("medicoNome"));
+        assertEquals("23", dto.payload().get("codProcedimento"));
+    }
+
+    @Test
     void should_preserve_direct_medware_doctor_name_and_code() throws Exception {
         JsonNode payload = objectMapper.readTree("""
                 {

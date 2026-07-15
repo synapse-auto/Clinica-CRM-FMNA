@@ -67,7 +67,14 @@ public class MedwareApiMapper {
     }
 
     public ExternalAppointmentDTO toAppointment(JsonNode node, Map<String, JsonNode> procedimentos, Map<String, JsonNode> medicos) {
-        JsonNode procedimentoPayload = object(node, "procedimento", "procedimentoAgenda", "procedimentoAgendado");
+        JsonNode pacientePayload = object(node, "paciente");
+        JsonNode procedimentoPayload = object(
+                node,
+                "procedimento",
+                "procedimentoAgenda",
+                "procedimentoAgendado",
+                "procedimentoPlanoOperadora"
+        );
         JsonNode medicoPayload = object(node, "medico");
         String codProcedimento = firstNonBlank(
                 text(node, "codProcedimento", "codprocedimento", "idProcedimento"),
@@ -80,7 +87,7 @@ public class MedwareApiMapper {
         JsonNode procedimento = catalogOrPayload(procedimentos, codProcedimento, procedimentoPayload);
         JsonNode medico = catalogOrPayload(medicos, codMedico, medicoPayload);
         OffsetDateTime startAt = appointmentStart(node);
-        Integer duration = integer(node, "duracao", "duracaoMinutos");
+        Integer duration = integer(node, "duracao", "duracaoMinutos", "intervalo");
         if (duration == null) {
             duration = integer(procedimento, "duracao", "duracaoMinutos");
         }
@@ -105,7 +112,10 @@ public class MedwareApiMapper {
 
         return new ExternalAppointmentDTO(
                 text(node, "codAgendamento", "codagendamento", "idAgendamento", "id", "codAgenda"),
-                text(node, "codPaciente", "codpaciente", "idPaciente"),
+                firstNonBlank(
+                        text(node, "codPaciente", "codpaciente", "idPaciente"),
+                        text(pacientePayload, "codPaciente", "codpaciente", "idPaciente")
+                ),
                 startAt,
                 appointmentEnd(node, startAt, duration),
                 appointmentType(node, procedimento),
@@ -243,7 +253,13 @@ public class MedwareApiMapper {
 
     private OffsetDateTime confirmedAt(JsonNode node) {
         String status = status(node);
-        OffsetDateTime value = parseOffset(text(node, "confirmadoEm", "dataConfirmacao", "dataHoraConfirmacao"));
+        OffsetDateTime value = parseOffset(text(
+                node,
+                "confirmadoEm",
+                "dataConfirmacao",
+                "dataHoraConfirmacao",
+                "dataHoraConfirmado"
+        ));
         if (value != null) {
             return value;
         }
