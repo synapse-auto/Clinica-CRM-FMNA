@@ -19,6 +19,7 @@ import { DemoCard } from '@/components/demo/DemoCard';
 import { EmptyState } from '@/components/demo/EmptyState';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { StatusBadge } from '@/components/demo/StatusBadge';
+import { FormSelect } from '@/components/ui/form-select';
 import type {
   ConsultaLembreteConfig,
   ConsultaLembreteConfigPayload,
@@ -137,8 +138,8 @@ export function AutomacaoIaClient({
   }
 
   const n8nStatus = clinic.usaN8n
-    ? (clinic.n8nWebhookConfigurado ? 'N8N configurado' : 'N8N sem webhook')
-    : 'N8N desativado';
+    ? (clinic.n8nWebhookConfigurado ? 'Automação configurada' : 'Automação sem webhook')
+    : 'Automação desativada';
 
   return (
     <>
@@ -154,7 +155,7 @@ export function AutomacaoIaClient({
         <AutomationMetric icon={Settings2} label="Automações ativas" value={automacoesAtivas} />
         <AutomationMetric icon={MessageCircle} label="Itens na fila" value={initialFila.length} />
         <AutomationMetric icon={Heart} label="Campanhas festivas" value={festivas.length} />
-        <AutomationMetric icon={Bot} label="Integração N8N" value={n8nStatus} />
+        <AutomationMetric icon={Bot} label="Integração de automação" value={n8nStatus} />
       </div>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
@@ -436,9 +437,7 @@ function SelectField({ label, name, defaultValue, options }: { label: string; na
   return (
     <label className="block">
       <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">{label}</span>
-      <select name={name} defaultValue={defaultValue} className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-sm text-clinic-text outline-none focus:border-clinic-primary">
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
-      </select>
+      <FormSelect name={name} defaultValue={defaultValue} options={options.map((option) => ({ value: option, label: option }))} />
     </label>
   );
 }

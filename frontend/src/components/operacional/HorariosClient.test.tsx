@@ -53,8 +53,10 @@ describe('HorariosClient', () => {
     render(<HorariosClient initialSchedules={[]} attendants={attendants} initialError={null} canManage />);
 
     await user.click(screen.getByRole('button', { name: /novo horário/i }));
-    await user.selectOptions(screen.getByLabelText('Atendente'), '3');
-    await user.selectOptions(screen.getByLabelText('Dia da semana'), '2');
+    await user.click(screen.getByLabelText('Atendente'));
+    await user.click(await screen.findByRole('option', { name: 'Recepcao Real' }));
+    await user.click(screen.getByLabelText('Dia da semana'));
+    await user.click(await screen.findByRole('option', { name: 'Terça-feira' }));
     await user.clear(screen.getByLabelText('Hora início'));
     await user.type(screen.getByLabelText('Hora início'), '13:00');
     await user.clear(screen.getByLabelText('Hora fim'));

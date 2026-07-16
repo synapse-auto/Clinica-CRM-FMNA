@@ -4,6 +4,7 @@ import { type FormEvent, type ReactNode, useState } from 'react';
 import { AlertCircle, Clock, Edit3, Plus, ToggleLeft, ToggleRight, Trash2, X } from 'lucide-react';
 import { EmptyState } from '@/components/demo/EmptyState';
 import { PageHeader } from '@/components/demo/PageHeader';
+import { FormSelect, SearchableSelect } from '@/components/ui/form-select';
 import type { AtendenteOption } from '@/types/atendimento';
 import type { HorarioAtendente, HorarioAtendentePayload } from '@/types/operacional';
 import { formatTime, getResponseMessage, isApiErrorBody, safeJson } from './client-helpers';
@@ -208,21 +209,19 @@ function HorarioDialog({
         <form onSubmit={onSubmit} className="space-y-3">
           <label className="block">
             <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Atendente</span>
-            <select name="usuarioId" required defaultValue={schedule?.usuarioId ?? attendants[0]?.id ?? ''} className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-sm text-clinic-text outline-none focus:border-clinic-primary">
-              {attendants.length === 0 ? <option value="">Nenhum atendente disponível</option> : null}
-              {attendants.map((attendant) => (
-                <option key={attendant.id} value={attendant.id}>{attendant.nome}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              name="usuarioId"
+              required
+              defaultValue={String(schedule?.usuarioId ?? attendants[0]?.id ?? '')}
+              disabled={attendants.length === 0}
+              placeholder={attendants.length === 0 ? 'Nenhum atendente disponível' : 'Selecione o atendente'}
+              options={attendants.map((attendant) => ({ value: String(attendant.id), label: attendant.nome }))}
+            />
           </label>
 
           <label className="block">
             <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Dia da semana</span>
-            <select name="diaSemana" required defaultValue={schedule?.diaSemana ?? 1} className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-sm text-clinic-text outline-none focus:border-clinic-primary">
-              {weekdays.map((day) => (
-                <option key={day.value} value={day.value}>{day.label}</option>
-              ))}
-            </select>
+            <FormSelect name="diaSemana" required defaultValue={String(schedule?.diaSemana ?? 1)} options={weekdays.map((day) => ({ value: String(day.value), label: day.label }))} />
           </label>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

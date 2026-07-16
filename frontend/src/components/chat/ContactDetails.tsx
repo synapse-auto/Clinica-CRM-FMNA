@@ -10,6 +10,8 @@ import type {
 } from '@/types/atendimento';
 import type { TagOperacional } from '@/types/operacional';
 import { ContactAvatar } from './ContactAvatar';
+import { DatePicker } from '@/components/ui/date-picker';
+import { FormSelect, SearchableSelect } from '@/components/ui/form-select';
 
 type Props = {
   detail: AtendimentoDetalhe | null;
@@ -148,21 +150,16 @@ export function ContactDetails({
           {canManage && atendentes.length > 0 ? (
             <label className="block text-[9px] font-bold text-clinic-muted">
               Transferir para
-              <select
+              <SearchableSelect
                 value=""
                 disabled={busy}
-                onChange={(event) => {
-                  if (event.target.value) void onTransfer(Number(event.target.value));
+                onValueChange={(value) => {
+                  if (value) void onTransfer(Number(value));
                 }}
                 className="mt-1 h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-[11px] text-clinic-text"
-              >
-                <option value="">Selecione...</option>
-                {atendentes.map((atendente) => (
-                  <option key={atendente.id} value={atendente.id}>
-                    {atendente.nome}
-                  </option>
-                ))}
-              </select>
+                placeholder="Selecione..."
+                options={atendentes.map((atendente) => ({ value: String(atendente.id), label: atendente.nome }))}
+              />
             </label>
           ) : null}
         </Section>
@@ -209,24 +206,19 @@ export function ContactDetails({
               {addingTag && tagsToAdd.length > 0 ? (
                 <label className="block text-[9px] font-bold text-clinic-muted">
                   Selecionar tag
-                  <select
+                  <FormSelect
                     value=""
                     aria-label="Selecionar tag para adicionar"
                     disabled={busy}
-                    onChange={(event) => {
-                      if (!event.target.value) return;
-                      void onAddTag(Number(event.target.value));
+                    onValueChange={(value) => {
+                      if (!value) return;
+                      void onAddTag(Number(value));
                       setAddingTag(false);
                     }}
                     className="mt-1 h-9 w-full rounded-lg border border-clinic-border bg-clinic-input px-2 text-[10px] text-clinic-text"
-                  >
-                    <option value="">Selecione...</option>
-                    {tagsToAdd.map((tag) => (
-                      <option key={tag.id} value={tag.id}>
-                        {tag.nome}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Selecione..."
+                    options={tagsToAdd.map((tag) => ({ value: String(tag.id), label: tag.nome }))}
+                  />
                 </label>
               ) : null}
             </div>
@@ -239,12 +231,11 @@ export function ContactDetails({
               <div className="grid grid-cols-2 gap-2">
                 <label className="block text-[9px] font-bold text-clinic-muted">
                   Data
-                  <input
+                  <DatePicker
                     aria-label="Data do lembrete"
-                    type="date"
                     value={reminderDate}
                     disabled={busy}
-                    onChange={(event) => setReminderDate(event.target.value)}
+                    onValueChange={setReminderDate}
                     className="mt-1 h-8 w-full rounded-lg border border-clinic-border bg-clinic-input px-2 text-[10px] text-clinic-text"
                   />
                 </label>

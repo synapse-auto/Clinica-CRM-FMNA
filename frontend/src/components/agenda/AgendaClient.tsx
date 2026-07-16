@@ -16,6 +16,7 @@ import { DonutChart } from '@/components/demo/DonutChart';
 import { GroupedBarChart } from '@/components/demo/GroupedBarChart';
 import { MetricCard } from '@/components/demo/MetricCard';
 import { PageHeader } from '@/components/demo/PageHeader';
+import { DatePicker } from '@/components/ui/date-picker';
 import type {
   Agendamento,
   AgendaOptions,
@@ -173,19 +174,19 @@ export function AgendaClient({
       <div className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-clinic-border bg-clinic-surface px-3 py-2">
         <label className="flex flex-col gap-1 text-[9px] font-bold uppercase text-clinic-muted">
           Início
-          <input
-            type="date"
+          <DatePicker
+            aria-label="Início"
             value={customStart}
-            onChange={(event) => setCustomStart(event.target.value)}
+            onValueChange={setCustomStart}
             className="h-8 rounded-lg border border-clinic-border bg-clinic-canvas px-2 text-[10px] font-semibold normal-case text-clinic-text outline-none focus:border-clinic-primary"
           />
         </label>
         <label className="flex flex-col gap-1 text-[9px] font-bold uppercase text-clinic-muted">
           Fim
-          <input
-            type="date"
+          <DatePicker
+            aria-label="Fim"
             value={customEnd}
-            onChange={(event) => setCustomEnd(event.target.value)}
+            onValueChange={setCustomEnd}
             className="h-8 rounded-lg border border-clinic-border bg-clinic-canvas px-2 text-[10px] font-semibold normal-case text-clinic-text outline-none focus:border-clinic-primary"
           />
         </label>

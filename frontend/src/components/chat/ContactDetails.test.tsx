@@ -159,7 +159,8 @@ describe('ContactDetails', () => {
     expect(screen.getByText('Prioridade')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Adicionar tag' }));
-    await user.selectOptions(screen.getByLabelText('Selecionar tag para adicionar'), '4');
+    await user.click(screen.getByLabelText('Selecionar tag para adicionar'));
+    await user.click(await screen.findByRole('option', { name: 'Retorno' }));
     await user.click(screen.getByRole('button', { name: 'Remover tag Prioridade' }));
 
     expect(onAddTag).toHaveBeenCalledWith(4);
@@ -218,7 +219,10 @@ describe('ContactDetails', () => {
       />,
     );
 
-    await user.type(screen.getByLabelText('Data do lembrete'), '2026-07-12');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-01T12:00:00-03:00'));
+    await user.click(screen.getByLabelText('Data do lembrete'));
+    await user.click(await screen.findByRole('button', { name: /12 de julho/i }));
     await user.type(screen.getByLabelText('Hora do lembrete'), '14:30');
     await user.type(screen.getByLabelText('Mensagem do lembrete'), 'Retornar com horarios disponiveis');
     await user.click(screen.getByRole('button', { name: 'Adicionar lembrete' }));
@@ -232,5 +236,6 @@ describe('ContactDetails', () => {
     });
     expect(onConcludeReminder).toHaveBeenCalledWith(20);
     expect(onCancelReminder).toHaveBeenCalledWith(20);
+    vi.useRealTimers();
   });
 });

@@ -98,7 +98,8 @@ describe('EquipeClient', () => {
     await user.click(screen.getByRole('button', { name: /novo usuário/i }));
     await user.type(screen.getByLabelText('Nome'), 'Recepcao Nova');
     await user.type(screen.getByLabelText('Email'), 'recepcao.nova@clinica.local');
-    await user.selectOptions(screen.getByLabelText('Perfil'), 'RECEPCIONISTA');
+    await user.click(screen.getByLabelText('Perfil'));
+    await user.click(await screen.findByRole('option', { name: 'Recepcionista' }));
     await user.type(screen.getByLabelText('Telefone'), '44988887777');
     await user.type(screen.getByLabelText('Senha temporária'), 'Acesso!123');
     await user.click(screen.getByRole('button', { name: 'Criar usuário' }));
@@ -131,7 +132,8 @@ describe('EquipeClient', () => {
     await user.click(screen.getByRole('button', { name: /novo usuário/i }));
     await user.type(screen.getByLabelText('Nome'), 'Recepcao Nova');
     await user.type(screen.getByLabelText('Email'), 'recepcao.nova@clinica.local');
-    await user.selectOptions(screen.getByLabelText('Perfil'), 'RECEPCIONISTA');
+    await user.click(screen.getByLabelText('Perfil'));
+    await user.click(await screen.findByRole('option', { name: 'Recepcionista' }));
     await user.type(screen.getByLabelText('Senha temporária'), 'Atendente1');
     await user.click(screen.getByRole('button', { name: 'Criar usuário' }));
 

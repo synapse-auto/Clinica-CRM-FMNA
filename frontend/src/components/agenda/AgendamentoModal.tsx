@@ -7,6 +7,8 @@ import type {
   AgendamentoPayload,
   AgendaOptions,
 } from '@/types/agendamento';
+import { DatePicker } from '@/components/ui/date-picker';
+import { FormSelect, SearchableSelect } from '@/components/ui/form-select';
 
 type AgendamentoModalProps = {
   appointment: Agendamento | null;
@@ -94,42 +96,38 @@ export function AgendamentoModal({
           ) : null}
 
           <Field label="Paciente" className="sm:col-span-2">
-            <select
+            <SearchableSelect
               id="agenda-paciente"
               value={pacienteId}
-              onChange={(event) => setPacienteId(event.target.value)}
+              onValueChange={setPacienteId}
               required
               disabled={busy || isCanceled}
               className={inputClassName}
-            >
-              <option value="">Selecione um paciente</option>
-              {options.pacientes.filter((paciente) => paciente.id !== null).map((paciente) => (
-                <option key={paciente.id} value={paciente.id ?? ''}>{paciente.nome}</option>
-              ))}
-            </select>
+              placeholder="Selecione um paciente"
+              options={options.pacientes.filter((paciente) => paciente.id !== null).map((paciente) => ({ value: String(paciente.id), label: paciente.nome }))}
+            />
           </Field>
 
           <Field label="Médico ou profissional" className="sm:col-span-2">
-            <select
+            <SearchableSelect
               id="agenda-medico"
               value={medicoId}
-              onChange={(event) => setMedicoId(event.target.value)}
+              onValueChange={setMedicoId}
               disabled={busy || isCanceled}
               className={inputClassName}
-            >
-              <option value="">Sem profissional definido</option>
-              {options.medicos.filter((medico) => medico.id !== null).map((medico) => (
-                <option key={medico.id} value={medico.id ?? ''}>{medico.nome}</option>
-              ))}
-            </select>
+              placeholder="Sem profissional definido"
+              options={[
+                { value: '', label: 'Sem profissional definido' },
+                ...options.medicos.filter((medico) => medico.id !== null).map((medico) => ({ value: String(medico.id), label: medico.nome })),
+              ]}
+            />
           </Field>
 
           <Field label="Data">
-            <input
+            <DatePicker
               id="agenda-data"
-              type="date"
               value={date}
-              onChange={(event) => setDate(event.target.value)}
+              onValueChange={setDate}
               required
               disabled={busy || isCanceled}
               className={inputClassName}
@@ -137,20 +135,19 @@ export function AgendamentoModal({
           </Field>
 
           <Field label="Tipo">
-            <select
+            <FormSelect
               id="agenda-tipo"
               value={tipo}
-              onChange={(event) => setTipo(event.target.value)}
+              onValueChange={setTipo}
               required
               disabled={busy || isCanceled}
               className={inputClassName}
-            >
-              <option value="CONSULTA">Consulta</option>
-              <option value="RETORNO">Retorno</option>
-              <option value="EXAME">Exame</option>
-              <option value="CIRURGIA">Cirurgia</option>
-              <option value="PROCEDIMENTO">Procedimento</option>
-            </select>
+              options={[
+                { value: 'CONSULTA', label: 'Consulta' }, { value: 'RETORNO', label: 'Retorno' },
+                { value: 'EXAME', label: 'Exame' }, { value: 'CIRURGIA', label: 'Cirurgia' },
+                { value: 'PROCEDIMENTO', label: 'Procedimento' },
+              ]}
+            />
           </Field>
 
           <Field label="Horário inicial">

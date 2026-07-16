@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import {
   AlertCircle,
   Check,
@@ -36,6 +36,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
   const [quickSearch, setQuickSearch] = useState('');
   const [showNewMessagesNotice, setShowNewMessagesNotice] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
   const messageScrollContainer = useRef<HTMLDivElement>(null);
   const messageEnd = useRef<HTMLDivElement>(null);
   const previousConversationId = useRef<number | null>(null);
@@ -91,11 +92,38 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
     previousLastMessageId.current = currentLastMessageId;
   }, [detail?.id, lastMessage?.direcao, lastMessage?.id, scrollToLastMessage]);
 
+  useEffect(() => {
+    const input = composer.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 132)}px`;
+  }, [content]);
+
   async function submit() {
     const value = content.trim();
     if (!value || busy || !detail) return;
     setContent('');
     await onSend(value);
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+
+    const quickMessage = findQuickMessageShortcut(quickMessages, content);
+    if (quickMessage) {
+      event.preventDefault();
+      setContent(quickMessage.conteudo);
+      window.requestAnimationFrame(() => {
+        const input = composer.current;
+        if (!input) return;
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      });
+      return;
+    }
+
+    event.preventDefault();
+    void submit();
   }
 
   return (
@@ -235,18 +263,15 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
           >
             <Paperclip className="h-4 w-4 -rotate-45" />
           </button>
-          <input
+          <textarea
+            ref={composer}
             value={content}
             disabled={!detail || busy}
             onChange={(event) => setContent(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                void submit();
-              }
-            }}
+            onKeyDown={handleComposerKeyDown}
             placeholder="Digite uma mensagem..."
-            className="h-11 flex-1 rounded-xl border border-clinic-border bg-clinic-input px-4 text-[12px] text-clinic-text outline-none placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10 disabled:opacity-50"
+            rows={1}
+            className="min-h-11 max-h-[132px] flex-1 resize-none rounded-xl border border-clinic-border bg-clinic-input px-4 py-3 text-[12px] text-clinic-text outline-none placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10 disabled:opacity-50 custom-scrollbar"
           />
           <button
             type="button"
@@ -275,6 +300,16 @@ function filterQuickMessages(messages: MensagemRapida[], search: string) {
         message.conteudo,
       ].some((value) => value.toLocaleLowerCase('pt-BR').includes(term));
     });
+}
+
+function findQuickMessageShortcut(messages: MensagemRapida[], content: string) {
+  const normalizedContent = normalizeShortcut(content);
+  if (!normalizedContent) return null;
+  return messages.find((message) => message.ativo && normalizeShortcut(message.atalho) === normalizedContent) ?? null;
+}
+
+function normalizeShortcut(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 }
 
 function MessageBubble({ message }: { message: MensagemAtendimento }) {

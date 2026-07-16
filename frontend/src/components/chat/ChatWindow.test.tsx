@@ -69,6 +69,67 @@ function setScrollMetrics(element: HTMLElement, metrics: { scrollHeight: number;
 }
 
 describe('ChatWindow', () => {
+  const quickMessages = [
+    {
+      id: 90,
+      categoriaId: null,
+      categoriaRotulo: null,
+      categoriaCor: null,
+      titulo: 'Saudação',
+      atalho: '/saudacao',
+      conteudo: 'Olá! Como posso ajudar?\nConte comigo. 😊',
+      ativo: true,
+      criadoEm: null,
+      atualizadoEm: null,
+    },
+  ];
+
+  it('should_expand_an_exact_active_quick_message_on_first_enter_without_sending', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(<ChatWindow detail={detail} messages={[]} quickMessages={quickMessages} busy={false} error={null} onSend={onSend} onAttach={async () => undefined} />);
+
+    const composer = screen.getByPlaceholderText('Digite uma mensagem...');
+    await user.type(composer, '  /SAUDACAO  ');
+    await user.keyboard('{Enter}');
+
+    expect(composer).toHaveValue('Olá! Como posso ajudar?\nConte comigo. 😊');
+    expect(onSend).not.toHaveBeenCalled();
+
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('Olá! Como posso ajudar?\nConte comigo. 😊'));
+  });
+
+  it('should_not_expand_partial_or_inactive_shortcuts_and_keeps_normal_send', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(<ChatWindow detail={detail} messages={[]} quickMessages={[...quickMessages, { ...quickMessages[0], id: 91, atalho: '/inativa', ativo: false }]} busy={false} error={null} onSend={onSend} onAttach={async () => undefined} />);
+
+    const composer = screen.getByPlaceholderText('Digite uma mensagem...');
+    await user.type(composer, 'preciso de /saudacao agora');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('preciso de /saudacao agora'));
+
+    await user.type(composer, '/inativa');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(onSend).toHaveBeenLastCalledWith('/inativa'));
+  });
+
+  it('should_keep_shift_enter_and_ime_composition_out_of_send_and_expansion_rules', () => {
+    const onSend = vi.fn();
+    render(<ChatWindow detail={detail} messages={[]} quickMessages={quickMessages} busy={false} error={null} onSend={onSend} onAttach={async () => undefined} />);
+
+    const composer = screen.getByPlaceholderText('Digite uma mensagem...');
+    fireEvent.change(composer, { target: { value: '/saudacao' } });
+    const shiftEnter = fireEvent.keyDown(composer, { key: 'Enter', shiftKey: true });
+    const composingEnter = fireEvent.keyDown(composer, { key: 'Enter', isComposing: true });
+
+    expect(shiftEnter).toBe(true);
+    expect(composingEnter).toBe(true);
+    expect(composer).toHaveValue('/saudacao');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it('should_show_ai_attendance_label_in_header', () => {
     render(
       <ChatWindow

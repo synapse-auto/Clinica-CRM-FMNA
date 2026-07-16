@@ -229,8 +229,10 @@ describe('AgendaClient (somente leitura)', () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText(/início/i), { target: { value: '2026-07-13' } });
-    fireEvent.change(screen.getByLabelText(/fim/i), { target: { value: '2026-07-17' } });
+    fireEvent.click(screen.getByLabelText(/início/i));
+    fireEvent.click(screen.getByRole('button', { name: /13 de julho/i }));
+    fireEvent.click(screen.getByLabelText(/fim/i));
+    fireEvent.click(screen.getByRole('button', { name: /17 de julho/i }));
     fireEvent.click(screen.getByRole('button', { name: /aplicar período/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));

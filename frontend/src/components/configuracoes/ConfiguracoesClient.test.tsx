@@ -55,6 +55,8 @@ describe('ConfiguracoesClient', () => {
     expect(screen.getByText('UltraMedical')).toBeInTheDocument();
     expect(screen.getByText('MEDWARE')).toBeInTheDocument();
     expect(screen.getByText('WhatsApp Oficial')).toBeInTheDocument();
+    expect(screen.getByText('Automação')).toBeInTheDocument();
+    expect(screen.queryByText('N8N')).not.toBeInTheDocument();
     expect(screen.getByText('FALHA_TOTAL')).toBeInTheDocument();
     expect(screen.getByText('Retorno HUMANO -> IA em 24h')).toBeInTheDocument();
     expect(screen.queryByText(/https:\/\/n8n/i)).not.toBeInTheDocument();

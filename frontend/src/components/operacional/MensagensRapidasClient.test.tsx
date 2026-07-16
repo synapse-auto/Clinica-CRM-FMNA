@@ -55,7 +55,8 @@ describe('MensagensRapidasClient', () => {
     await user.click(screen.getByRole('button', { name: /nova mensagem/i }));
     await user.type(screen.getByLabelText('Título'), 'Preparo exame');
     await user.type(screen.getByLabelText('Atalho'), '/preparo');
-    await user.selectOptions(screen.getByLabelText('Categoria'), '1');
+    await user.click(screen.getByLabelText('Categoria'));
+    await user.click(await screen.findByRole('option', { name: 'Agendamento' }));
     await user.type(screen.getByLabelText('Conteúdo'), 'Chegue com 15 minutos de antecedencia.');
     await user.click(screen.getByRole('button', { name: 'Salvar mensagem' }));
 

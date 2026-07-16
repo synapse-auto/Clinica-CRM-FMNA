@@ -4,6 +4,7 @@ import { type FormEvent, type ReactNode, useState } from 'react';
 import { AlertCircle, Copy, Edit3, Plus, ToggleLeft, ToggleRight, Trash2, X, Zap } from 'lucide-react';
 import { EmptyState } from '@/components/demo/EmptyState';
 import { PageHeader } from '@/components/demo/PageHeader';
+import { FormSelect } from '@/components/ui/form-select';
 import type {
   CategoriaMensagemRapida,
   MensagemRapida,
@@ -206,12 +207,13 @@ function MensagemDialog({
           <Field label="Atalho" name="atalho" defaultValue={message?.atalho ?? ''} required />
           <label className="block">
             <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Categoria</span>
-            <select name="categoriaId" defaultValue={message?.categoriaId ?? ''} className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-sm text-clinic-text outline-none focus:border-clinic-primary">
-              <option value="">Sem categoria</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>{category.rotulo}</option>
-              ))}
-            </select>
+            <FormSelect
+              name="categoriaId"
+              defaultValue={String(message?.categoriaId ?? '')}
+              placeholder="Sem categoria"
+              emptyOptionLabel="Sem categoria"
+              options={categories.map((category) => ({ value: String(category.id), label: category.rotulo }))}
+            />
           </label>
           <label className="block">
             <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Conteúdo</span>

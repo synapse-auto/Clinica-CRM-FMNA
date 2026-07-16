@@ -102,7 +102,8 @@ describe('AcessosClient', () => {
 
     await user.type(screen.getByLabelText('Nome'), 'Novo Recepcionista');
     await user.type(screen.getByLabelText('Email'), 'recepcao@clinica.local');
-    await user.selectOptions(screen.getByLabelText('Perfil'), 'RECEPCIONISTA');
+    await user.click(screen.getByLabelText('Perfil'));
+    await user.click(await screen.findByRole('option', { name: 'Recepcionista' }));
     await user.type(screen.getByLabelText('Telefone'), '44988887777');
     await user.type(screen.getByLabelText('Senha temporária'), 'Senha@123');
 

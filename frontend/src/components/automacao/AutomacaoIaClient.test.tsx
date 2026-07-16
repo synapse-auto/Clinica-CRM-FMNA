@@ -60,6 +60,8 @@ describe('AutomacaoIaClient', () => {
     await user.click(screen.getByRole('button', { name: 'Salvar automação' }));
 
     await waitFor(() => expect(screen.getByText('Pos exame')).toBeInTheDocument());
+    expect(screen.getByText('Integração de automação')).toBeInTheDocument();
+    expect(screen.queryByText(/N8N/i)).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/follow-up/config', expect.objectContaining({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

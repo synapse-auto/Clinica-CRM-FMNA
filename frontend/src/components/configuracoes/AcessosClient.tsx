@@ -22,6 +22,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/demo/PageHeader';
+import { FormSelect } from '@/components/ui/form-select';
 import { StatusBadge } from '@/components/demo/StatusBadge';
 import { DemoCard } from '@/components/demo/DemoCard';
 import type { AuthUser } from '@/lib/auth/types';
@@ -417,11 +418,15 @@ export function AcessosClient({ user }: AcessosClientProps) {
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="block">
                   <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Perfil</span>
-                  <select name="perfil" required defaultValue="RECEPCIONISTA" className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15">
-                    <option value="GESTOR">Gestor</option>
-                    <option value="MEDICO">Médico</option>
-                    <option value="RECEPCIONISTA">Recepcionista</option>
-                  </select>
+                  <FormSelect
+                    name="perfil"
+                    required
+                    defaultValue="RECEPCIONISTA"
+                    options={[
+                      { value: 'GESTOR', label: 'Gestor' }, { value: 'MEDICO', label: 'Médico' },
+                      { value: 'RECEPCIONISTA', label: 'Recepcionista' },
+                    ]}
+                  />
                 </label>
 
                 <label className="block">

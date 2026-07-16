@@ -64,7 +64,7 @@ function ConfiguracoesResumoView({ resumo, user }: { resumo: ConfiguracaoResumo;
             <ConfigRow label="Tipo" value={formatClinicType(resumo.identidade.tipoClinica)} />
             <ConfigRow label="Provider externo" value={resumo.identidade.externalProvider} />
             <BooleanRow label="WhatsApp configurado" active={resumo.identidade.whatsappConfigurado} />
-            <BooleanRow label="N8N configurado" active={resumo.identidade.n8nConfigurado} />
+            <BooleanRow label="Automação configurada" active={resumo.identidade.n8nConfigurado} />
           </div>
         </DemoCard>
 
@@ -211,7 +211,7 @@ function IntegrationRow({
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <CheckCircle2 className="h-4 w-4 shrink-0 text-clinic-primary" />
-          <span className="truncate text-sm font-extrabold text-clinic-text">{integracao.nome}</span>
+          <span className="truncate text-sm font-extrabold text-clinic-text">{formatIntegrationName(integracao.nome)}</span>
         </div>
         <StatusBadge tone={statusTone(integracao.status)}>{integracao.status}</StatusBadge>
       </div>
@@ -270,6 +270,10 @@ function statusTone(status: string): 'green' | 'orange' | 'slate' | 'teal' {
     return 'slate';
   }
   return 'teal';
+}
+
+function formatIntegrationName(name: string) {
+  return name.toLocaleLowerCase('pt-BR') === 'n8n' ? 'Automação' : name;
 }
 
 function formatClinicType(value: string) {
