@@ -61,6 +61,9 @@ class MensagemServiceTest {
     @Mock
     private RabbitTemplate rabbitTemplate;
 
+    @Mock
+    private WhatsappWindowService whatsappWindowService;
+
     private MensagemService service;
     private Atendimento atendimento;
     private Usuario remetente;
@@ -73,7 +76,8 @@ class MensagemServiceTest {
                 atendimentoRepository,
                 usuarioRepository,
                 whatsappOutboundClient,
-                rabbitTemplate
+                rabbitTemplate,
+                whatsappWindowService
         );
 
         Clinica clinica = new Clinica();
@@ -160,6 +164,7 @@ class MensagemServiceTest {
         assertEquals(enviadoEm, mensagemFinal.getDataHora());
         verify(whatsappOutboundClient, never()).validarConfiguracao();
         verify(whatsappOutboundClient, never()).enviarTexto(any(), any());
+        verify(whatsappWindowService, never()).exigirAberta(any(), any());
     }
 
     @Test
@@ -323,7 +328,7 @@ class MensagemServiceTest {
     }
 
     @Test
-    void should_explain_template_requirement_when_meta_rejects_first_outbound_message() {
+    void should_propagate_template_requirement_without_retry_when_meta_rejects_message() {
         when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L))
                 .thenReturn(Optional.of(remetente));
         when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
@@ -331,22 +336,51 @@ class MensagemServiceTest {
         when(whatsappOutboundClient.enviarTexto("5544999990000", "Mensagem inicial"))
                 .thenThrow(new WhatsappTemplateRequiredException());
 
-        service.enviar(
-                30L,
-                9L,
-                new EnviarMensagemRequest("TEXTO", "Mensagem inicial"),
-                99L
-        );
-
-        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
-        verify(mensagemRepository, atLeastOnce()).save(mensagemCaptor.capture());
-        Mensagem mensagemFinal = mensagemCaptor.getAllValues().getLast();
-        assertEquals("FALHA", mensagemFinal.getWhatsappStatus());
-        assertEquals(
-                "A Meta exige template aprovado para iniciar conversa ativa ou responder fora da janela de 24h.",
-                mensagemFinal.getMotivoFalha()
+        org.junit.jupiter.api.Assertions.assertThrows(
+                WhatsappTemplateRequiredException.class,
+                () -> service.enviar(
+                        30L,
+                        9L,
+                        new EnviarMensagemRequest("TEXTO", "Mensagem inicial"),
+                        99L
+                )
         );
         org.mockito.Mockito.verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
+    void should_not_persist_or_call_meta_when_text_window_is_closed() {
+        when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L)).thenReturn(Optional.of(remetente));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
+        org.mockito.Mockito.doThrow(new com.synapse.clinicafemina.exception.WhatsappWindowClosedException())
+                .when(whatsappWindowService).exigirAberta(30L, 9L);
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.synapse.clinicafemina.exception.WhatsappWindowClosedException.class,
+                () -> service.enviar(30L, 9L, new EnviarMensagemRequest("TEXTO", "Mensagem"), 99L)
+        );
+
+        verify(mensagemRepository, never()).save(any());
+        verify(whatsappOutboundClient, never()).enviarTexto(any(), any());
+    }
+
+    @Test
+    void should_not_upload_or_persist_media_when_window_is_closed() {
+        MockMultipartFile arquivo = new MockMultipartFile(
+                "arquivo", "exame.png", "image/png", new byte[] {1, 2, 3}
+        );
+        when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L)).thenReturn(Optional.of(remetente));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
+        org.mockito.Mockito.doThrow(new com.synapse.clinicafemina.exception.WhatsappWindowClosedException())
+                .when(whatsappWindowService).exigirAberta(30L, 9L);
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.synapse.clinicafemina.exception.WhatsappWindowClosedException.class,
+                () -> service.enviarMidia(30L, 9L, arquivo, 99L)
+        );
+
+        verify(mensagemRepository, never()).save(any());
+        verify(whatsappOutboundClient, never()).uploadMidia(any(), any(), any());
     }
 
     @Test

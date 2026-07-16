@@ -13,7 +13,11 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
  
 import java.util.Locale;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import org.springframework.web.util.UriComponentsBuilder;
  
 /**
  * Cliente HTTP para envio de mensagens outbound via Meta WhatsApp Cloud API.
@@ -39,14 +43,17 @@ public class WhatsappOutboundClient {
  
     @Value("${app.whatsapp.phone-number-id}")
     private String phoneNumberId;
+
+    @Value("${app.whatsapp.business-account-id:}")
+    private String businessAccountId;
  
     @Value("${app.whatsapp.graph-api-url}")
     private String graphApiUrl;
  
     private final RestClient restClient;
  
-    public WhatsappOutboundClient() {
-        this.restClient = RestClient.builder().build();
+    public WhatsappOutboundClient(RestClient.Builder restClientBuilder) {
+        this.restClient = restClientBuilder.build();
     }
  
     public void validarConfiguracao() {
@@ -56,6 +63,131 @@ public class WhatsappOutboundClient {
                     "WhatsApp/Meta não configurado. Ative WHATSAPP_ENABLED e configure as credenciais"
             );
         }
+    }
+
+    public boolean templatesDisponiveis() {
+        return enabled
+                && preenchido(accessToken)
+                && preenchido(phoneNumberId)
+                && preenchido(businessAccountId)
+                && preenchido(graphApiUrl);
+    }
+
+    public String configuracaoTemplatesKey() {
+        validarConfiguracaoTemplates();
+        return graphApiUrl.replaceAll("/+$", "") + "|" + businessAccountId.trim();
+    }
+
+    public TemplatePage listarTemplatesPagina(String after) {
+        validarConfiguracaoTemplates();
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder
+                .fromHttpUrl(graphApiUrl)
+                .pathSegment(businessAccountId, "message_templates")
+                .queryParam("fields", "id,name,language,status,category,components")
+                .queryParam("limit", 100);
+        if (preenchido(after)) {
+            uriBuilder.queryParam("after", after);
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restClient.get()
+                    .uri(uriBuilder.build().encode().toUri())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .retrieve()
+                    .body(Map.class);
+            return parseTemplatePage(response);
+        } catch (RestClientResponseException exception) {
+            logMetaError("consulta de templates", exception);
+            throw new IllegalStateException("Nao foi possivel consultar os templates da Meta", exception);
+        }
+    }
+
+    public String enviarTemplate(
+            String telefoneE164,
+            String nome,
+            String idioma,
+            List<Map<String, Object>> componentes
+    ) {
+        validarConfiguracaoTemplates();
+        Map<String, Object> template = new LinkedHashMap<>();
+        template.put("name", nome);
+        template.put("language", Map.of("code", idioma));
+        if (componentes != null && !componentes.isEmpty()) {
+            template.put("components", componentes);
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("messaging_product", "whatsapp");
+        body.put("recipient_type", "individual");
+        body.put("to", telefoneE164);
+        body.put("type", "template");
+        body.put("template", template);
+
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restClient.post()
+                    .uri(graphApiUrl + "/" + phoneNumberId + "/messages")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .body(Map.class);
+            return extrairMensagemId(response);
+        } catch (RestClientResponseException exception) {
+            logMetaError("envio de template", exception);
+            throw new IllegalStateException("Nao foi possivel enviar o template pela Meta", exception);
+        }
+    }
+
+    private void validarConfiguracaoTemplates() {
+        if (!templatesDisponiveis()) {
+            throw new IllegalStateException("Templates WhatsApp/Meta nao configurados");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private TemplatePage parseTemplatePage(Map<String, Object> response) {
+        if (response == null) {
+            throw new IllegalStateException("Resposta inesperada ao consultar templates da Meta");
+        }
+        Object data = response.get("data");
+        List<Map<String, Object>> templates = data instanceof List<?> list
+                ? list.stream()
+                .filter(Map.class::isInstance)
+                .map(item -> (Map<String, Object>) item)
+                .toList()
+                : List.of();
+        String after = null;
+        Object paging = response.get("paging");
+        if (paging instanceof Map<?, ?> pagingMap) {
+            Object cursors = pagingMap.get("cursors");
+            if (cursors instanceof Map<?, ?> cursorMap) {
+                after = Objects.toString(cursorMap.get("after"), null);
+            }
+        }
+        return new TemplatePage(templates, after);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extrairMensagemId(Map<String, Object> response) {
+        if (response == null || !(response.get("messages") instanceof List<?> messages)
+                || messages.isEmpty() || !(messages.getFirst() instanceof Map<?, ?> first)) {
+            throw new IllegalStateException("Resposta inesperada da Meta API");
+        }
+        String id = Objects.toString(first.get("id"), "");
+        if (id.isBlank()) {
+            throw new IllegalStateException("Resposta da Meta sem identificador de mensagem");
+        }
+        return id;
+    }
+
+    public record TemplatePage(List<Map<String, Object>> templates, String after) {
+        public TemplatePage {
+            templates = templates == null ? List.of() : List.copyOf(templates);
+        }
+    }
+
+    private boolean preenchido(String valor) {
+        return valor != null && !valor.isBlank();
     }
  
     /**

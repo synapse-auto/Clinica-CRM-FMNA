@@ -15,8 +15,27 @@ public record AtendimentoDetalheDTO(
         OffsetDateTime dataEncerramento,
         Integer naoLidas,
         PacienteDetalheDTO paciente,
-        AtendenteDTO atendentePrincipal
+        AtendenteDTO atendentePrincipal,
+        Boolean janelaWhatsappAberta,
+        OffsetDateTime janelaWhatsappExpiraEm,
+        OffsetDateTime ultimaMensagemEntradaEm,
+        Boolean aguardandoRespostaTemplate,
+        Boolean whatsappTemplatesDisponiveis
 ) {
+    public AtendimentoDetalheDTO(
+            Long id,
+            String status,
+            Boolean tratadoPorIa,
+            OffsetDateTime dataInicio,
+            OffsetDateTime dataEncerramento,
+            Integer naoLidas,
+            PacienteDetalheDTO paciente,
+            AtendenteDTO atendentePrincipal
+    ) {
+        this(id, status, tratadoPorIa, dataInicio, dataEncerramento, naoLidas,
+                paciente, atendentePrincipal, null, null, null, null, null);
+    }
+
     public record PacienteDetalheDTO(
             Long id,
             String nome,

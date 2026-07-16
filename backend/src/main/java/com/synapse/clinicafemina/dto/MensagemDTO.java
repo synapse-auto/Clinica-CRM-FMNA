@@ -15,8 +15,28 @@ public record MensagemDTO(
         OffsetDateTime dataHora,
         OffsetDateTime entregueEm,
         OffsetDateTime lidaEm,
-        MidiaDTO midia
+        MidiaDTO midia,
+        String templateNome,
+        String templateIdioma
 ) {
+    public MensagemDTO(
+            Long id,
+            String direcao,
+            String remetente,
+            String tipoMedia,
+            String conteudo,
+            String conteudoPrevia,
+            String whatsappStatus,
+            String motivoFalha,
+            OffsetDateTime dataHora,
+            OffsetDateTime entregueEm,
+            OffsetDateTime lidaEm,
+            MidiaDTO midia
+    ) {
+        this(id, direcao, remetente, tipoMedia, conteudo, conteudoPrevia,
+                whatsappStatus, motivoFalha, dataHora, entregueEm, lidaEm, midia, null, null);
+    }
+
     public record MidiaDTO(
             String tipoMedia,
             String mimeType,

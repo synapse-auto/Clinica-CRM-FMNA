@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.service;
 import com.synapse.clinicafemina.domain.*;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.repository.*;
+import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +37,8 @@ class AtendimentoServiceTest {
     @Mock private RealtimeBroadcastService broadcastService;
     @Mock private AtendimentoTagRepository atendimentoTagRepository;
     @Mock private PacienteTagRepository pacienteTagRepository;
+    @Mock private WhatsappWindowService whatsappWindowService;
+    @Mock private WhatsappOutboundClient whatsappOutboundClient;
 
     private AtendimentoService service;
     private Atendimento atendimento;
@@ -51,8 +54,12 @@ class AtendimentoServiceTest {
                 notificationService,
                 broadcastService,
                 atendimentoTagRepository,
-                pacienteTagRepository
+                pacienteTagRepository,
+                whatsappWindowService,
+                whatsappOutboundClient
         );
+        org.mockito.Mockito.lenient().when(whatsappWindowService.avaliar(anyLong(), anyLong()))
+                .thenReturn(new WhatsappWindowService.WindowState(false, null, null, false));
         clinica = new Clinica();
         clinica.setId(1L);
         Paciente paciente = new Paciente();

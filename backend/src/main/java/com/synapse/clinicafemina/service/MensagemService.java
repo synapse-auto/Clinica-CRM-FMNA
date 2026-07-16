@@ -48,6 +48,7 @@ public class MensagemService {
     private final UsuarioRepository usuarioRepository;
     private final WhatsappOutboundClient whatsappOutboundClient;
     private final RabbitTemplate rabbitTemplate;
+    private final WhatsappWindowService whatsappWindowService;
 
     @Transactional(readOnly = true)
     public Page<MensagemDTO> listarHistorico(Long atendimentoId, Long clinicaId, Pageable pageable) {
@@ -68,6 +69,7 @@ public class MensagemService {
         if (!"TEXTO".equalsIgnoreCase(request.tipoMedia())) {
             throw new BadRequestException("O endpoint de texto aceita apenas tipo TEXTO");
         }
+        whatsappWindowService.exigirAberta(atendimentoId, clinicaId);
 
         Mensagem mensagem = criarMensagemSaida(
                 atendimento, remetente, "TEXTO", request.conteudo(), limitarPrevia(request.conteudo())
@@ -101,6 +103,10 @@ public class MensagemService {
         if (existente.isPresent()) {
             return new RespostaIaResultado(toDTO(existente.get()), true);
         }
+        boolean enviarWhatsapp = deveEnviarWhatsapp(request);
+        if (enviarWhatsapp) {
+            whatsappWindowService.exigirAberta(atendimentoId, clinicaId);
+        }
 
         String conteudo = request.mensagem().trim();
         Mensagem mensagem = criarMensagemSaida(
@@ -118,7 +124,7 @@ public class MensagemService {
         mensagem = mensagemRepository.save(mensagem);
         atualizarUltimaMensagem(atendimento, mensagem);
 
-        if (!deveEnviarWhatsapp(request)) {
+        if (!enviarWhatsapp) {
             mensagem.setWhatsappStatus("REGISTRADA");
             return new RespostaIaResultado(toDTO(mensagemRepository.save(mensagem)), false);
         }
@@ -146,6 +152,7 @@ public class MensagemService {
         validarArquivo(arquivo);
         Atendimento atendimento = buscarAtendimentoAtivo(atendimentoId, clinicaId);
         Usuario remetente = buscarRemetente(remetenteUsuarioId, clinicaId);
+        whatsappWindowService.exigirAberta(atendimentoId, clinicaId);
         String mimeType = arquivo.getContentType();
         String tipoMedia = resolverTipoMedia(mimeType);
         String nomeArquivo = sanitizarNomeArquivo(arquivo.getOriginalFilename());
@@ -363,6 +370,10 @@ public class MensagemService {
     }
 
     private void registrarFalha(Mensagem mensagem, Exception exception, boolean midia) {
+        WhatsappTemplateRequiredException templateRequired = findTemplateRequired(exception);
+        if (templateRequired != null) {
+            throw templateRequired;
+        }
         mensagem.setMotivoFalha(motivoFalha(exception));
         mensagem.setWhatsappStatus("FALHA");
         log.error(
@@ -371,11 +382,6 @@ public class MensagemService {
                 mensagem.getId(),
                 exception.getClass().getSimpleName()
         );
-        WhatsappTemplateRequiredException templateRequired = findTemplateRequired(exception);
-        if (templateRequired != null) {
-            log.info("Retry automatico ignorado para mensagem {}: janela Meta exige template", mensagem.getId());
-            return;
-        }
         try {
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.EXCHANGE_WHATSAPP_SAIDA,
@@ -477,7 +483,9 @@ public class MensagemService {
                 mensagem.getDataHora(),
                 mensagem.getEntregueEm(),
                 mensagem.getLidaEm(),
-                midia
+                midia,
+                mensagem.getTemplateNome(),
+                mensagem.getTemplateIdioma()
         );
     }
 }

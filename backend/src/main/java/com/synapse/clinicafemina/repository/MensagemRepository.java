@@ -34,6 +34,30 @@ public interface MensagemRepository extends JpaRepository<Mensagem, Long> {
 
     Optional<Mensagem> findFirstByAtendimentoIdOrderByDataHoraDesc(Long atendimentoId);
 
+    @Query("""
+            SELECT MAX(m.dataHora) FROM Mensagem m
+            WHERE m.atendimento.id = :atendimentoId
+              AND m.atendimento.clinica.id = :clinicaId
+              AND m.direcao = 'ENTRADA'
+            """)
+    Optional<OffsetDateTime> findUltimaMensagemEntradaEm(
+            @Param("atendimentoId") Long atendimentoId,
+            @Param("clinicaId") Long clinicaId
+    );
+
+    @Query("""
+            SELECT MAX(m.dataHora) FROM Mensagem m
+            WHERE m.atendimento.id = :atendimentoId
+              AND m.atendimento.clinica.id = :clinicaId
+              AND m.direcao = 'SAIDA'
+              AND m.tipoMedia = 'TEMPLATE'
+              AND (m.whatsappStatus IS NULL OR m.whatsappStatus <> 'FALHA')
+            """)
+    Optional<OffsetDateTime> findUltimoTemplateSaidaValidoEm(
+            @Param("atendimentoId") Long atendimentoId,
+            @Param("clinicaId") Long clinicaId
+    );
+
     @Query(value = """
             SELECT DISTINCT ON (atendimento_id)
                    atendimento_id AS "atendimentoId",

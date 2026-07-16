@@ -1,0 +1,3 @@
+ALTER TABLE mensagem
+    ADD COLUMN IF NOT EXISTS template_nome VARCHAR(512),
+    ADD COLUMN IF NOT EXISTS template_idioma VARCHAR(20);

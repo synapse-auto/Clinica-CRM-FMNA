@@ -2,9 +2,12 @@ package com.synapse.clinicafemina.controller;
 
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.dto.MensagemDTO;
+import com.synapse.clinicafemina.dto.EnviarTemplateWhatsappRequest;
+import com.synapse.clinicafemina.dto.WhatsappTemplateDTO;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.MensagemService;
+import com.synapse.clinicafemina.service.WhatsappTemplateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +17,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 /**
  * Controller REST para envio de mensagens outbound.
@@ -32,6 +37,7 @@ public class MensagemController {
 
     private final MensagemService mensagemService;
     private final ClinicaConfigService clinicaConfigService;
+    private final WhatsappTemplateService whatsappTemplateService;
 
     /**
      * Envia uma mensagem outbound para o paciente via WhatsApp.
@@ -65,5 +71,25 @@ public class MensagemController {
         Long remetenteId = usuario != null ? usuario.getId() : null;
         Long clinicaId = clinicaConfigService.obterClinicaAtual().getId();
         return mensagemService.enviarMidia(atendimentoId, clinicaId, arquivo, remetenteId);
+    }
+
+    @GetMapping("/templates-whatsapp")
+    @PreAuthorize("hasAnyRole('GESTOR', 'MEDICO', 'RECEPCIONISTA')")
+    public List<WhatsappTemplateDTO> listarTemplates(@PathVariable Long atendimentoId) {
+        Long clinicaId = clinicaConfigService.obterClinicaAtual().getId();
+        return whatsappTemplateService.listar(atendimentoId, clinicaId);
+    }
+
+    @PostMapping("/mensagens-template")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('GESTOR', 'MEDICO', 'RECEPCIONISTA')")
+    public MensagemDTO enviarTemplate(
+            @PathVariable Long atendimentoId,
+            @RequestBody @Valid EnviarTemplateWhatsappRequest request,
+            @AuthenticationPrincipal Usuario usuario
+    ) {
+        Long clinicaId = clinicaConfigService.obterClinicaAtual().getId();
+        Long remetenteId = usuario != null ? usuario.getId() : null;
+        return whatsappTemplateService.enviar(atendimentoId, clinicaId, remetenteId, request);
     }
 }

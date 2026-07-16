@@ -61,6 +61,12 @@ public class Mensagem {
     @Column(name = "motivo_falha", length = 255)
     private String motivoFalha;
 
+    @Column(name = "template_nome", length = 512)
+    private String templateNome;
+
+    @Column(name = "template_idioma", length = 20)
+    private String templateIdioma;
+
     @Column(name = "chave_criptografia_id", nullable = false, length = 20)
     private String chaveCriptografiaId = "v1";
 

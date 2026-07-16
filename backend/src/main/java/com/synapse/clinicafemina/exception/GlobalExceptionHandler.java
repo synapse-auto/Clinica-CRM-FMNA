@@ -1,6 +1,7 @@
 package com.synapse.clinicafemina.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -71,6 +72,32 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 
+    @ExceptionHandler({WhatsappWindowClosedException.class, WhatsappTemplateRequiredException.class})
+    public ResponseEntity<Object> handleWhatsappWindowClosed(RuntimeException ex, WebRequest request) {
+        log.info("Envio WhatsApp bloqueado porque a janela exige template");
+        return buildResponse(
+                HttpStatus.CONFLICT,
+                WhatsappWindowClosedException.MESSAGE,
+                WhatsappWindowClosedException.CODE,
+                request
+        );
+    }
+
+    @ExceptionHandler(WhatsappTemplateSendException.class)
+    public ResponseEntity<Object> handleWhatsappTemplateSend(
+            WhatsappTemplateSendException ex,
+            WebRequest request
+    ) {
+        log.error("Falha sanitizada no envio de template WhatsApp. tipoErro={}",
+                ex.getCause() == null ? "desconhecido" : ex.getCause().getClass().getSimpleName());
+        return buildResponse(
+                HttpStatus.BAD_GATEWAY,
+                ex.getMessage(),
+                "WHATSAPP_TEMPLATE_SEND_FAILED",
+                request
+        );
+    }
+
     // ── 501 Não implementado ──────────────────────────────────────────────────
     @ExceptionHandler(UnsupportedOperationException.class)
     public ResponseEntity<Object> handleUnsupported(UnsupportedOperationException ex, WebRequest request) {
@@ -137,11 +164,23 @@ public class GlobalExceptionHandler {
 
     // ── Builder ───────────────────────────────────────────────────────────────
     private ResponseEntity<Object> buildResponse(HttpStatus status, String message, WebRequest request) {
+        return buildResponse(status, message, null, request);
+    }
+
+    private ResponseEntity<Object> buildResponse(
+            HttpStatus status,
+            String message,
+            String code,
+            WebRequest request
+    ) {
         Map<String, Object> body = new HashMap<>();
         body.put("timestamp", OffsetDateTime.now());
         body.put("status", status.value());
         body.put("error", status.getReasonPhrase());
         body.put("message", message);
+        if (code != null) {
+            body.put("code", code);
+        }
         body.put("path", request.getDescription(false).replace("uri=", ""));
         return new ResponseEntity<>(body, status);
     }

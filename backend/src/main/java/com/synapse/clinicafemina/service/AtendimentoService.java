@@ -11,6 +11,7 @@ import com.synapse.clinicafemina.dto.AtendimentoResumoDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import com.synapse.clinicafemina.exception.NotFoundException;
+import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.AtendimentoTagRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
@@ -48,6 +49,8 @@ public class AtendimentoService {
     private final RealtimeBroadcastService broadcastService;
     private final AtendimentoTagRepository atendimentoTagRepository;
     private final PacienteTagRepository pacienteTagRepository;
+    private final WhatsappWindowService whatsappWindowService;
+    private final WhatsappOutboundClient whatsappOutboundClient;
 
     @Transactional(readOnly = true)
     public Page<AtendimentoResumoDTO> listar(
@@ -343,6 +346,9 @@ public class AtendimentoService {
         Paciente paciente = atendimento.getPaciente();
         Usuario atendente = atendimento.getAtendentePrincipal();
         Usuario convenioResponsavel = paciente.getConvenioRevisadoPor();
+        WhatsappWindowService.WindowState janela = whatsappWindowService.avaliar(
+                atendimento.getId(), atendimento.getClinica().getId()
+        );
         return new AtendimentoDetalheDTO(
                 atendimento.getId(),
                 atendimento.getStatus(),
@@ -368,7 +374,12 @@ public class AtendimentoService {
                         ? new AtendimentoDetalheDTO.AtendenteDTO(
                                 atendente.getId(), atendente.getNome(), atendente.getPerfil()
                         )
-                        : null
+                        : null,
+                janela.aberta(),
+                janela.expiraEm(),
+                janela.ultimaMensagemEntradaEm(),
+                janela.aguardandoRespostaTemplate(),
+                whatsappOutboundClient.templatesDisponiveis()
         );
     }
 
