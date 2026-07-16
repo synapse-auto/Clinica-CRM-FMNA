@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { brandingInitials, publicBranding } from '@/config/public-branding';
 import { menuItemsForProfile } from '@/lib/auth/permissions';
 import type { AuthUser } from '@/lib/auth/types';
 import type { ClinicaAtualResponse } from '@/types/dashboard';
@@ -87,8 +88,14 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
   return (
     <aside className="flex h-screen w-[256px] shrink-0 flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-[84px] items-center gap-3 border-b border-sidebar-border px-6">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm">
-          <Image src="/ultramedical-logo.png" alt="UltraMedical" width={32} height={32} className="object-contain" />
+        <div className="flex h-11 w-11 items-center justify-center">
+          {publicBranding.logoUrl ? (
+            <Image src={publicBranding.logoUrl} alt={clinic.nome} width={44} height={44} priority className="h-11 w-11 object-contain" />
+          ) : (
+            <span aria-label={`${clinic.nome} sem logotipo`} className="flex h-10 w-10 items-center justify-center rounded-xl bg-sidebar-primary text-xs font-extrabold text-sidebar-primary-foreground">
+              {brandingInitials(clinic.nome)}
+            </span>
+          )}
         </div>
         <div className="min-w-0">
           <p className="truncate text-[15px] font-bold leading-tight text-white">{clinic.nome}</p>

@@ -379,6 +379,36 @@ describe('AgendaClient (somente leitura)', () => {
     expect(screen.queryByText('Paciente Médico B')).not.toBeInTheDocument();
   });
 
+  it('should_filter_patients_without_fetching_and_combine_with_doctor', () => {
+    const appointments = [
+      appointment({ id: 451, pacienteNome: 'Ana Lara Lopes Ferreira', medicoId: 30, medicoNome: 'Dra. Renata', dataHoraInicio: '2026-07-15T08:15:00-03:00' }),
+      appointment({ id: 452, pacienteNome: 'Jo\u00e3o Souza', medicoId: 31, medicoNome: 'Dr. Paulo', dataHoraInicio: '2026-07-15T09:00:00-03:00' }),
+    ];
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <AgendaClient
+        initialAppointments={appointments}
+        initialOptions={{ ...options, medicos: [...options.medicos, { id: 31, nome: 'Dr. Paulo', codigoExterno: null, origem: 'CRM' }] }}
+        initialError={null}
+        weekStart="2026-07-13"
+      />,
+    );
+
+    const search = screen.getByRole('searchbox', { name: 'Buscar paciente na agenda' });
+    fireEvent.change(search, { target: { value: '  ana   lara ' } });
+    expect(screen.getByText('Ana Lara Lopes Ferreira')).toBeInTheDocument();
+    expect(screen.queryByText('Jo\u00e3o Souza')).not.toBeInTheDocument();
+    expect(screen.getByText('1 agendamentos encontrados')).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(screen.getByText('Jo\u00e3o Souza')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Dra. Renata' }));
+    fireEvent.change(search, { target: { value: 'joao' } });
+    expect(screen.getByText('Nenhum agendamento encontrado para este paciente no per\u00edodo selecionado.')).toBeInTheDocument();
+  });
+
   it('should_preserve_sao_paulo_time_and_show_empty_selected_day', () => {
     render(
       <AgendaClient

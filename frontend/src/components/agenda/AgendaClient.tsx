@@ -8,8 +8,10 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  Search,
   Stethoscope,
   UserRoundCheck,
+  X,
 } from 'lucide-react';
 import { DemoCard } from '@/components/demo/DemoCard';
 import { DonutChart } from '@/components/demo/DonutChart';
@@ -17,6 +19,7 @@ import { GroupedBarChart } from '@/components/demo/GroupedBarChart';
 import { MetricCard } from '@/components/demo/MetricCard';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { DatePicker } from '@/components/ui/date-picker';
+import { normalizeSearchText } from '@/lib/search';
 import type {
   Agendamento,
   AgendaOptions,
@@ -53,6 +56,7 @@ export function AgendaClient({
   const [appointments, setAppointments] = useState(initialAppointments);
   const [options, setOptions] = useState(initialOptions);
   const [selectedDoctor, setSelectedDoctor] = useState<string | 'all'>('all');
+  const [patientSearch, setPatientSearch] = useState('');
   const [range, setRange] = useState<AgendaRange>(initialRange);
   const [error, setError] = useState(initialError);
   const [loading, setLoading] = useState(false);
@@ -68,12 +72,11 @@ export function AgendaClient({
     () => appointments.filter((item) => item.status !== 'CANCELADO'),
     [appointments],
   );
-  const visibleAppointments = useMemo(
-    () => selectedDoctor === 'all'
-      ? appointments
-      : appointments.filter((item) => appointmentDoctorKey(item) === selectedDoctor),
-    [appointments, selectedDoctor],
-  );
+  const normalizedPatientSearch = normalizeSearchText(patientSearch);
+  const visibleAppointments = useMemo(() => appointments.filter((item) => (
+    (selectedDoctor === 'all' || appointmentDoctorKey(item) === selectedDoctor)
+    && (!normalizedPatientSearch || normalizeSearchText(item.pacienteNome).includes(normalizedPatientSearch))
+  )), [appointments, normalizedPatientSearch, selectedDoctor]);
   const selectedDayAppointments = useMemo(
     () => visibleAppointments.filter(
       (appointment) => formatDate(appointment.dataHoraInicio) === selectedDay,
@@ -216,6 +219,28 @@ export function AgendaClient({
         actions={<CalendarDays className="h-4 w-4" />}
       >
         <div className="px-4 pb-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-clinic-border bg-clinic-input px-2 text-clinic-muted focus-within:ring-2 focus-within:ring-clinic-primary/35 sm:max-w-sm">
+              <Search className="h-3.5 w-3.5 shrink-0" />
+              <input
+                type="search"
+                value={patientSearch}
+                onChange={(event) => setPatientSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setPatientSearch('');
+                }}
+                aria-label="Buscar paciente na agenda"
+                placeholder="Buscar paciente na agenda..."
+                className="min-w-0 flex-1 bg-transparent text-[11px] font-semibold text-clinic-text outline-none placeholder:text-clinic-muted"
+              />
+              {patientSearch ? (
+                <button type="button" aria-label="Limpar pesquisa de paciente" onClick={() => setPatientSearch('')} className="rounded p-0.5 hover:bg-clinic-hover hover:text-clinic-text">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+            </label>
+            <p className="text-[10px] font-semibold text-clinic-muted">{visibleAppointments.length} agendamentos encontrados</p>
+          </div>
           <DoctorFilters
             options={options}
             selected={selectedDoctor}
@@ -232,6 +257,7 @@ export function AgendaClient({
             appointments={selectedDayAppointments}
             expandedGroups={expandedGroups}
             onToggleGroup={toggleGroup}
+            emptyMessage={normalizedPatientSearch ? 'Nenhum agendamento encontrado para este paciente no per\u00edodo selecionado.' : 'Sem agendamentos'}
           />
         </div>
       </DemoCard>
@@ -350,11 +376,13 @@ function CompactAgendaDay({
   appointments,
   expandedGroups,
   onToggleGroup,
+  emptyMessage,
 }: {
   date: string;
   appointments: Agendamento[];
   expandedGroups: Set<string>;
   onToggleGroup: (groupKey: string) => void;
+  emptyMessage: string;
 }) {
   const groups = groupAppointmentsForAgenda(appointments);
   return (
@@ -378,7 +406,7 @@ function CompactAgendaDay({
         ))}
         {groups.length === 0 ? (
           <p className="rounded-lg border border-dashed border-clinic-border px-3 py-6 text-center text-[9px] text-clinic-muted">
-            Sem agendamentos
+            {emptyMessage}
           </p>
         ) : null}
       </div>

@@ -96,4 +96,16 @@ describe('DemoSidebar', () => {
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/login'));
     expect(refreshMock).toHaveBeenCalled();
   });
+
+  it('should_render_branding_fallback_without_a_white_logo_container', () => {
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false }}
+      />,
+    );
+
+    expect(screen.getByLabelText('Clinica Femina sem logotipo')).toBeInTheDocument();
+    expect(screen.queryByAltText('UltraMedical')).not.toBeInTheDocument();
+  });
 });

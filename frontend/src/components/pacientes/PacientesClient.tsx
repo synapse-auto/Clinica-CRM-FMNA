@@ -21,6 +21,7 @@ import {
 } from '@/services/pacientes';
 import type { TagOperacional } from '@/types/operacional';
 import type { PacienteResumo } from '@/types/paciente';
+import { normalizeDigits, normalizeSearchText } from '@/lib/search';
 
 type Props = {
   initialPacientes: PacienteResumo[];
@@ -38,9 +39,11 @@ export function PacientesClient({
   const [pacientes, setPacientes] = useState(initialPacientes);
   const [selectedPatient, setSelectedPatient] = useState<PacienteResumo | null>(null);
   const [tagSearch, setTagSearch] = useState('');
+  const [patientSearch, setPatientSearch] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError);
   const statusCount = contarStatus(pacientes);
+  const filteredPacientes = useMemo(() => pacientes.filter((paciente) => patientMatchesSearch(paciente, patientSearch)), [pacientes, patientSearch]);
   const activeTags = useMemo(
     () => availableTags
       .filter((tagItem) => tagItem.ativo)
@@ -128,6 +131,31 @@ export function PacientesClient({
         />
       </div>
 
+      {pacientes.length > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-clinic-border bg-clinic-input px-2 text-clinic-muted focus-within:ring-2 focus-within:ring-clinic-primary/35 sm:max-w-md">
+            <Search className="h-3.5 w-3.5 shrink-0" />
+            <input
+              type="search"
+              value={patientSearch}
+              onChange={(event) => setPatientSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setPatientSearch('');
+              }}
+              aria-label="Buscar pacientes"
+              placeholder="Buscar por nome, telefone ou ID..."
+              className="min-w-0 flex-1 bg-transparent text-[11px] font-semibold text-clinic-text outline-none placeholder:text-clinic-muted"
+            />
+            {patientSearch ? (
+              <button type="button" aria-label="Limpar pesquisa de pacientes" onClick={() => setPatientSearch('')} className="rounded p-0.5 hover:bg-clinic-hover hover:text-clinic-text">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </label>
+          <p className="text-[10px] font-semibold text-clinic-muted">{filteredPacientes.length} de {pacientes.length} pacientes</p>
+        </div>
+      ) : null}
+
       {pacientes.length === 0 && !error ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-clinic-border bg-clinic-surface py-16 text-center">
           <Users className="mb-3 h-10 w-10 text-clinic-muted" />
@@ -136,9 +164,15 @@ export function PacientesClient({
             Os pacientes serao importados automaticamente apos a sincronizacao com o sistema clinico.
           </p>
         </div>
+      ) : filteredPacientes.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-clinic-border bg-clinic-surface py-16 text-center">
+          <Users className="mb-3 h-10 w-10 text-clinic-muted" />
+          <p className="text-[12px] font-bold text-clinic-text">Nenhum paciente encontrado para &ldquo;{patientSearch.trim()}&rdquo;.</p>
+          <button type="button" onClick={() => setPatientSearch('')} className="mt-3 text-[10px] font-bold text-clinic-primary hover:underline">Limpar pesquisa</button>
+        </div>
       ) : (
         <DemoTable
-          data={pacientes}
+          data={filteredPacientes}
           getKey={(item) => item.id}
           columns={[
             {
@@ -396,4 +430,13 @@ function contarStatus(pacientes: PacienteResumo[]) {
 
 function errorMessage(cause: unknown) {
   return cause instanceof Error ? cause.message : 'Nao foi possivel concluir a operacao';
+}
+
+function patientMatchesSearch(paciente: PacienteResumo, search: string) {
+  const normalizedSearch = normalizeSearchText(search);
+  if (!normalizedSearch) return true;
+  const normalizedDigits = normalizeDigits(search);
+  return [paciente.nome, paciente.externalId, paciente.id]
+    .some((value) => normalizeSearchText(value).includes(normalizedSearch))
+    || (Boolean(normalizedDigits) && normalizeDigits(paciente.telefone).includes(normalizedDigits));
 }

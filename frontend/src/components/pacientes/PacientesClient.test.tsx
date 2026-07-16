@@ -93,6 +93,41 @@ describe('PacientesClient', () => {
     expect(screen.queryByRole('button', { name: 'Adicionar tag para Maria Silva' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Remover tag Prioridade de Maria Silva' })).not.toBeInTheDocument();
   });
+
+  it('should_search_by_normalized_name_phone_and_identifiers_without_fetching', async () => {
+    const user = userEvent.setup();
+    const joao: PacienteResumo = { ...paciente, id: 42, nome: 'Jo\u00e3o  L\u00f3pes', telefone: '(83) 99999-9999', externalId: 'MW-42' };
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<PacientesClient initialPacientes={[paciente, joao]} availableTags={tags} initialError={null} canManage />);
+
+    const search = screen.getByRole('searchbox', { name: 'Buscar pacientes' });
+    await user.type(search, 'joao lopes');
+    expect(screen.getByText(/Jo\u00e3o/)).toBeInTheDocument();
+    expect(screen.queryByText('Maria Silva')).not.toBeInTheDocument();
+    expect(screen.getByText('1 de 2 pacientes')).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await user.clear(search);
+    await user.type(search, '83999999999');
+    expect(screen.getByText(/Jo\u00e3o/)).toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, 'MW-42');
+    expect(screen.getByText(/Jo\u00e3o/)).toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, '12');
+    expect(screen.getByText('Maria Silva')).toBeInTheDocument();
+  });
+
+  it('should_show_search_empty_state_and_keep_tags_actions_after_clearing', async () => {
+    const user = userEvent.setup();
+    render(<PacientesClient initialPacientes={[paciente]} availableTags={tags} initialError={null} canManage />);
+    const search = screen.getByRole('searchbox', { name: 'Buscar pacientes' });
+    await user.type(search, 'inexistente');
+    expect(screen.getByText(/Nenhum paciente encontrado para/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Limpar pesquisa' }));
+    expect(screen.getByRole('button', { name: 'Adicionar tag para Maria Silva' })).toBeInTheDocument();
+  });
 });
 
 function jsonResponse(body: unknown, status = 200) {
