@@ -34,6 +34,12 @@ type AgendaRange = {
   apiEnd: string;
 };
 
+export type AgendaAppointmentGroup = {
+  key: string;
+  appointments: Agendamento[];
+  appointmentIds: number[];
+};
+
 export function AgendaClient({
   initialAppointments,
   initialOptions,
@@ -276,16 +282,17 @@ function WeekGrid({
           const dayAppointments = appointments.filter(
             (appointment) => formatDate(appointment.dataHoraInicio) === day.date,
           );
+          const dayGroups = groupAppointmentsForAgenda(dayAppointments);
           return (
             <div key={day.date} className="min-w-0">
               <p className="mb-2 border-b border-clinic-border pb-1.5 text-center text-[9px] font-bold text-clinic-text">
                 {day.label}
               </p>
               <div className="space-y-1.5">
-                {dayAppointments.map((appointment) => (
-                  <AppointmentCard key={appointment.id} appointment={appointment} />
+                {dayGroups.map((group) => (
+                  <AppointmentCard key={group.key} group={group} />
                 ))}
-                {dayAppointments.length === 0 ? (
+                {dayGroups.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-clinic-border px-2 py-3 text-center text-[8px] text-clinic-muted">
                     Sem agendamentos
                   </p>
@@ -300,14 +307,18 @@ function WeekGrid({
 }
 
 function AppointmentCard({
-  appointment,
+  group,
 }: {
-  appointment: Agendamento;
+  group: AgendaAppointmentGroup;
 }) {
+  const appointment = group.appointments[0];
   const canceled = appointment.status === 'CANCELADO';
+  const procedures = group.appointments.map(appointmentProcedureName);
+  const statusLabel = formatStatus(appointment.status);
   return (
     <div
-      aria-label={`${appointment.pacienteNome}, ${appointment.servicoNome}, ${formatTime(appointment.dataHoraInicio)}`}
+      aria-label={`${appointment.pacienteNome}, ${procedures.join(', ')}, ${formatTime(appointment.dataHoraInicio)}, ${statusLabel}`}
+      data-appointment-ids={group.appointmentIds.join(',')}
       className={`min-h-12 w-full rounded-lg px-2.5 py-2 ${
         canceled ? 'bg-clinic-danger/10 opacity-70' : 'bg-clinic-cyan/15'
       }`}
@@ -318,9 +329,97 @@ function AppointmentCard({
       <p className="mt-0.5 truncate text-[8px] text-clinic-muted">
         {formatTime(appointment.dataHoraInicio)} · {appointment.medicoNome ?? 'Sem profissional'}
       </p>
-      {canceled ? <span className="text-[7px] font-bold uppercase text-clinic-danger">Cancelado</span> : null}
+      <span className={`mt-1 inline-flex text-[7px] font-bold uppercase ${
+        canceled ? 'text-clinic-danger' : 'text-clinic-primary'
+      }`}>
+        {statusLabel}
+      </span>
+      {procedures.length === 1 ? (
+        <p className="mt-1 text-[8px] font-semibold leading-snug text-clinic-text">
+          {procedures[0]}
+        </p>
+      ) : (
+        <div className="mt-1.5">
+          <p className="text-[8px] font-bold text-clinic-text">
+            {procedures.length} procedimentos
+          </p>
+          <ul className="mt-1 space-y-0.5 text-[8px] leading-snug text-clinic-muted">
+            {procedures.map((procedure, index) => (
+              <li key={`${group.appointmentIds[index]}:${procedure}`} className="flex gap-1">
+                <span aria-hidden="true">•</span>
+                <span>{procedure}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
+}
+
+export function groupAppointmentsForAgenda(
+  appointments: Agendamento[],
+): AgendaAppointmentGroup[] {
+  const groups = new Map<string, Agendamento[]>();
+
+  appointments.forEach((appointment) => {
+    const identity = [
+      `patient:${appointment.pacienteId}`,
+      `start:${new Date(appointment.dataHoraInicio).toISOString()}`,
+      `doctor:${appointmentDoctorIdentity(appointment)}`,
+      `status:${appointment.status}`,
+    ].join('|');
+    const current = groups.get(identity) ?? [];
+    current.push(appointment);
+    groups.set(identity, current);
+  });
+
+  return Array.from(groups.entries())
+    .map(([identity, groupAppointments]) => {
+      const sortedAppointments = [...groupAppointments].sort((left, right) => (
+        appointmentProcedureName(left).localeCompare(
+          appointmentProcedureName(right),
+          'pt-BR',
+          { sensitivity: 'base' },
+        ) || left.id - right.id
+      ));
+      const appointmentIds = sortedAppointments.map((appointment) => appointment.id);
+      return {
+        key: `${identity}|ids:${[...appointmentIds].sort((left, right) => left - right).join(',')}`,
+        appointments: sortedAppointments,
+        appointmentIds,
+      };
+    })
+    .sort((left, right) => {
+      const leftAppointment = left.appointments[0];
+      const rightAppointment = right.appointments[0];
+      return new Date(leftAppointment.dataHoraInicio).getTime()
+        - new Date(rightAppointment.dataHoraInicio).getTime()
+        || leftAppointment.pacienteNome.localeCompare(
+          rightAppointment.pacienteNome,
+          'pt-BR',
+          { sensitivity: 'base' },
+        )
+        || appointmentProcedureName(leftAppointment).localeCompare(
+          appointmentProcedureName(rightAppointment),
+          'pt-BR',
+          { sensitivity: 'base' },
+        );
+    });
+}
+
+function appointmentProcedureName(appointment: Agendamento) {
+  const serviceName = appointment.servicoNome?.trim();
+  if (serviceName) return serviceName;
+  const type = appointment.tipo?.trim();
+  return type || 'Procedimento não informado';
+}
+
+function formatStatus(status: string) {
+  return status
+    .toLocaleLowerCase('pt-BR')
+    .replaceAll('_', ' ')
+    .replace(/^./, (letter) => letter.toLocaleUpperCase('pt-BR'));
 }
 
 function buildMetrics(
@@ -371,15 +470,21 @@ function buildBarData(appointments: Agendamento[], options: AgendaOptions) {
 }
 
 function doctorKey(doctor: { id: number | null; nome: string; codigoExterno: string | null; origem: string | null }) {
-  return doctor.origem === 'MEDWARE'
-    ? `external:${doctor.codigoExterno ?? normalizeDoctorName(doctor.nome)}`
-    : `local:${doctor.id}`;
+  if (doctor.id != null) return `local:${doctor.id}`;
+  if (doctor.codigoExterno?.trim()) return `external:${doctor.codigoExterno.trim()}`;
+  return `name:${normalizeDoctorName(doctor.nome)}`;
 }
 
 function appointmentDoctorKey(appointment: Agendamento) {
-  return appointment.medicoOrigem === 'MEDWARE'
-    ? `external:${appointment.medicoExternalId ?? normalizeDoctorName(appointment.medicoNome ?? '')}`
-    : `local:${appointment.medicoId}`;
+  return appointmentDoctorIdentity(appointment);
+}
+
+function appointmentDoctorIdentity(appointment: Agendamento) {
+  if (appointment.medicoId != null) return `local:${appointment.medicoId}`;
+  if (appointment.medicoExternalId?.trim()) {
+    return `external:${appointment.medicoExternalId.trim()}`;
+  }
+  return `name:${normalizeDoctorName(appointment.medicoNome ?? 'sem profissional')}`;
 }
 
 function normalizeDoctorName(value: string) {
