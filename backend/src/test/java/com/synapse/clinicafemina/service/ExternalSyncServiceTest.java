@@ -27,10 +27,14 @@ import org.springframework.dao.DataIntegrityViolationException;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -476,17 +480,14 @@ class ExternalSyncServiceTest {
         clinica.setExternalProvider(ExternalProviderType.MEDWARE);
         when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
         Paciente existente = pacienteExistente("Nome Completo", "11911112222");
-        existente.setExternalSource(ExternalProviderType.WHATSAPP);
-        existente.setExternalId("whatsapp-existing");
         existente.setExternalPayload("{\"source\":\"fixture\"}");
         ExternalAppointmentDTO appointment = appointment(
                 "appointment-cpf",
                 "patient-medware-cpf",
-                Map.of("medware", Map.of(
-                        "cpfPaciente", "123.456.789-09",
-                        "nomePaciente", "Paciente Medware patient-medware-cpf",
-                        "telefonePaciente", "00000000000"
-                ))
+                Map.of("medware", Map.of("paciente", Map.of(
+                        "cpf", "123.456.789-09",
+                        "nome", "Paciente Medware patient-medware-cpf",
+                        "telefone", "00000000000")))
         );
 
         when(provider.getPatients(null, null, 100))
@@ -530,7 +531,7 @@ class ExternalSyncServiceTest {
         ExternalAppointmentDTO appointment = appointment(
                 "appointment-new-cpf",
                 "patient-new-cpf",
-                Map.of("medware", Map.of("cpf", "12345678909"))
+                Map.of("medware", Map.of("paciente", Map.of("cpf", "12345678909")))
         );
 
         when(provider.getPatients(null, null, 100))
@@ -560,12 +561,23 @@ class ExternalSyncServiceTest {
     }
 
     @Test
-    void should_create_distinct_minimal_patients_when_both_have_no_phone_or_cpf() {
+    void should_ignore_doctor_and_procedure_identity_when_creating_distinct_minimal_patients() {
         clinica.setSlug("ultramedical");
         clinica.setExternalProvider(ExternalProviderType.MEDWARE);
         when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
-        ExternalAppointmentDTO first = appointment("appointment-one", "1001", Map.of());
-        ExternalAppointmentDTO second = appointment("appointment-two", "1002", Map.of());
+        Map<String, Object> contaminatedPayload = Map.of(
+                "medware", Map.of(
+                        "medico", Map.of(
+                                "cpf", "12345678909",
+                                "nome", "Medico Ficticio",
+                                "telefone", "11999990000"),
+                        "procedimentoPlanoOperadora", Map.of(
+                                "cpf", "98765432100",
+                                "nome", "Procedimento Ficticio")),
+                "medico", Map.of("cpf", "12345678909", "nome", "Medico Ficticio"),
+                "procedimento", Map.of("cpf", "98765432100"));
+        ExternalAppointmentDTO first = appointment("appointment-one", "1001", contaminatedPayload);
+        ExternalAppointmentDTO second = appointment("appointment-two", "1002", contaminatedPayload);
 
         when(provider.getPatients(null, null, 100))
                 .thenReturn(new PageResult<>(List.of(), false, null));
@@ -592,8 +604,104 @@ class ExternalSyncServiceTest {
                 .equals(created.get(1).getTelefoneNormalizado()));
         assertNull(created.get(0).getCpfHash());
         assertNull(created.get(1).getCpfHash());
+        assertEquals("Paciente Medware 1001", created.get(0).getNome());
+        assertEquals("Paciente Medware 1002", created.get(1).getNome());
+        verify(pacienteRepository, never()).findByClinicaIdAndCpfHash(eq(7L), any());
         assertEquals(2, result.pacientesCriados());
         assertEquals(2, result.agendamentosCriados());
+    }
+
+    @Test
+    void should_fail_controlled_when_cpf_matches_another_medware_external_patient_id() {
+        clinica.setSlug("ultramedical");
+        clinica.setExternalProvider(ExternalProviderType.MEDWARE);
+        when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
+        Paciente existente = pacienteExistente("Paciente Ficticio", "11911112222");
+        existente.setExternalSource(ExternalProviderType.MEDWARE);
+        existente.setExternalId("patient-existing");
+        ExternalAppointmentDTO appointment = appointment(
+                "appointment-conflict",
+                "patient-conflicting",
+                Map.of("medware", Map.of("paciente", Map.of("cpf", "12345678909"))));
+
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(appointment), false, null));
+        when(pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                7L, ExternalProviderType.MEDWARE, "patient-conflicting"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndCpfHash(eq(7L), any()))
+                .thenReturn(Optional.of(existente));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        ArgumentCaptor<String> errorCaptor = ArgumentCaptor.forClass(String.class);
+        verify(integrationSyncLogService).finalizar(
+                eq(99L), eq("FALHA_TOTAL"), any(ExternalSyncProgress.class), errorCaptor.capture());
+        assertEquals("FALHA_TOTAL", result.status());
+        assertEquals(
+                "Falha na sincronizacao externa na etapa PACIENTE_PERSIST: "
+                        + "ExternalIdentityConflictException [field=externalPatientId]",
+                errorCaptor.getValue());
+        assertFalse(errorCaptor.getValue().contains("patient-existing"));
+        assertFalse(errorCaptor.getValue().contains("patient-conflicting"));
+        assertEquals("patient-existing", existente.getExternalId());
+        verify(pacienteRepository, never()).save(any(Paciente.class));
+        verify(agendamentoRepository, never()).save(any(Agendamento.class));
+    }
+
+    @Test
+    void should_keep_patient_distribution_for_large_medware_appointment_batch() {
+        clinica.setSlug("ultramedical");
+        clinica.setExternalProvider(ExternalProviderType.MEDWARE);
+        when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
+        List<ExternalAppointmentDTO> appointments = new ArrayList<>();
+        Map<String, Object> catalogs = Map.of(
+                "medico", Map.of("cpf", "12345678909", "nome", "Medico Ficticio"),
+                "procedimento", Map.of("cpf", "98765432100", "nome", "Procedimento Ficticio"));
+        for (int index = 0; index < 62; index++) {
+            appointments.add(appointment(
+                    "appointment-" + index,
+                    "patient-" + (index % 31),
+                    Map.of("medware", catalogs)));
+        }
+        Map<String, Paciente> patientsByExternalId = new LinkedHashMap<>();
+
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(null, null, 100))
+                .thenReturn(new PageResult<>(appointments, false, null));
+        when(pacienteRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                eq(7L), eq(ExternalProviderType.MEDWARE), any()))
+                .thenAnswer(invocation -> Optional.ofNullable(
+                        patientsByExternalId.get(invocation.getArgument(2, String.class))));
+        when(pacienteRepository.save(any(Paciente.class))).thenAnswer(invocation -> {
+            Paciente patient = invocation.getArgument(0, Paciente.class);
+            patientsByExternalId.put(patient.getExternalId(), patient);
+            return patient;
+        });
+        when(agendamentoRepository.findByClinicaIdAndExternalSourceAndExternalId(
+                eq(7L), eq(ExternalProviderType.MEDWARE), any()))
+                .thenReturn(Optional.empty());
+        when(agendamentoRepository.save(any(Agendamento.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        ArgumentCaptor<Agendamento> appointmentCaptor = ArgumentCaptor.forClass(Agendamento.class);
+        verify(pacienteRepository, times(31)).save(any(Paciente.class));
+        verify(agendamentoRepository, times(62)).save(appointmentCaptor.capture());
+        Set<Paciente> distinctPatients = Collections.newSetFromMap(new IdentityHashMap<>());
+        appointmentCaptor.getAllValues().forEach(item -> distinctPatients.add(item.getPaciente()));
+        assertEquals(31, distinctPatients.size());
+        assertEquals(31, patientsByExternalId.size());
+        assertTrue(patientsByExternalId.values().stream()
+                .allMatch(patient -> patient.getNome().startsWith("Paciente Medware patient-")));
+        assertTrue(patientsByExternalId.values().stream()
+                .allMatch(patient -> patient.getCpfHash() == null));
+        assertEquals(31, result.pacientesCriados());
+        assertEquals(62, result.agendamentosCriados());
     }
 
     @Test

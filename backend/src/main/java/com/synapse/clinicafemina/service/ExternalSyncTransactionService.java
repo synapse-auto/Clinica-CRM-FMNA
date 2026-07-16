@@ -203,8 +203,8 @@ public class ExternalSyncTransactionService {
                     clinica.getId(), providerType, dto.externalPatientId());
         }
 
-        String cpfLimpo = onlyDigits(
-                payloadText(dto.payload(), "cpfPaciente", "cpf", "documentoPaciente"));
+        AppointmentPatientData patientData = appointmentPatientData(dto.payload());
+        String cpfLimpo = onlyDigits(patientData.cpf());
         String cpfHash = gerarCpfHashSeguro(cpfLimpo);
         Optional<PatientMatch> existente = localizarPacienteExistente(
                 clinica.getId(), providerType, dto.externalPatientId(), cpfHash);
@@ -228,7 +228,8 @@ public class ExternalSyncTransactionService {
 
         Paciente criado = executeAtStage(
                 SyncStage.PACIENTE_PERSIST,
-                () -> criarPacienteMinimoMedware(clinica, dto, cpfLimpo, cpfHash));
+                () -> criarPacienteMinimoMedware(
+                        clinica, dto, patientData, cpfLimpo, cpfHash));
         progress.registrarPacienteMinimoCriado();
         log.info(
                 "Paciente minimo Medware criado a partir de agendamento: clinica={}, provider={}",
@@ -280,14 +281,14 @@ public class ExternalSyncTransactionService {
     private Paciente criarPacienteMinimoMedware(
             Clinica clinica,
             ExternalAppointmentDTO dto,
+            AppointmentPatientData patientData,
             String cpfLimpo,
             String cpfHash
     ) {
         String nome = nullToFallback(
-                payloadText(dto.payload(), "nomePaciente", "pacienteNome", "nomePacienteAgenda"),
+                patientData.nome(),
                 "Paciente Medware " + dto.externalPatientId());
-        String telefone = payloadText(
-                dto.payload(), "telefonePaciente", "celularPaciente", "telefone", "celular");
+        String telefone = patientData.telefone();
 
         Paciente paciente = new Paciente();
         paciente.setClinica(clinica);
@@ -338,17 +339,80 @@ public class ExternalSyncTransactionService {
             String externalId
     ) {
         validarTamanho("externalId", externalId, EXTERNAL_ID_MAX_LENGTH);
-        boolean providerAlterado = paciente.getExternalSource() != null
-                && paciente.getExternalSource() != providerType;
-        boolean externalIdAlterado = paciente.getExternalId() != null
-                && !java.util.Objects.equals(paciente.getExternalId(), externalId);
-        if (providerAlterado || externalIdAlterado) {
+        ExternalProviderType currentProvider = paciente.getExternalSource();
+        String currentExternalId = paciente.getExternalId();
+
+        if (currentProvider != null && currentProvider != providerType) {
             log.warn(
-                    "Vinculo externo de paciente atualizado por identidade segura: clinica={}, providerAnterior={}, providerNovo={}",
-                    paciente.getClinica().getId(), paciente.getExternalSource(), providerType);
+                    "Vinculo externo existente preservado ao reutilizar paciente por identidade segura: clinica={}, providerExistente={}, providerRecebido={}",
+                    paciente.getClinica().getId(), currentProvider, providerType);
+            return;
+        }
+        if (currentExternalId != null && !java.util.Objects.equals(currentExternalId, externalId)) {
+            throw new ExternalIdentityConflictException("externalPatientId");
         }
         paciente.setExternalSource(providerType);
         paciente.setExternalId(externalId);
+    }
+
+    private AppointmentPatientData appointmentPatientData(Map<String, Object> payload) {
+        Map<String, Object> medware = directMap(payload, "medware");
+        Map<String, Object> medwarePatient = directMap(medware, "paciente");
+        Map<String, Object> payloadPatient = directMap(payload, "paciente");
+
+        String cpf = firstNonBlank(
+                directText(medwarePatient, "cpf", "cpfPaciente", "documento"),
+                directText(payloadPatient, "cpf", "cpfPaciente", "documento"),
+                directText(medware, "cpfPaciente"),
+                directText(payload, "cpfPaciente"));
+        String nome = firstNonBlank(
+                directText(medwarePatient, "nome", "nomePaciente"),
+                directText(payloadPatient, "nome", "nomePaciente"),
+                directText(medware, "nomePaciente"),
+                directText(payload, "nomePaciente"));
+        String telefone = firstNonBlank(
+                directText(medwarePatient, "telefone", "celular", "telefonePaciente", "celularPaciente"),
+                directText(payloadPatient, "telefone", "celular", "telefonePaciente", "celularPaciente"),
+                directText(medware, "telefonePaciente", "celularPaciente"),
+                directText(payload, "telefonePaciente", "celularPaciente"));
+        return new AppointmentPatientData(cpf, nome, telefone);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> directMap(Map<String, Object> source, String key) {
+        Object value = directValue(source, key);
+        return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+    }
+
+    private String directText(Map<String, Object> source, String... keys) {
+        for (String key : keys) {
+            Object value = directValue(source, key);
+            if (value != null && !String.valueOf(value).isBlank()) {
+                return String.valueOf(value);
+            }
+        }
+        return null;
+    }
+
+    private Object directValue(Map<String, Object> source, String key) {
+        if (source == null || source.isEmpty()) {
+            return null;
+        }
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(key)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private void validarPacienteAntesDePersistir(Paciente paciente) {
@@ -580,9 +644,7 @@ public class ExternalSyncTransactionService {
             this.causeType = cause.getClass().getSimpleName();
             this.sqlState = findSqlState(cause);
             this.constraintName = findConstraintName(cause);
-            this.fieldName = cause instanceof ExternalFieldValidationException validation
-                    ? validation.getFieldName()
-                    : null;
+            this.fieldName = diagnosticField(cause);
         }
 
         SyncStage getStage() {
@@ -632,6 +694,16 @@ public class ExternalSyncTransactionService {
         private static String safeTechnicalName(String name) {
             return name != null && name.matches("[A-Za-z0-9_.-]{1,128}") ? name : null;
         }
+
+        private static String diagnosticField(RuntimeException cause) {
+            if (cause instanceof ExternalFieldValidationException validation) {
+                return validation.getFieldName();
+            }
+            if (cause instanceof ExternalIdentityConflictException conflict) {
+                return conflict.getFieldName();
+            }
+            return null;
+        }
     }
 
     static final class ExternalFieldValidationException extends RuntimeException {
@@ -646,11 +718,26 @@ public class ExternalSyncTransactionService {
         }
     }
 
+    static final class ExternalIdentityConflictException extends RuntimeException {
+        private final String fieldName;
+
+        ExternalIdentityConflictException(String fieldName) {
+            this.fieldName = fieldName;
+        }
+
+        String getFieldName() {
+            return fieldName;
+        }
+    }
+
     private enum PatientMatchType {
         EXTERNAL_ID,
         CPF
     }
 
     private record PatientMatch(Paciente paciente, PatientMatchType tipo) {
+    }
+
+    private record AppointmentPatientData(String cpf, String nome, String telefone) {
     }
 }
