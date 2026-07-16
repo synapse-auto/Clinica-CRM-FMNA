@@ -1,5 +1,6 @@
 package com.synapse.clinicafemina.service;
 
+import com.synapse.clinicafemina.domain.Agendamento;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.IntegrationSyncLog;
 import com.synapse.clinicafemina.integration.external.ExternalAppointmentDTO;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 import java.time.LocalDate;
@@ -62,6 +64,9 @@ class ExternalSyncTransactionIntegrationTest {
 
     @Autowired
     private IntegrationSyncLogRepository syncLogRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @MockBean
     private ExternalProviderFactory providerFactory;
@@ -131,6 +136,52 @@ class ExternalSyncTransactionIntegrationTest {
         assertEquals(1, runLog.getPacientesProcessados());
         assertEquals(1, runLog.getAgendamentosProcessados());
         assertNull(runLog.getMensagemErro());
+    }
+
+    @Test
+    void should_update_same_appointment_without_duplication_when_sync_is_repeated() {
+        Clinica clinica = criarClinica("idempotent");
+        ExternalPatientDTO patient = pacienteFicticio("patient-idempotent");
+        ExternalAppointmentDTO firstVersion = agendamentoFicticio(
+                "appointment-idempotent",
+                patient.externalId(),
+                "Procedimento ficticio inicial"
+        );
+        ExternalAppointmentDTO updatedVersion = agendamentoFicticio(
+                firstVersion.externalId(),
+                patient.externalId(),
+                "Procedimento ficticio atualizado"
+        );
+        when(provider.getPatients(isNull(), isNull(), eq(100)))
+                .thenReturn(
+                        new PageResult<>(List.of(patient), false, null),
+                        new PageResult<>(List.of(patient), false, null));
+        when(provider.getAppointments(isNull(), eq(DATA_INICIO), eq(DATA_FIM), isNull(), eq(100)))
+                .thenReturn(
+                        new PageResult<>(List.of(firstVersion), false, null),
+                        new PageResult<>(List.of(updatedVersion), false, null));
+
+        ExternalSyncResult firstResult = externalSyncService.sincronizar(
+                clinica, DATA_INICIO, DATA_FIM);
+        ExternalSyncResult secondResult = externalSyncService.sincronizar(
+                clinica, DATA_INICIO, DATA_FIM);
+
+        Agendamento persisted = agendamentoRepository
+                .findByClinicaIdAndExternalSourceAndExternalId(
+                        clinica.getId(), ExternalProviderType.MEDWARE, firstVersion.externalId())
+                .orElseThrow();
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM agendamento
+                WHERE clinica_id = ? AND external_source = ? AND external_id = ?
+                """, Integer.class, clinica.getId(), ExternalProviderType.MEDWARE.name(),
+                firstVersion.externalId());
+
+        assertEquals(1, firstResult.agendamentosCriados());
+        assertEquals(0, firstResult.agendamentosAtualizados());
+        assertEquals(0, secondResult.agendamentosCriados());
+        assertEquals(1, secondResult.agendamentosAtualizados());
+        assertEquals(1, count);
+        assertEquals("Procedimento ficticio atualizado", persisted.getServicoNome());
     }
 
     private void configurarProvider(
