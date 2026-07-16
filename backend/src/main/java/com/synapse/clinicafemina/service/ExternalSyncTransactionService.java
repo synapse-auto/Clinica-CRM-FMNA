@@ -10,6 +10,7 @@ import com.synapse.clinicafemina.integration.external.ExternalClinicProvider;
 import com.synapse.clinicafemina.integration.external.ExternalClinicalNoteDTO;
 import com.synapse.clinicafemina.integration.external.ExternalPatientDTO;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
+import com.synapse.clinicafemina.integration.external.MedwareApiMapper;
 import com.synapse.clinicafemina.integration.external.PageResult;
 import com.synapse.clinicafemina.repository.AgendamentoRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
@@ -387,7 +388,10 @@ public class ExternalSyncTransactionService {
     private String directText(Map<String, Object> source, String... keys) {
         for (String key : keys) {
             Object value = directValue(source, key);
-            if (value != null && !String.valueOf(value).isBlank()) {
+            if (value instanceof String text && !text.isBlank()) {
+                return text;
+            }
+            if (value instanceof Number || value instanceof Character) {
                 return String.valueOf(value);
             }
         }
@@ -566,15 +570,7 @@ public class ExternalSyncTransactionService {
     }
 
     private String normalizarTelefone(String phone, String fallback) {
-        String digits = onlyDigits(phone);
-        if (digits != null && !digits.isBlank()) {
-            return digits;
-        }
-        String fallbackDigits = onlyDigits((fallback == null ? "" : fallback) + "00000000000");
-        if (fallbackDigits == null || fallbackDigits.length() < 11) {
-            return "00000000000";
-        }
-        return fallbackDigits.substring(0, 11);
+        return MedwareApiMapper.normalizarTelefoneExterno(phone, fallback);
     }
 
     private String onlyDigits(String input) {

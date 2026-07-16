@@ -66,6 +66,51 @@ class MedwareApiMapperTest {
     }
 
     @Test
+    void should_normalize_common_multiple_and_invalid_external_phone_formats() {
+        assertEquals(
+                "83999990000",
+                MedwareApiMapper.normalizarTelefoneExterno("(83) 99999-0000", "fallback-1"));
+        assertEquals(
+                "5583999990000",
+                MedwareApiMapper.normalizarTelefoneExterno("+55 (83) 99999-0000", "fallback-2"));
+        assertEquals(
+                "83999990000",
+                MedwareApiMapper.normalizarTelefoneExterno(
+                        "83999990000 / 83988880000", "fallback-3"));
+        assertEquals(
+                "83999990000",
+                MedwareApiMapper.normalizarTelefoneExterno(
+                        "83999990000, 83988880000\n83977770000", "fallback-4"));
+        assertEquals(
+                "83999990000",
+                MedwareApiMapper.normalizarTelefoneExterno(
+                        "83999990000; 83988880000|83977770000", "fallback-5"));
+        assertEquals(
+                "12300000000",
+                MedwareApiMapper.normalizarTelefoneExterno(
+                        "123456789012345678901", "patient-123"));
+        assertEquals(
+                "00000000000",
+                MedwareApiMapper.normalizarTelefoneExterno(null, null));
+    }
+
+    @Test
+    void should_ignore_map_and_list_in_scalar_phone_fields() throws Exception {
+        JsonNode payload = objectMapper.readTree("""
+                {
+                  "codPaciente": 2001,
+                  "nome": "Paciente Ficticio",
+                  "numeroCelular": ["83999990000", "83988880000"],
+                  "telefone": {"principal": "83977770000"}
+                }
+                """);
+
+        ExternalPatientDTO dto = mapper.toPatient(payload);
+
+        assertNull(dto.phone());
+    }
+
+    @Test
     void should_reject_unrecognized_medware_envelope() throws Exception {
         JsonNode payload = objectMapper.readTree("""
                 {"sucesso":true,"mensagem":"resposta sem lista reconhecida"}

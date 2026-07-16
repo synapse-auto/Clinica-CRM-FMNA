@@ -26,6 +26,9 @@ public class MedwareApiMapper {
     private static final ZoneId MEDWARE_ZONE = ZoneId.of("America/Sao_Paulo");
     private static final DateTimeFormatter BR_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter BR_DATE_TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm[:ss]");
+    private static final int PHONE_MIN_LENGTH = 8;
+    private static final int PHONE_MAX_LENGTH = 20;
+    private static final int PHONE_FALLBACK_LENGTH = 11;
     private static final String UNKNOWN_ENVELOPE_MESSAGE =
             "Resposta Medware com envelope nao reconhecido.";
 
@@ -146,9 +149,11 @@ public class MedwareApiMapper {
     }
 
     private String phone(JsonNode node) {
-        String ddd = onlyDigits(text(node, "numeroCelularddd", "dddCelular", "ddd"));
-        String number = onlyDigits(text(node, "numeroCelular", "celular", "telefonePaciente", "telefone"));
-        if (number != null && ddd != null && !number.startsWith(ddd)) {
+        String ddd = onlyDigits(scalarText(node, "numeroCelularddd", "dddCelular", "ddd"));
+        String number = firstValidPhoneCandidate(
+                scalarText(node, "numeroCelular", "celular", "telefonePaciente", "telefone"));
+        if (number != null && number.length() <= 9 && ddd != null
+                && ddd.length() <= 3 && number.length() + ddd.length() <= PHONE_MAX_LENGTH) {
             return ddd + number;
         }
         if (number != null) {
@@ -157,7 +162,8 @@ public class MedwareApiMapper {
         JsonNode telefones = find(node, "telefones");
         if (telefones != null && telefones.isArray()) {
             for (JsonNode telefone : telefones) {
-                String value = onlyDigits(text(telefone, "numero", "telefone", "celular"));
+                String value = firstValidPhoneCandidate(
+                        scalarText(telefone, "numero", "telefone", "celular"));
                 if (value != null) {
                     return value;
                 }
@@ -361,7 +367,35 @@ public class MedwareApiMapper {
         return null;
     }
 
-    private String onlyDigits(String value) {
+    public static String normalizarTelefoneExterno(String telefone, String fallback) {
+        String candidate = firstValidPhoneCandidate(telefone);
+        if (candidate != null) {
+            return candidate;
+        }
+        String fallbackDigits = onlyDigits(fallback);
+        if (fallbackDigits == null) {
+            return "0".repeat(PHONE_FALLBACK_LENGTH);
+        }
+        return (fallbackDigits + "0".repeat(PHONE_FALLBACK_LENGTH))
+                .substring(0, PHONE_FALLBACK_LENGTH);
+    }
+
+    private static String firstValidPhoneCandidate(String telefone) {
+        if (telefone == null || telefone.isBlank()) {
+            return null;
+        }
+        for (String part : telefone.split("[/,;|\\r\\n]+")) {
+            String digits = onlyDigits(part);
+            if (digits != null
+                    && digits.length() >= PHONE_MIN_LENGTH
+                    && digits.length() <= PHONE_MAX_LENGTH) {
+                return digits;
+            }
+        }
+        return null;
+    }
+
+    private static String onlyDigits(String value) {
         if (value == null) {
             return null;
         }
@@ -381,6 +415,25 @@ public class MedwareApiMapper {
             String text = value.isTextual() ? value.asText() : value.toString();
             if (!text.isBlank() && !"null".equalsIgnoreCase(text)) {
                 return text.replaceAll("^\"|\"$", "");
+            }
+        }
+        return null;
+    }
+
+    private String scalarText(JsonNode node, String... names) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return null;
+        }
+        for (String name : names) {
+            JsonNode value = find(node, name);
+            if (value == null || value.isNull() || value.isMissingNode()) {
+                continue;
+            }
+            if (value.isTextual() || value.isNumber()) {
+                String scalar = value.asText();
+                if (!scalar.isBlank() && !"null".equalsIgnoreCase(scalar)) {
+                    return scalar;
+                }
             }
         }
         return null;
