@@ -34,6 +34,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
   const [content, setContent] = useState('');
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState('');
+  const [quickActiveIndex, setQuickActiveIndex] = useState(0);
   const [showNewMessagesNotice, setShowNewMessagesNotice] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
@@ -98,6 +99,62 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
     input.style.height = 'auto';
     input.style.height = `${Math.min(input.scrollHeight, 132)}px`;
   }, [content]);
+
+  useEffect(() => {
+    setQuickActiveIndex((current) => Math.max(0, Math.min(current, filteredQuickMessages.length - 1)));
+  }, [filteredQuickMessages.length]);
+
+  function focusComposer() {
+    window.requestAnimationFrame(() => {
+      const input = composer.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
+  }
+
+  function closeQuickMessages({ focus = false }: { focus?: boolean } = {}) {
+    setQuickOpen(false);
+    setQuickSearch('');
+    setQuickActiveIndex(0);
+    if (focus) focusComposer();
+  }
+
+  function openQuickMessages() {
+    setQuickOpen(true);
+    setQuickSearch('');
+    setQuickActiveIndex(0);
+  }
+
+  function selectQuickMessage(message: MensagemRapida) {
+    setContent(message.conteudo);
+    closeQuickMessages({ focus: true });
+  }
+
+  function handleQuickSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeQuickMessages({ focus: true });
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (!event.shiftKey && filteredQuickMessages[quickActiveIndex]) {
+        selectQuickMessage(filteredQuickMessages[quickActiveIndex]);
+      }
+      return;
+    }
+    if (event.key === 'ArrowDown' && filteredQuickMessages.length) {
+      event.preventDefault();
+      setQuickActiveIndex((current) => (current + 1) % filteredQuickMessages.length);
+      return;
+    }
+    if (event.key === 'ArrowUp' && filteredQuickMessages.length) {
+      event.preventDefault();
+      setQuickActiveIndex((current) => (current - 1 + filteredQuickMessages.length) % filteredQuickMessages.length);
+    }
+  }
 
   async function submit() {
     const value = content.trim();
@@ -208,27 +265,36 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-clinic-muted" />
               <input
                 value={quickSearch}
-                onChange={(event) => setQuickSearch(event.target.value)}
+                onChange={(event) => {
+                  setQuickSearch(event.target.value);
+                  setQuickActiveIndex(0);
+                }}
+                onKeyDown={handleQuickSearchKeyDown}
                 placeholder="Buscar mensagem rápida"
                 aria-label="Buscar mensagens rápidas"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={quickOpen}
+                aria-controls="quick-messages-list"
+                aria-activedescendant={filteredQuickMessages[quickActiveIndex] ? `quick-message-${filteredQuickMessages[quickActiveIndex].id}` : undefined}
                 className="h-9 w-full rounded-lg border border-clinic-border bg-clinic-input pl-8 pr-3 text-[11px] text-clinic-text outline-none focus:border-clinic-primary"
               />
             </label>
-            <div className="mt-2 max-h-52 space-y-1 overflow-y-auto custom-scrollbar">
+            <div id="quick-messages-list" role="listbox" className="mt-2 max-h-52 space-y-1 overflow-y-auto custom-scrollbar">
               {filteredQuickMessages.length === 0 ? (
                 <p className="px-2 py-3 text-center text-[10px] text-clinic-muted">
                   Nenhuma mensagem rápida ativa.
                 </p>
-              ) : filteredQuickMessages.map((message) => (
+              ) : filteredQuickMessages.map((message, index) => (
                 <button
                   key={message.id}
+                  id={`quick-message-${message.id}`}
                   type="button"
-                  onClick={() => {
-                    setContent(message.conteudo);
-                    setQuickOpen(false);
-                    setQuickSearch('');
-                  }}
-                  className="w-full rounded-lg px-3 py-2.5 text-left hover:bg-clinic-hover"
+                  role="option"
+                  aria-selected={index === quickActiveIndex}
+                  onMouseEnter={() => setQuickActiveIndex(index)}
+                  onClick={() => selectQuickMessage(message)}
+                  className={`w-full rounded-lg px-3 py-2.5 text-left hover:bg-clinic-hover ${index === quickActiveIndex ? 'bg-clinic-hover' : ''}`}
                 >
                   <span className="block truncate text-[10px] font-extrabold text-clinic-text">
                     {message.titulo}
@@ -249,7 +315,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
             type="button"
             aria-label="Mensagens rápidas"
             disabled={!detail || busy || quickMessages.length === 0}
-            onClick={() => setQuickOpen((current) => !current)}
+            onClick={() => (quickOpen ? closeQuickMessages() : openQuickMessages())}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary disabled:opacity-40"
           >
             <MessageSquareText className="h-4 w-4" />

@@ -228,11 +228,67 @@ describe('ChatWindow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Mensagens rápidas' }));
     await user.type(screen.getByLabelText('Buscar mensagens rápidas'), 'confirmar');
-    await user.click(screen.getByRole('button', { name: /Confirmar consulta/ }));
+    await user.click(screen.getByRole('option', { name: /Confirmar consulta/ }));
 
     expect(screen.getByPlaceholderText('Digite uma mensagem...')).toHaveValue('Sua consulta esta confirmada.');
     expect(onSend).not.toHaveBeenCalled();
     expect(screen.queryByText('Inativa')).not.toBeInTheDocument();
+  });
+
+  it('should_select_the_first_quick_message_with_enter_without_sending', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    const messages = [{ ...quickMessages[0], titulo: 'One Piece', atalho: '/kkkk', conteudo: 'Orientado TGG' }];
+    render(<ChatWindow detail={detail} messages={[]} quickMessages={messages} busy={false} error={null} onSend={onSend} onAttach={async () => undefined} />);
+
+    await user.click(screen.getByRole('button', { name: 'Mensagens rápidas' }));
+    const search = screen.getByRole('combobox', { name: 'Buscar mensagens rápidas' });
+    await user.type(search, 'one piece');
+    const option = screen.getByRole('option', { name: /One Piece/ });
+    expect(option).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{Enter}');
+
+    const composer = screen.getByPlaceholderText('Digite uma mensagem...');
+    expect(composer).toHaveValue('Orientado TGG');
+    expect(composer).toHaveFocus();
+    expect(screen.queryByRole('combobox', { name: 'Buscar mensagens rápidas' })).not.toBeInTheDocument();
+    expect(onSend).not.toHaveBeenCalled();
+    await user.keyboard('{Enter}');
+    expect(onSend).toHaveBeenCalledWith('Orientado TGG');
+  });
+
+  it('should_navigate_quick_messages_with_arrows_and_select_the_active_option', () => {
+    const onSend = vi.fn();
+    const messages = [
+      { ...quickMessages[0], id: 101, titulo: 'Primeira', atalho: '/primeira', conteudo: 'Conteúdo um' },
+      { ...quickMessages[0], id: 102, titulo: 'Segunda', atalho: '/segunda', conteudo: 'Conteúdo dois' },
+    ];
+    render(<ChatWindow detail={detail} messages={[]} quickMessages={messages} busy={false} error={null} onSend={onSend} onAttach={async () => undefined} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mensagens rápidas' }));
+    const search = screen.getByRole('combobox', { name: 'Buscar mensagens rápidas' });
+    expect(screen.getByRole('option', { name: /Primeira/ })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    expect(screen.getByRole('option', { name: /Segunda/ })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(search, { key: 'Enter' });
+    expect(screen.getByPlaceholderText('Digite uma mensagem...')).toHaveValue('Conteúdo dois');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('should_keep_the_panel_open_when_enter_has_no_result_and_close_with_escape', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(<ChatWindow detail={detail} messages={[]} quickMessages={quickMessages} busy={false} error={null} onSend={onSend} onAttach={async () => undefined} />);
+    await user.click(screen.getByRole('button', { name: 'Mensagens rápidas' }));
+    const search = screen.getByRole('combobox', { name: 'Buscar mensagens rápidas' });
+    await user.type(search, 'inexistente');
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('combobox', { name: 'Buscar mensagens rápidas' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Digite uma mensagem...')).toHaveValue('');
+    expect(onSend).not.toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('combobox', { name: 'Buscar mensagens rápidas' })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Digite uma mensagem...')).toHaveFocus();
   });
 
   it('should_render_image_using_bff_endpoint', () => {
