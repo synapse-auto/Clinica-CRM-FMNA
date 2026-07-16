@@ -1,8 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getWhatsappTemplates } from '@/services/atendimentos';
 import { ChatWindow } from './ChatWindow';
-import type { AtendimentoDetalhe, MensagemAtendimento } from '@/types/atendimento';
+import type { AtendimentoDetalhe, MensagemAtendimento, WhatsappTemplate } from '@/types/atendimento';
+
+vi.mock('@/services/atendimentos', () => ({
+  getWhatsappTemplates: vi.fn(),
+}));
+
+const getTemplatesMock = vi.mocked(getWhatsappTemplates);
 
 const detail: AtendimentoDetalhe = {
   id: 30,
@@ -17,6 +24,7 @@ const detail: AtendimentoDetalhe = {
     telefone: '44 99999-9999',
     email: null,
     status: 'EM_ATENDIMENTO',
+    fotoUrl: null,
     ultimaInteracaoEm: null,
     requerRevisao: false,
     convenioStatus: null,
@@ -25,11 +33,33 @@ const detail: AtendimentoDetalhe = {
     convenioRevisadoPorNome: null,
   },
   atendentePrincipal: null,
+  janelaWhatsappAberta: true,
+  janelaWhatsappExpiraEm: '2026-07-16T18:00:00Z',
+  ultimaMensagemEntradaEm: '2026-07-15T18:00:00Z',
+  aguardandoRespostaTemplate: false,
+  whatsappTemplatesDisponiveis: true,
 };
 
 const scrollIntoViewMock = vi.fn();
 
+const template: WhatsappTemplate = {
+  id: 'template-1',
+  nome: 'retomar_atendimento',
+  idioma: 'pt_BR',
+  status: 'APPROVED',
+  categoria: 'UTILITY',
+  cabecalho: null,
+  corpo: 'Podemos continuar seu atendimento?',
+  rodape: null,
+  botoes: [],
+  variaveis: [],
+  suportado: true,
+  motivoNaoSuportado: null,
+};
+
 beforeEach(() => {
+  getTemplatesMock.mockReset();
+  getTemplatesMock.mockResolvedValue([template]);
   scrollIntoViewMock.mockClear();
   Object.defineProperty(Element.prototype, 'scrollIntoView', {
     configurable: true,
@@ -59,6 +89,8 @@ function makeMessage(id: number, direcao: MensagemAtendimento['direcao'] = 'ENTR
     entregueEm: null,
     lidaEm: null,
     midia: null,
+    templateNome: null,
+    templateIdioma: null,
   };
 }
 
@@ -311,6 +343,8 @@ describe('ChatWindow', () => {
         tamanhoBytes: 1234,
         url: '/api/atendimentos/30/mensagens/1/midia',
       },
+      templateNome: null,
+      templateIdioma: null,
     };
 
     render(
@@ -350,6 +384,8 @@ describe('ChatWindow', () => {
         tamanhoBytes: 5678,
         url: '/api/atendimentos/30/mensagens/2/midia',
       },
+      templateNome: null,
+      templateIdioma: null,
     };
 
     render(
@@ -389,6 +425,8 @@ describe('ChatWindow', () => {
         tamanhoBytes: 9999,
         url: '/api/atendimentos/30/mensagens/3/midia',
       },
+      templateNome: null,
+      templateIdioma: null,
     };
 
     render(
@@ -449,6 +487,8 @@ describe('ChatWindow', () => {
         tamanhoBytes: 1234,
         url: '/api/atendimentos/30/mensagens/4/midia',
       },
+      templateNome: null,
+      templateIdioma: null,
     };
 
     render(
@@ -467,6 +507,239 @@ describe('ChatWindow', () => {
     fireEvent.error(imgElement);
 
     expect(screen.getByText('Imagem indisponível')).toBeInTheDocument();
+  });
+
+  it('should_replace_attachment_button_with_accessible_add_menu', async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <ChatWindow
+        detail={detail}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(fileInput).not.toBeNull();
+    const fileClick = vi.spyOn(fileInput!, 'click');
+    const add = screen.getByRole('button', { name: 'Adicionar' });
+
+    expect(screen.queryByRole('button', { name: 'Anexar' })).not.toBeInTheDocument();
+    expect(add).toHaveAttribute('aria-haspopup', 'menu');
+    expect(add).toHaveAttribute('aria-expanded', 'false');
+    await user.click(add);
+    expect(add).toHaveAttribute('aria-expanded', 'true');
+    await user.click(screen.getByRole('menuitem', { name: /Enviar arquivo/ }));
+
+    expect(fileClick).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('menuitem', { name: /Enviar arquivo/ })).not.toBeInTheDocument();
+  });
+
+  it('should_close_add_menu_with_escape_and_disable_unavailable_templates', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChatWindow
+        detail={{ ...detail, whatsappTemplatesDisponiveis: false }}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Adicionar' }));
+    const templatesItem = screen.getByRole('menuitem', { name: /Templates/ });
+    expect(templatesItem).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText(/Templates da Meta não estão configurados/)).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menuitem', { name: /Templates/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Adicionar' })).toHaveFocus();
+  });
+
+  it('should_hide_free_composer_when_window_is_closed_and_open_templates_directly', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChatWindow
+        detail={{ ...detail, janelaWhatsappAberta: false }}
+        messages={[]}
+        quickMessages={quickMessages}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+        onSendTemplate={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText(/A sessão de 24 horas para atendimento foi encerrada/)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Digite uma mensagem...')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mensagens rápidas' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Adicionar' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Nova mensagem' }));
+    expect(screen.getByRole('dialog', { name: 'Enviar template do WhatsApp' })).toBeInTheDocument();
+    expect(getTemplatesMock).toHaveBeenCalledOnce();
+    expect(await screen.findByText('retomar_atendimento')).toBeInTheDocument();
+  });
+
+  it('should_explain_when_closed_window_has_no_templates_configured', () => {
+    render(
+      <ChatWindow
+        detail={{
+          ...detail,
+          janelaWhatsappAberta: false,
+          whatsappTemplatesDisponiveis: false,
+        }}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText('Templates da Meta não estão configurados para esta clínica.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nova mensagem' })).toBeDisabled();
+    expect(getTemplatesMock).not.toHaveBeenCalled();
+  });
+
+  it('should_keep_closed_window_after_template_send_and_reopen_only_from_updated_detail', async () => {
+    const user = userEvent.setup();
+    const onSendTemplate = vi.fn().mockResolvedValue(undefined);
+    const closedDetail = {
+      ...detail,
+      janelaWhatsappAberta: false,
+      aguardandoRespostaTemplate: true,
+    };
+    const { rerender } = render(
+      <ChatWindow
+        detail={closedDetail}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+        onSendTemplate={onSendTemplate}
+      />,
+    );
+
+    expect(screen.getByText(/Template enviado. Aguardando uma resposta/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Nova mensagem' }));
+    await screen.findByText('retomar_atendimento');
+    await user.click(screen.getByRole('button', { name: 'Enviar' }));
+    await waitFor(() => expect(onSendTemplate).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByPlaceholderText('Digite uma mensagem...')).not.toBeInTheDocument();
+    expect(screen.getByText(/Aguardando uma resposta/)).toBeInTheDocument();
+
+    rerender(
+      <ChatWindow
+        detail={{ ...closedDetail, janelaWhatsappAberta: true, aguardandoRespostaTemplate: false }}
+        messages={[makeMessage(50, 'ENTRADA')]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+        onSendTemplate={onSendTemplate}
+      />,
+    );
+    expect(screen.getByPlaceholderText('Digite uma mensagem...')).toBeInTheDocument();
+    expect(screen.queryByText(/Aguardando uma resposta/)).not.toBeInTheDocument();
+  });
+
+  it('should_not_allow_closed_window_to_attach_or_use_quick_messages', async () => {
+    const onAttach = vi.fn();
+    const { container } = render(
+      <ChatWindow
+        detail={{ ...detail, janelaWhatsappAberta: false }}
+        messages={[]}
+        quickMessages={quickMessages}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={onAttach}
+      />,
+    );
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    const file = new File(['conteúdo fictício'], 'arquivo.pdf', { type: 'application/pdf' });
+
+    fireEvent.change(input!, { target: { files: [file] } });
+
+    expect(onAttach).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Mensagens rápidas' })).not.toBeInTheDocument();
+  });
+
+  it('should_keep_typed_text_when_backend_rejects_common_send', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockRejectedValue(new Error('Use um template aprovado.'));
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={onSend}
+        onAttach={async () => undefined}
+      />,
+    );
+    const composer = screen.getByPlaceholderText('Digite uma mensagem...');
+
+    await user.type(composer, 'Texto que não deve sumir');
+    await user.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('Texto que não deve sumir'));
+    expect(composer).toHaveValue('Texto que não deve sumir');
+  });
+
+  it('should_render_template_metadata_without_regressing_message_content', () => {
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[{
+          ...makeMessage(70, 'SAIDA'),
+          tipoMedia: 'TEMPLATE',
+          conteudo: 'Mensagem de template\ncom duas linhas',
+          templateNome: 'retomar_atendimento',
+          templateIdioma: 'pt_BR',
+        }]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText('Template')).toBeInTheDocument();
+    expect(screen.getByText('retomar_atendimento')).toBeInTheDocument();
+    expect(screen.getByText(/pt_BR/)).toBeInTheDocument();
+    expect(screen.getByText(/Mensagem de template/)).toHaveClass('whitespace-pre-wrap');
+  });
+
+  it('should_not_render_negative_expiration_information', () => {
+    render(
+      <ChatWindow
+        detail={{ ...detail, janelaWhatsappExpiraEm: '2020-01-01T10:00:00Z' }}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText('Janela do WhatsApp aberta')).toBeInTheDocument();
+    expect(screen.queryByText(/Disponível até/)).not.toBeInTheDocument();
   });
 
   it('should_scroll_to_latest_message_when_opening_conversation', async () => {

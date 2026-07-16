@@ -11,6 +11,7 @@ import {
   criarAtendimentoLembrete,
   enviarAnexo,
   enviarMensagem,
+  enviarWhatsappTemplate,
   getAtendimento,
   getAtendimentoLembretes,
   getAtendimentoTags,
@@ -25,6 +26,7 @@ import {
   removerTagAtendimento,
   revisarConvenio,
   transferirAtendimento,
+  isWhatsappTemplateRequiredError,
 } from '@/services/atendimentos';
 import type {
   AtendenteOption,
@@ -32,6 +34,7 @@ import type {
   AtendimentoFilter,
   AtendimentoLembrete,
   AtendimentoResumo,
+  EnviarTemplateWhatsappRequest,
   MensagemAtendimento,
   NovoAtendimentoLembrete,
 } from '@/types/atendimento';
@@ -64,6 +67,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
   const [busy, setBusy] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const knownNotifications = useRef<Set<number> | null>(null);
+  const activeIdRef = useRef<number | null>(activeId);
 
   const refreshList = useCallback(async () => {
     try {
@@ -88,6 +92,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
         getMensagens(id),
         getAtendimentoTags(id),
       ]);
+      if (activeIdRef.current !== id) return;
       setDetail(nextDetail);
       setMessages(nextMessages);
       setActiveTags(nextTags);
@@ -104,6 +109,10 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       setRemindersLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
 
   const refreshReminders = useCallback(async (id: number) => {
     setRemindersLoading(true);
@@ -185,21 +194,31 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
     return () => window.clearInterval(interval);
   }, []);
 
-  async function runAction(action: () => Promise<unknown>) {
+  async function runAction(
+    action: () => Promise<unknown>,
+    options: { propagate?: boolean; targetId?: number | null } = {},
+  ) {
+    const targetId = options.targetId ?? activeId;
     setBusy(true);
     try {
       const result = await action();
       const sentMessage = isMensagemAtendimento(result) ? result : null;
-      if (sentMessage && activeId) {
+      if (sentMessage && targetId && activeIdRef.current === targetId) {
         setMessages((current) => mergeMensagem(current, sentMessage));
       }
-      if (activeId) await refreshActive(activeId);
+      if (targetId && activeIdRef.current === targetId) await refreshActive(targetId);
       await refreshList();
-      setError(sentMessage?.whatsappStatus === 'FALHA'
-        ? mensagemFalhaAmigavel(sentMessage.motivoFalha)
-        : null);
+      if (activeIdRef.current === targetId) {
+        setError(sentMessage?.whatsappStatus === 'FALHA'
+          ? mensagemFalhaAmigavel(sentMessage.motivoFalha)
+          : null);
+      }
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (targetId && activeIdRef.current === targetId) {
+        if (isWhatsappTemplateRequiredError(cause)) await refreshActive(targetId);
+        setError(errorMessage(cause));
+      }
+      if (options.propagate) throw cause;
     } finally {
       setBusy(false);
     }
@@ -260,10 +279,13 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
         busy={busy}
         error={error}
         onSend={(content) => activeId
-          ? runAction(() => enviarMensagem(activeId, content))
+          ? runAction(() => enviarMensagem(activeId, content), { propagate: true, targetId: activeId })
           : Promise.resolve()}
         onAttach={(file) => activeId
-          ? runAction(() => enviarAnexo(activeId, file))
+          ? runAction(() => enviarAnexo(activeId, file), { propagate: true, targetId: activeId })
+          : Promise.resolve()}
+        onSendTemplate={(request: EnviarTemplateWhatsappRequest) => activeId
+          ? runAction(() => enviarWhatsappTemplate(activeId, request), { propagate: true, targetId: activeId })
           : Promise.resolve()}
       />
       <ContactDetails

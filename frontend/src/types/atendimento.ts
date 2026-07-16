@@ -65,6 +65,48 @@ export type AtendimentoDetalhe = {
     nome: string;
     perfil: string;
   } | null;
+  janelaWhatsappAberta: boolean | null;
+  janelaWhatsappExpiraEm: string | null;
+  ultimaMensagemEntradaEm: string | null;
+  aguardandoRespostaTemplate: boolean | null;
+  whatsappTemplatesDisponiveis: boolean | null;
+};
+
+export type WhatsappTemplateStatus = 'APPROVED' | 'PENDING' | 'PAUSED' | 'REJECTED' | string;
+
+export type WhatsappTemplateComponent = 'HEADER' | 'BODY' | 'BUTTON';
+
+export type WhatsappTemplateVariable = {
+  componente: WhatsappTemplateComponent;
+  posicao: number;
+  indiceBotao: number | null;
+};
+
+export type WhatsappTemplateButton = {
+  tipo: string;
+  texto: string;
+  url: string | null;
+};
+
+export type WhatsappTemplate = {
+  id: string;
+  nome: string;
+  idioma: string;
+  status: WhatsappTemplateStatus;
+  categoria: string;
+  cabecalho: string | null;
+  corpo: string | null;
+  rodape: string | null;
+  botoes: WhatsappTemplateButton[];
+  variaveis: WhatsappTemplateVariable[];
+  suportado: boolean;
+  motivoNaoSuportado: string | null;
+};
+
+export type EnviarTemplateWhatsappRequest = {
+  nome: string;
+  idioma: string;
+  parametros: Array<WhatsappTemplateVariable & { valor: string }>;
 };
 
 export type MensagemAtendimento = {
@@ -86,6 +128,8 @@ export type MensagemAtendimento = {
     tamanhoBytes: number;
     url: string;
   } | null;
+  templateNome: string | null;
+  templateIdioma: string | null;
 };
 
 export type AtendimentoFilter =

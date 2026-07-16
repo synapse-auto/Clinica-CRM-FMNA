@@ -27,6 +27,11 @@ const detail: AtendimentoDetalhe = {
     convenioRevisadoPorNome: null,
   },
   atendentePrincipal: null,
+  janelaWhatsappAberta: true,
+  janelaWhatsappExpiraEm: null,
+  ultimaMensagemEntradaEm: null,
+  aguardandoRespostaTemplate: false,
+  whatsappTemplatesDisponiveis: true,
 };
 
 const baseProps = {

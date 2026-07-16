@@ -5,9 +5,11 @@ import type {
   AtendimentoLembrete,
   AtendimentoPage,
   AtendimentoResumo,
+  EnviarTemplateWhatsappRequest,
   MensagemAtendimento,
   NovoAtendimentoLembrete,
   NotificacaoAtendimento,
+  WhatsappTemplate,
 } from '@/types/atendimento';
 import type { MensagemRapida, TagOperacional } from '@/types/operacional';
 
@@ -114,6 +116,20 @@ export function enviarAnexo(id: number, arquivo: File): Promise<MensagemAtendime
   });
 }
 
+export function getWhatsappTemplates(id: number): Promise<WhatsappTemplate[]> {
+  return requestJson(`/api/atendimentos/${id}/templates-whatsapp`);
+}
+
+export function enviarWhatsappTemplate(
+  id: number,
+  request: EnviarTemplateWhatsappRequest,
+): Promise<MensagemAtendimento> {
+  return requestJson(`/api/atendimentos/${id}/mensagens-template`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
 export function marcarAtendimentoComoLido(id: number): Promise<void> {
   return requestVoid(`/api/atendimentos/${id}/leitura`, { method: 'PATCH' });
 }
@@ -171,20 +187,40 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
     headers.set('Content-Type', 'application/json');
   }
   const response = await fetch(path, { ...init, headers, cache: 'no-store' });
-  if (!response.ok) throw new Error(await readError(response));
+  if (!response.ok) throw await readError(response);
   return response.json() as Promise<T>;
 }
 
 async function requestVoid(path: string, init: RequestInit): Promise<void> {
   const response = await fetch(path, { ...init, cache: 'no-store' });
-  if (!response.ok) throw new Error(await readError(response));
+  if (!response.ok) throw await readError(response);
 }
 
-async function readError(response: Response): Promise<string> {
+export class AtendimentoApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null = null,
+  ) {
+    super(message);
+    this.name = 'AtendimentoApiError';
+  }
+}
+
+export function isWhatsappTemplateRequiredError(cause: unknown): cause is AtendimentoApiError {
+  return cause instanceof AtendimentoApiError
+    && cause.code === 'WHATSAPP_TEMPLATE_REQUIRED';
+}
+
+async function readError(response: Response): Promise<AtendimentoApiError> {
   try {
-    const body = await response.json() as { message?: string };
-    return body.message ?? `Falha na operação (${response.status})`;
+    const body = await response.json() as { message?: string; code?: string };
+    return new AtendimentoApiError(
+      body.message ?? `Falha na operação (${response.status})`,
+      response.status,
+      body.code ?? null,
+    );
   } catch {
-    return `Falha na operação (${response.status})`;
+    return new AtendimentoApiError(`Falha na operação (${response.status})`, response.status);
   }
 }

@@ -1,24 +1,27 @@
 'use client';
 
-import Image from 'next/image';
+import { Menu } from '@base-ui/react/menu';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import {
   AlertCircle,
   Check,
   CheckCheck,
   Clock3,
+  FileUp,
   FileText,
   MessageSquareText,
-  Paperclip,
+  Plus,
   Send,
   Search,
 } from 'lucide-react';
 import type {
   AtendimentoDetalhe,
+  EnviarTemplateWhatsappRequest,
   MensagemAtendimento,
 } from '@/types/atendimento';
 import type { MensagemRapida } from '@/types/operacional';
 import { ContactAvatar } from './ContactAvatar';
+import { WhatsappTemplateDialog } from './WhatsappTemplateDialog';
 
 type Props = {
   detail: AtendimentoDetalhe | null;
@@ -28,16 +31,21 @@ type Props = {
   error: string | null;
   onSend: (content: string) => Promise<void>;
   onAttach: (file: File) => Promise<void>;
+  onSendTemplate?: (request: EnviarTemplateWhatsappRequest) => Promise<void>;
 };
 
-export function ChatWindow({ detail, messages, quickMessages, busy, error, onSend, onAttach }: Props) {
+export function ChatWindow({ detail, messages, quickMessages, busy, error, onSend, onAttach, onSendTemplate }: Props) {
   const [content, setContent] = useState('');
   const [quickOpen, setQuickOpen] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState('');
   const [quickActiveIndex, setQuickActiveIndex] = useState(0);
   const [showNewMessagesNotice, setShowNewMessagesNotice] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
+  const templateOpener = useRef<HTMLElement | null>(null);
   const messageScrollContainer = useRef<HTMLDivElement>(null);
   const messageEnd = useRef<HTMLDivElement>(null);
   const previousConversationId = useRef<number | null>(null);
@@ -45,6 +53,8 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
   const isNearBottom = useRef(true);
   const filteredQuickMessages = filterQuickMessages(quickMessages, quickSearch);
   const lastMessage = messages.at(-1);
+  const windowOpen = detail?.janelaWhatsappAberta !== false;
+  const templatesAvailable = detail?.whatsappTemplatesDisponiveis === true;
 
   const scrollToLastMessage = useCallback((behavior: ScrollBehavior = 'auto') => {
     window.requestAnimationFrame(() => {
@@ -92,6 +102,15 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
     previousConversationId.current = currentConversationId;
     previousLastMessageId.current = currentLastMessageId;
   }, [detail?.id, lastMessage?.direcao, lastMessage?.id, scrollToLastMessage]);
+
+  useEffect(() => {
+    setContent('');
+    setAddMenuOpen(false);
+    setTemplatesOpen(false);
+    closeQuickMessages();
+  // O ID é a fronteira entre conversas; não carregamos estado sensível para outro paciente.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.id]);
 
   useEffect(() => {
     const input = composer.current;
@@ -158,9 +177,27 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
 
   async function submit() {
     const value = content.trim();
-    if (!value || busy || !detail) return;
-    setContent('');
-    await onSend(value);
+    if (!value || busy || !detail || !windowOpen) return;
+    try {
+      await onSend(value);
+      setContent('');
+    } catch {
+      // O texto permanece para correção ou envio posterior por decisão do usuário.
+    }
+  }
+
+  function openTemplates(opener: HTMLElement | null) {
+    if (!detail || !templatesAvailable) return;
+    templateOpener.current = opener;
+    setAddMenuOpen(false);
+    setTemplatesOpen(true);
+  }
+
+  function changeTemplatesOpen(nextOpen: boolean) {
+    setTemplatesOpen(nextOpen);
+    if (!nextOpen) {
+      window.requestAnimationFrame(() => templateOpener.current?.focus());
+    }
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -247,7 +284,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
         ) : null}
       </div>
 
-      <div className="shrink-0 border-t border-clinic-border bg-clinic-surface px-6 py-4">
+      <div className="shrink-0 border-t border-clinic-border bg-clinic-surface px-4 py-4 sm:px-6">
         <input
           ref={fileInput}
           type="file"
@@ -255,11 +292,11 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
           accept="image/jpeg,image/png,image/webp,audio/ogg,audio/mpeg,audio/mp4,application/pdf"
           onChange={(event) => {
             const file = event.target.files?.[0];
-            if (file) void onAttach(file);
+            if (file && windowOpen) void onAttach(file).catch(() => undefined);
             event.target.value = '';
           }}
         />
-        {quickOpen && detail ? (
+        {windowOpen && quickOpen && detail ? (
           <div className="mx-auto mb-3 max-w-[880px] rounded-xl border border-clinic-border bg-clinic-surface p-3 shadow-lg shadow-clinic-primary/5">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-clinic-muted" />
@@ -310,46 +347,103 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
             </div>
           </div>
         ) : null}
-        <div className="mx-auto flex w-full max-w-[880px] items-center gap-2.5">
-          <button
-            type="button"
-            aria-label="Mensagens rápidas"
-            disabled={!detail || busy || quickMessages.length === 0}
-            onClick={() => (quickOpen ? closeQuickMessages() : openQuickMessages())}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary disabled:opacity-40"
-          >
-            <MessageSquareText className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Anexar"
-            disabled={!detail || busy}
-            onClick={() => fileInput.current?.click()}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary disabled:opacity-40"
-          >
-            <Paperclip className="h-4 w-4 -rotate-45" />
-          </button>
-          <textarea
-            ref={composer}
-            value={content}
-            disabled={!detail || busy}
-            onChange={(event) => setContent(event.target.value)}
-            onKeyDown={handleComposerKeyDown}
-            placeholder="Digite uma mensagem..."
-            rows={1}
-            className="min-h-11 max-h-[132px] flex-1 resize-none rounded-xl border border-clinic-border bg-clinic-input px-4 py-3 text-[12px] text-clinic-text outline-none placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10 disabled:opacity-50 custom-scrollbar"
-          />
-          <button
-            type="button"
-            aria-label="Enviar"
-            disabled={!detail || busy || !content.trim()}
-            onClick={() => void submit()}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-clinic-primary text-white transition hover:bg-clinic-primary-strong disabled:opacity-40"
-          >
-            <Send className="ml-0.5 h-4 w-4" />
-          </button>
-        </div>
+        {detail && !windowOpen ? (
+          <div className="mx-auto flex w-full max-w-[880px] flex-col items-center rounded-lg border border-clinic-warning/35 bg-clinic-warning/10 px-4 py-5 text-center">
+            <Clock3 className="h-5 w-5 text-clinic-warning" />
+            <p className="mt-2 max-w-2xl text-xs font-bold text-clinic-text">
+              {detail.aguardandoRespostaTemplate
+                ? 'Template enviado. Aguardando uma resposta do paciente para liberar novas mensagens.'
+                : 'A sessão de 24 horas para atendimento foi encerrada. A partir de agora, somente mensagens através de templates serão aceitas.'}
+            </p>
+            {!templatesAvailable ? (
+              <p className="mt-2 text-[10px] text-clinic-danger">Templates da Meta não estão configurados para esta clínica.</p>
+            ) : null}
+            <button
+              type="button"
+              disabled={!templatesAvailable || busy}
+              onClick={(event) => openTemplates(event.currentTarget)}
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-clinic-primary px-4 text-xs font-extrabold text-white hover:bg-clinic-primary-strong disabled:opacity-40"
+            >
+              <MessageSquareText className="h-4 w-4" />
+              Nova mensagem
+            </button>
+          </div>
+        ) : (
+          <div className="mx-auto w-full max-w-[880px]">
+            {detail ? <WhatsappWindowIndicator expiresAt={detail.janelaWhatsappExpiraEm} /> : null}
+            <div className="mt-2 flex items-center gap-2.5">
+              <button
+                type="button"
+                aria-label="Mensagens rápidas"
+                disabled={!detail || busy || quickMessages.length === 0}
+                onClick={() => (quickOpen ? closeQuickMessages() : openQuickMessages())}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary disabled:opacity-40"
+              >
+                <MessageSquareText className="h-4 w-4" />
+              </button>
+              <Menu.Root open={addMenuOpen} onOpenChange={setAddMenuOpen}>
+                <Menu.Trigger
+                  ref={addButton}
+                  aria-label="Adicionar"
+                  aria-expanded={addMenuOpen}
+                  aria-haspopup="menu"
+                  disabled={!detail || busy}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary focus-visible:outline-2 focus-visible:outline-clinic-primary disabled:opacity-40"
+                >
+                  <Plus className="h-5 w-5" />
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Positioner side="top" align="start" sideOffset={8} className="z-[70]">
+                    <Menu.Popup className="w-64 rounded-md border border-clinic-border bg-clinic-surface p-1.5 text-clinic-text shadow-xl outline-none">
+                      <Menu.Item
+                        disabled={!windowOpen || busy}
+                        onClick={() => fileInput.current?.click()}
+                        className="flex cursor-default items-start gap-3 rounded-md px-3 py-2.5 text-xs outline-none data-[highlighted]:bg-clinic-hover data-[disabled]:opacity-45"
+                      >
+                        <FileUp className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span><span className="block font-bold">Enviar arquivo</span>{!windowOpen ? <span className="mt-0.5 block text-[10px] text-clinic-muted">Disponível somente dentro da janela de 24 horas.</span> : null}</span>
+                      </Menu.Item>
+                      <Menu.Item
+                        disabled={!templatesAvailable || busy}
+                        onClick={() => openTemplates(addButton.current)}
+                        className="flex cursor-default items-start gap-3 rounded-md px-3 py-2.5 text-xs outline-none data-[highlighted]:bg-clinic-hover data-[disabled]:opacity-45"
+                      >
+                        <MessageSquareText className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span><span className="block font-bold">Templates</span>{!templatesAvailable ? <span className="mt-0.5 block text-[10px] text-clinic-muted">Templates da Meta não estão configurados para esta clínica.</span> : null}</span>
+                      </Menu.Item>
+                    </Menu.Popup>
+                  </Menu.Positioner>
+                </Menu.Portal>
+              </Menu.Root>
+              <textarea
+                ref={composer}
+                value={content}
+                disabled={!detail || busy}
+                onChange={(event) => setContent(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
+                placeholder="Digite uma mensagem..."
+                rows={1}
+                className="min-h-11 max-h-[132px] flex-1 resize-none rounded-xl border border-clinic-border bg-clinic-input px-4 py-3 text-[12px] text-clinic-text outline-none placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10 disabled:opacity-50 custom-scrollbar"
+              />
+              <button
+                type="button"
+                aria-label="Enviar"
+                disabled={!detail || busy || !content.trim()}
+                onClick={() => void submit()}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-clinic-primary text-white transition hover:bg-clinic-primary-strong disabled:opacity-40"
+              >
+                <Send className="ml-0.5 h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+      <WhatsappTemplateDialog
+        open={templatesOpen}
+        atendimentoId={detail?.id ?? null}
+        onOpenChange={changeTemplatesOpen}
+        onSend={onSendTemplate ?? (() => Promise.resolve())}
+      />
     </section>
   );
 }
@@ -378,9 +472,32 @@ function normalizeShortcut(value: string) {
   return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 }
 
+function WhatsappWindowIndicator({ expiresAt }: { expiresAt: string | null }) {
+  const expiration = expiresAt ? new Date(expiresAt) : null;
+  const validExpiration = expiration && !Number.isNaN(expiration.getTime()) ? expiration : null;
+  const formatted = validExpiration ? new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(validExpiration) : null;
+  const time = validExpiration && validExpiration.getTime() >= Date.now()
+    ? new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(validExpiration)
+    : null;
+  return (
+    <p
+      title={formatted ? `Janela disponível até ${formatted}` : undefined}
+      aria-label={formatted ? `Janela do WhatsApp aberta. Disponível até ${formatted}` : 'Janela do WhatsApp aberta'}
+      className="flex items-center gap-1.5 text-[10px] font-semibold text-clinic-success"
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-clinic-success" />
+      Janela do WhatsApp aberta{time ? ` · Disponível até ${time}` : ''}
+    </p>
+  );
+}
+
 function MessageBubble({ message }: { message: MensagemAtendimento }) {
   const outbound = message.direcao === 'SAIDA';
   const failed = message.whatsappStatus === 'FALHA';
+  const template = message.tipoMedia === 'TEMPLATE';
   return (
     <div className={`flex flex-col ${outbound ? 'items-end' : 'items-start'}`}>
       <div
@@ -392,7 +509,14 @@ function MessageBubble({ message }: { message: MensagemAtendimento }) {
             : 'rounded-tl-sm border border-clinic-border bg-clinic-surface text-clinic-text'
         }`}
       >
-        {message.midia ? <MediaContent message={message} /> : message.conteudo}
+        {template ? (
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[9px] font-bold">
+            <span className={`rounded-full px-2 py-0.5 ${failed ? 'bg-clinic-danger/15 text-clinic-danger' : 'bg-white/15 text-current'}`}>Template</span>
+            {message.templateNome ? <span className="opacity-85">{message.templateNome}</span> : null}
+            {message.templateIdioma ? <span className="opacity-70">· {message.templateIdioma}</span> : null}
+          </div>
+        ) : null}
+        <div className="whitespace-pre-wrap">{message.midia ? <MediaContent message={message} /> : message.conteudo}</div>
       </div>
       <div className="mt-1 flex items-center gap-1 text-[10px] text-clinic-muted">
         {new Intl.DateTimeFormat('pt-BR', {

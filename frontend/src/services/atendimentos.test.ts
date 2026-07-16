@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   adicionarTagAtendimento,
+  AtendimentoApiError,
   ativarIaAtendimento,
   enviarAnexo,
   enviarMensagem,
+  enviarWhatsappTemplate,
+  getWhatsappTemplates,
   getMensagensRapidasAtivas,
   getTagsOperacionaisAtivas,
+  isWhatsappTemplateRequiredError,
   listAtendimentos,
   removerTagAtendimento,
   revisarConvenio,
@@ -50,6 +54,63 @@ describe('atendimentos service', () => {
     await expect(enviarMensagem(12, 'Olá')).rejects.toThrow(
       'WhatsApp/Meta não configurado',
     );
+  });
+
+  it('should_preserve_structured_template_required_error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(
+      {
+        message: 'Use um template aprovado.',
+        code: 'WHATSAPP_TEMPLATE_REQUIRED',
+      },
+      409,
+    )));
+
+    const error = await enviarMensagem(12, 'Mensagem mantida').catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(AtendimentoApiError);
+    expect(error).toMatchObject({
+      message: 'Use um template aprovado.',
+      status: 409,
+      code: 'WHATSAPP_TEMPLATE_REQUIRED',
+    });
+    expect(isWhatsappTemplateRequiredError(error)).toBe(true);
+  });
+
+  it('should_load_templates_and_send_only_the_allowed_contract', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse({ id: 88 }, 201));
+    vi.stubGlobal('fetch', fetchMock);
+    const request = {
+      nome: 'confirmacao_consulta',
+      idioma: 'pt_BR',
+      parametros: [{ componente: 'BODY' as const, posicao: 1, indiceBotao: null, valor: '15 de julho' }],
+    };
+
+    await getWhatsappTemplates(12);
+    await enviarWhatsappTemplate(12, request);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/atendimentos/12/templates-whatsapp',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/atendimentos/12/mensagens-template',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(request),
+        cache: 'no-store',
+      }),
+    );
+    const sentBody = JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body));
+    expect(sentBody).toEqual(request);
+    expect(sentBody).not.toHaveProperty('telefone');
+    expect(sentBody).not.toHaveProperty('clinicaId');
+    expect(sentBody).not.toHaveProperty('accessToken');
+    expect(sentBody).not.toHaveProperty('businessAccountId');
+    expect(sentBody).not.toHaveProperty('phoneNumberId');
   });
 
   it('should_upload_attachment_as_form_data', async () => {
