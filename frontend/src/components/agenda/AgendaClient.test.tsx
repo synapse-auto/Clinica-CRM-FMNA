@@ -243,7 +243,7 @@ describe('AgendaClient (somente leitura)', () => {
     expect(screen.getByText('Agendamentos de 13/07/2026 a 17/07/2026')).toBeInTheDocument();
   });
 
-  it('should_keep_current_week_shortcut_weekdays_and_empty_days', async () => {
+  it('should_keep_current_week_shortcut_and_switch_between_compact_days', async () => {
     const weekAppointments = [
       appointment({ id: 83, pacienteNome: 'Paciente Segunda', dataHoraInicio: '2026-07-13T08:15:00-03:00' }),
       appointment({ id: 84, pacienteNome: 'Paciente Quarta', dataHoraInicio: '2026-07-15T17:45:00-03:00' }),
@@ -270,10 +270,17 @@ describe('AgendaClient (somente leitura)', () => {
     expect(appointmentsUrl).toContain('inicio=2026-07-13T00:00:00-03:00');
     expect(appointmentsUrl).toContain('fim=2026-07-18T00:00:00-03:00');
     expect(await screen.findByText('Paciente Segunda')).toBeInTheDocument();
+    expect(screen.queryByText('Paciente Quarta')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /seg.*13.*1 agendamento/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /ter.*14.*0 agendamentos/i })).toBeInTheDocument();
+    const wednesday = screen.getByRole('button', { name: /qua.*15.*1 agendamento/i });
+    fireEvent.click(wednesday);
+    expect(screen.queryByText('Paciente Segunda')).not.toBeInTheDocument();
     expect(screen.getByText('Paciente Quarta')).toBeInTheDocument();
-    expect(screen.getByText(/seg.*13/i)).toBeInTheDocument();
-    expect(screen.getByText(/qua.*15/i)).toBeInTheDocument();
-    expect(screen.getAllByText('Sem agendamentos')).toHaveLength(3);
+    expect(wednesday).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: /ter.*14.*0 agendamentos/i }));
+    expect(screen.getByText('Sem agendamentos')).toBeInTheDocument();
   });
 
   it('should_group_four_procedures_for_same_patient_time_doctor_and_status', () => {
@@ -295,14 +302,21 @@ describe('AgendaClient (somente leitura)', () => {
 
     expect(screen.getAllByText('Paciente Fictício')).toHaveLength(1);
     expect(screen.getByText('4 procedimentos')).toBeInTheDocument();
+    expect(screen.queryByText('Procedimento Alfa')).not.toBeInTheDocument();
+    const groupButton = screen.getByLabelText(/Paciente Fictício/);
+    expect(groupButton).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(groupButton);
     expect(screen.getByText('Procedimento Alfa')).toBeInTheDocument();
     expect(screen.getByText('Procedimento Beta')).toBeInTheDocument();
     expect(screen.getByText('Procedimento Gama')).toBeInTheDocument();
     expect(screen.getByText('Procedimento Delta')).toBeInTheDocument();
-    expect(screen.getByLabelText(/Paciente Fictício/)).toHaveAttribute(
+    expect(groupButton).toHaveAttribute('aria-expanded', 'true');
+    expect(groupButton).toHaveAttribute(
       'data-appointment-ids',
       '102,104,101,103',
     );
+    fireEvent.click(groupButton);
+    expect(screen.queryByText('Procedimento Alfa')).not.toBeInTheDocument();
   });
 
   it('should_keep_groups_separate_by_doctor_status_and_patient', () => {
@@ -363,7 +377,7 @@ describe('AgendaClient (somente leitura)', () => {
     expect(screen.queryByText('Paciente Médico B')).not.toBeInTheDocument();
   });
 
-  it('should_preserve_sao_paulo_time_and_empty_days_in_week', () => {
+  it('should_preserve_sao_paulo_time_and_show_empty_selected_day', () => {
     render(
       <AgendaClient
         initialAppointments={[
@@ -378,8 +392,9 @@ describe('AgendaClient (somente leitura)', () => {
 
     expect(screen.getByText(/08:15/)).toBeInTheDocument();
     expect(screen.getByText(/17:45/)).toBeInTheDocument();
-    expect(screen.getByText(/qua.*15/i)).toBeInTheDocument();
-    expect(screen.getAllByText('Sem agendamentos')).toHaveLength(4);
+    expect(screen.getByRole('button', { name: /qua.*15.*2 agendamentos/i })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /seg.*13.*0 agendamentos/i }));
+    expect(screen.getByText('Sem agendamentos')).toBeInTheDocument();
   });
 
   it('should_preserve_all_ids_when_raw_records_are_visually_grouped', () => {
@@ -404,5 +419,35 @@ describe('AgendaClient (somente leitura)', () => {
     expect(groupedIds.sort((left, right) => left - right)).toEqual(
       appointments.map((item) => item.id),
     );
+
+    render(
+      <AgendaClient
+        initialAppointments={appointments}
+        initialOptions={medwareOptions}
+        initialError={null}
+        weekStart="2026-07-13"
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /qua.*15.*62 agendamentos/i })).toBeInTheDocument();
+  });
+
+  it('should_prefer_today_when_it_is_in_range_and_has_appointments', () => {
+    vi.setSystemTime(new Date('2026-07-15T12:00:00-03:00'));
+    render(
+      <AgendaClient
+        initialAppointments={[
+          appointment({ id: 701, pacienteNome: 'Paciente Segunda', dataHoraInicio: '2026-07-13T08:15:00-03:00' }),
+          appointment({ id: 702, pacienteNome: 'Paciente Hoje', dataHoraInicio: '2026-07-15T09:30:00-03:00' }),
+        ]}
+        initialOptions={options}
+        initialError={null}
+        weekStart="2026-07-13"
+      />,
+    );
+
+    expect(screen.getByText('Paciente Hoje')).toBeInTheDocument();
+    expect(screen.queryByText('Paciente Segunda')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /qua.*15.*1 agendamento/i })).toHaveAttribute('aria-pressed', 'true');
   });
 });

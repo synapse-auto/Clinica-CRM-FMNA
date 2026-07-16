@@ -1,10 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   CalendarDays,
   CalendarRange,
+  ChevronDown,
+  ChevronUp,
   Loader2,
   Stethoscope,
   UserRoundCheck,
@@ -55,14 +57,50 @@ export function AgendaClient({
   const [loading, setLoading] = useState(false);
   const [customStart, setCustomStart] = useState(initialRange.startDate);
   const [customEnd, setCustomEnd] = useState(initialRange.endDate);
-  const days = useMemo(() => buildDays(range.startDate, range.endDate), [range]);
-  const activeAppointments = appointments.filter((item) => item.status !== 'CANCELADO');
-  const visibleAppointments = selectedDoctor === 'all'
-    ? appointments
-    : appointments.filter((item) => appointmentDoctorKey(item) === selectedDoctor);
+  const [selectedDay, setSelectedDay] = useState(initialRange.startDate);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const days = useMemo(
+    () => buildDays(range.startDate, range.endDate),
+    [range.startDate, range.endDate],
+  );
+  const activeAppointments = useMemo(
+    () => appointments.filter((item) => item.status !== 'CANCELADO'),
+    [appointments],
+  );
+  const visibleAppointments = useMemo(
+    () => selectedDoctor === 'all'
+      ? appointments
+      : appointments.filter((item) => appointmentDoctorKey(item) === selectedDoctor),
+    [appointments, selectedDoctor],
+  );
+  const selectedDayAppointments = useMemo(
+    () => visibleAppointments.filter(
+      (appointment) => formatDate(appointment.dataHoraInicio) === selectedDay,
+    ),
+    [selectedDay, visibleAppointments],
+  );
   const metrics = buildMetrics(activeAppointments, options);
   const donutItems = buildDonutItems(activeAppointments);
   const barData = buildBarData(activeAppointments, options);
+
+  useEffect(() => {
+    setSelectedDay(preferredDay(days, visibleAppointments));
+    setExpandedGroups(new Set());
+  }, [days, visibleAppointments]);
+
+  function selectDay(day: string) {
+    setSelectedDay(day);
+    setExpandedGroups(new Set());
+  }
+
+  function toggleGroup(groupKey: string) {
+    setExpandedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  }
 
   async function loadRange(nextRange: AgendaRange) {
     setLoading(true);
@@ -171,32 +209,37 @@ export function AgendaClient({
         <MetricCard icon={Activity} title="Confirmações enviadas" value={metrics.confirmations} subtitle="no período selecionado" tone="purple" />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
-        <DemoCard
-          className="xl:col-span-8"
-          title="Agendamentos do Período"
-          description="Visão por dia e profissional"
-          actions={<CalendarDays className="h-4 w-4" />}
-        >
-          <div className="px-4 pb-4">
-            <DoctorFilters
-              options={options}
-              selected={selectedDoctor}
-              onSelect={setSelectedDoctor}
-            />
-            <WeekGrid
-              days={days}
-              appointments={visibleAppointments}
-            />
-          </div>
-        </DemoCard>
+      <DemoCard
+        title="Agendamentos do Período"
+        description="Selecione um dia para consultar os horários"
+        actions={<CalendarDays className="h-4 w-4" />}
+      >
+        <div className="px-4 pb-4">
+          <DoctorFilters
+            options={options}
+            selected={selectedDoctor}
+            onSelect={setSelectedDoctor}
+          />
+          <DayTabs
+            days={days}
+            appointments={visibleAppointments}
+            selectedDay={selectedDay}
+            onSelect={selectDay}
+          />
+          <CompactAgendaDay
+            date={selectedDay}
+            appointments={selectedDayAppointments}
+            expandedGroups={expandedGroups}
+            onToggleGroup={toggleGroup}
+          />
+        </div>
+      </DemoCard>
 
-        <DemoCard className="xl:col-span-4" title="Tipos de Atendimento" description="Distribuição no período">
-          <div className="flex min-h-[222px] items-center justify-center px-5 pb-4">
-            <DonutChart items={donutItems} valueMode="value" />
-          </div>
-        </DemoCard>
-      </div>
+      <DemoCard className="mt-3" title="Tipos de Atendimento" description="Distribuição no período">
+        <div className="flex min-h-[190px] items-center justify-center px-5 pb-4">
+          <DonutChart items={donutItems} valueMode="value" />
+        </div>
+      </DemoCard>
 
       <DemoCard className="mt-3" title="Agenda por Médico" description="Distribuição de atendimentos no período">
         <GroupedBarChart height={230} labels={barData.labels} series={barData.series} />
@@ -242,15 +285,15 @@ function DoctorFilters({
     ...options.medicos,
   ];
   return (
-    <div className="mb-3 flex flex-wrap gap-1.5">
+    <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
       {filters.map((doctor) => (
         <button
           key={filterKey(doctor)}
           type="button"
           onClick={() => onSelect(filterKey(doctor))}
           className={selected === filterKey(doctor)
-            ? 'rounded-lg bg-clinic-primary px-3 py-1.5 text-[9px] font-bold text-white'
-            : 'rounded-lg bg-clinic-surface-muted px-3 py-1.5 text-[9px] font-semibold text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-text'}
+            ? 'shrink-0 rounded-lg bg-clinic-primary px-3 py-1.5 text-[9px] font-bold text-white'
+            : 'shrink-0 rounded-lg bg-clinic-surface-muted px-3 py-1.5 text-[9px] font-semibold text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-text'}
         >
           {doctor.nome}
         </button>
@@ -265,96 +308,180 @@ function filterKey(doctor: DoctorFilter): string {
   return doctor.id === 'all' ? 'all' : doctorKey(doctor);
 }
 
-function WeekGrid({
+function DayTabs({
   days,
   appointments,
+  selectedDay,
+  onSelect,
 }: {
   days: Array<{ date: string; label: string }>;
   appointments: Agendamento[];
+  selectedDay: string;
+  onSelect: (date: string) => void;
 }) {
   return (
-    <div className="overflow-x-auto custom-scrollbar">
-      <div
-        className="grid min-w-[680px] gap-2"
-        style={{ gridTemplateColumns: `repeat(${days.length}, minmax(136px, 1fr))` }}
-      >
-        {days.map((day) => {
-          const dayAppointments = appointments.filter(
-            (appointment) => formatDate(appointment.dataHoraInicio) === day.date,
-          );
-          const dayGroups = groupAppointmentsForAgenda(dayAppointments);
-          return (
-            <div key={day.date} className="min-w-0">
-              <p className="mb-2 border-b border-clinic-border pb-1.5 text-center text-[9px] font-bold text-clinic-text">
-                {day.label}
-              </p>
-              <div className="space-y-1.5">
-                {dayGroups.map((group) => (
-                  <AppointmentCard key={group.key} group={group} />
-                ))}
-                {dayGroups.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-clinic-border px-2 py-3 text-center text-[8px] text-clinic-muted">
-                    Sem agendamentos
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    <div className="mb-3 flex gap-1.5 overflow-x-auto border-b border-clinic-border pb-2 custom-scrollbar">
+      {days.map((day) => {
+        const count = countAppointmentsOnDay(appointments, day.date);
+        const selected = selectedDay === day.date;
+        return (
+          <button
+            key={day.date}
+            type="button"
+            aria-label={`${day.label}: ${count} ${count === 1 ? 'agendamento' : 'agendamentos'}`}
+            aria-pressed={selected}
+            onClick={() => onSelect(day.date)}
+            className={selected
+              ? 'flex min-w-[72px] shrink-0 flex-col items-center rounded-lg bg-clinic-primary px-3 py-2 text-white'
+              : 'flex min-w-[72px] shrink-0 flex-col items-center rounded-lg bg-clinic-surface-muted px-3 py-2 text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-text'}
+          >
+            <span className="text-[9px] font-bold capitalize">{day.label}</span>
+            <span className="mt-0.5 text-[11px] font-extrabold">{count}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function AppointmentCard({
+function CompactAgendaDay({
+  date,
+  appointments,
+  expandedGroups,
+  onToggleGroup,
+}: {
+  date: string;
+  appointments: Agendamento[];
+  expandedGroups: Set<string>;
+  onToggleGroup: (groupKey: string) => void;
+}) {
+  const groups = groupAppointmentsForAgenda(appointments);
+  return (
+    <section aria-label={`Agenda de ${formatDisplayDate(date)}`}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-[10px] font-bold text-clinic-text">
+          {formatDisplayDate(date)}
+        </p>
+        <p className="text-[9px] font-semibold text-clinic-muted">
+          {appointments.length} {appointments.length === 1 ? 'agendamento' : 'agendamentos'}
+        </p>
+      </div>
+      <div className="max-h-[520px] space-y-1.5 overflow-y-auto pr-1 custom-scrollbar">
+        {groups.map((group) => (
+          <CompactAppointmentRow
+            key={group.key}
+            group={group}
+            expanded={expandedGroups.has(group.key)}
+            onToggle={() => onToggleGroup(group.key)}
+          />
+        ))}
+        {groups.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-clinic-border px-3 py-6 text-center text-[9px] text-clinic-muted">
+            Sem agendamentos
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function CompactAppointmentRow({
   group,
+  expanded,
+  onToggle,
 }: {
   group: AgendaAppointmentGroup;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   const appointment = group.appointments[0];
   const canceled = appointment.status === 'CANCELADO';
   const procedures = group.appointments.map(appointmentProcedureName);
   const statusLabel = formatStatus(appointment.status);
+  const expandable = procedures.length > 1;
+  const detailsId = `agenda-group-${group.appointmentIds.join('-')}`;
   return (
-    <div
-      aria-label={`${appointment.pacienteNome}, ${procedures.join(', ')}, ${formatTime(appointment.dataHoraInicio)}, ${statusLabel}`}
-      data-appointment-ids={group.appointmentIds.join(',')}
-      className={`min-h-12 w-full rounded-lg px-2.5 py-2 ${
-        canceled ? 'bg-clinic-danger/10 opacity-70' : 'bg-clinic-cyan/15'
-      }`}
-    >
-      <p className={`truncate text-[9px] font-extrabold ${canceled ? 'line-through text-clinic-muted' : 'text-clinic-text'}`}>
-        {appointment.pacienteNome}
-      </p>
-      <p className="mt-0.5 truncate text-[8px] text-clinic-muted">
-        {formatTime(appointment.dataHoraInicio)} · {appointment.medicoNome ?? 'Sem profissional'}
-      </p>
-      <span className={`mt-1 inline-flex text-[7px] font-bold uppercase ${
-        canceled ? 'text-clinic-danger' : 'text-clinic-primary'
-      }`}>
-        {statusLabel}
-      </span>
-      {procedures.length === 1 ? (
-        <p className="mt-1 text-[8px] font-semibold leading-snug text-clinic-text">
-          {procedures[0]}
-        </p>
-      ) : (
-        <div className="mt-1.5">
-          <p className="text-[8px] font-bold text-clinic-text">
-            {procedures.length} procedimentos
-          </p>
-          <ul className="mt-1 space-y-0.5 text-[8px] leading-snug text-clinic-muted">
-            {procedures.map((procedure, index) => (
-              <li key={`${group.appointmentIds[index]}:${procedure}`} className="flex gap-1">
-                <span aria-hidden="true">•</span>
-                <span>{procedure}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+    <div className={`overflow-hidden rounded-lg border ${
+      canceled
+        ? 'border-clinic-danger/25 bg-clinic-danger/10'
+        : 'border-clinic-border bg-clinic-surface-muted/70'
+    }`}>
+      <button
+        type="button"
+        aria-label={`${appointment.pacienteNome}, ${procedures.length === 1 ? procedures[0] : `${procedures.length} procedimentos`}, ${formatTime(appointment.dataHoraInicio)}, ${statusLabel}`}
+        aria-expanded={expandable ? expanded : undefined}
+        aria-controls={expandable ? detailsId : undefined}
+        data-appointment-ids={group.appointmentIds.join(',')}
+        onClick={expandable ? onToggle : undefined}
+        className={`grid w-full grid-cols-[52px_minmax(0,1.2fr)] gap-x-3 gap-y-1 px-3 py-2 text-left sm:grid-cols-[56px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-center ${
+          expandable ? 'cursor-pointer transition hover:bg-clinic-hover' : 'cursor-default'
+        }`}
+      >
+        <span className="row-span-2 text-[11px] font-extrabold text-clinic-primary sm:row-span-1">
+          {formatTime(appointment.dataHoraInicio)}
+        </span>
+        <span className={`min-w-0 truncate text-[10px] font-extrabold ${
+          canceled ? 'line-through text-clinic-muted' : 'text-clinic-text'
+        }`}>
+          {appointment.pacienteNome}
+        </span>
+        <span className="min-w-0 truncate text-[9px] font-semibold text-clinic-muted">
+          {appointment.medicoNome ?? 'Sem profissional'}
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5 text-[9px] font-semibold text-clinic-text">
+          <span className="truncate">
+            {procedures.length === 1 ? procedures[0] : `${procedures.length} procedimentos`}
+          </span>
+          {expandable ? (
+            expanded
+              ? <ChevronUp className="h-3.5 w-3.5 shrink-0 text-clinic-muted" />
+              : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-clinic-muted" />
+          ) : null}
+        </span>
+        <span className={`w-fit rounded-full px-2 py-0.5 text-[7px] font-bold uppercase ${
+          canceled
+            ? 'bg-clinic-danger/15 text-clinic-danger'
+            : 'bg-clinic-primary/10 text-clinic-primary'
+        }`}>
+          {statusLabel}
+        </span>
+      </button>
+      {expandable && expanded ? (
+        <ul
+          id={detailsId}
+          className="space-y-1 border-t border-clinic-border px-3 py-2 text-[9px] leading-snug text-clinic-muted"
+        >
+          {procedures.map((procedure, index) => (
+            <li key={`${group.appointmentIds[index]}:${procedure}`} className="flex gap-1.5">
+              <span aria-hidden="true">&bull;</span>
+              <span>{procedure}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
+}
+
+function preferredDay(
+  days: Array<{ date: string }>,
+  appointments: Agendamento[],
+) {
+  const today = formatDate(new Date().toISOString());
+  const todayInRange = days.some((day) => day.date === today);
+  if (todayInRange && countAppointmentsOnDay(appointments, today) > 0) {
+    return today;
+  }
+  const firstDayWithAppointments = days.find(
+    (day) => countAppointmentsOnDay(appointments, day.date) > 0,
+  );
+  return firstDayWithAppointments?.date ?? days[0]?.date ?? today;
+}
+
+function countAppointmentsOnDay(appointments: Agendamento[], date: string) {
+  return appointments.filter(
+    (appointment) => formatDate(appointment.dataHoraInicio) === date,
+  ).length;
 }
 
 export function groupAppointmentsForAgenda(
