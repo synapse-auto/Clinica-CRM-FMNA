@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
-import { publicDocumentTitle } from '@/config/public-branding';
+import { publicBranding, publicDocumentTitle } from '@/config/public-branding';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -21,6 +21,11 @@ export const metadata: Metadata = {
     template: `%s | ${publicDocumentTitle}`,
   },
   description: `Sistema de atendimento e gestão clínica${publicDocumentTitle === 'CRM de Atendimento Clínico' ? '' : ` da ${publicDocumentTitle.replace(/^CRM /, '')}`}`,
+  icons: {
+    icon: publicBranding.faviconUrl,
+    shortcut: publicBranding.faviconUrl,
+    apple: publicBranding.faviconUrl,
+  },
 };
 
 const themeInitializationScript = `

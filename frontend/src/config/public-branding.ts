@@ -22,9 +22,15 @@ function publicLogo() {
   return value?.startsWith('/') ? value : DEFAULT_BRANDING.logoUrl;
 }
 
+export function publicFavicon(value = process.env.NEXT_PUBLIC_CLINIC_FAVICON) {
+  const path = value?.trim();
+  return path?.startsWith('/') && !path.startsWith('//') ? path : '/favicon.ico';
+}
+
 export const publicBranding = {
   clinicName: publicValue('NEXT_PUBLIC_CLINIC_NAME', DEFAULT_BRANDING.clinicName),
   logoUrl: publicLogo(),
+  faviconUrl: publicFavicon(),
   headline: publicValue('NEXT_PUBLIC_LOGIN_HEADLINE', DEFAULT_BRANDING.headline),
   description: publicValue('NEXT_PUBLIC_LOGIN_DESCRIPTION', DEFAULT_BRANDING.description),
   benefits: DEFAULT_BRANDING.benefits,
