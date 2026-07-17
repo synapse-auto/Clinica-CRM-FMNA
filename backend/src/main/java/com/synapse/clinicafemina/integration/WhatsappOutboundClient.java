@@ -83,7 +83,7 @@ public class WhatsappOutboundClient {
         UriComponentsBuilder uriBuilder = UriComponentsBuilder
                 .fromHttpUrl(graphApiUrl)
                 .pathSegment(businessAccountId, "message_templates")
-                .queryParam("fields", "id,name,language,status,category,components")
+                .queryParam("fields", "id,name,language,status,category,parameter_format,components")
                 .queryParam("limit", 100);
         if (preenchido(after)) {
             uriBuilder.queryParam("after", after);

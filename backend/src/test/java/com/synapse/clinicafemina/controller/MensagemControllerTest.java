@@ -5,6 +5,7 @@ import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.WhatsappTemplateDTO;
 import com.synapse.clinicafemina.exception.GlobalExceptionHandler;
+import com.synapse.clinicafemina.exception.WhatsappTemplateParametersException;
 import com.synapse.clinicafemina.exception.WhatsappWindowClosedException;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.MensagemService;
@@ -114,6 +115,33 @@ class MensagemControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("WHATSAPP_TEMPLATE_REQUIRED"))
                 .andExpect(jsonPath("$.message").value(WhatsappWindowClosedException.MESSAGE));
+    }
+
+    @Test
+    void should_return_structured_bad_request_for_invalid_template_parameters() throws Exception {
+        when(templateService.enviar(eq(10L), eq(1L), isNull(), any()))
+                .thenThrow(new WhatsappTemplateParametersException(
+                        "Os parametros informados nao correspondem ao template oficial"
+                ));
+
+        mockMvc.perform(post("/api/atendimentos/10/mensagens-template")
+                        .with(user(usuario))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nome":"confirmacao_nomeada",
+                                  "idioma":"pt_BR",
+                                  "parametros":[{
+                                    "componente":"BODY",
+                                    "posicao":1,
+                                    "indiceBotao":null,
+                                    "nomeParametro":"nome_divergente",
+                                    "valor":"Pessoa ficticia"
+                                  }]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("WHATSAPP_TEMPLATE_PARAMETERS_INVALID"));
     }
 
     @Test

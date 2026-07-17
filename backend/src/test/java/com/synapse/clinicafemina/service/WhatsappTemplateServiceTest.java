@@ -10,6 +10,7 @@ import com.synapse.clinicafemina.dto.EnviarTemplateWhatsappRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.exception.WhatsappTemplateSendException;
+import com.synapse.clinicafemina.exception.WhatsappTemplateParametersException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
@@ -58,7 +59,7 @@ class WhatsappTemplateServiceTest {
                 mensagemRepository,
                 usuarioRepository,
                 whatsappClient,
-                new WhatsappTemplateMapper(),
+                new WhatsappTemplateMapper(new WhatsappTemplateParameterMapper()),
                 Clock.fixed(Instant.parse("2026-07-16T12:00:00Z"), ZoneOffset.UTC)
         );
         Clinica clinica = new Clinica();
@@ -223,6 +224,31 @@ class WhatsappTemplateServiceTest {
     }
 
     @Test
+    void should_reject_invalid_named_parameter_before_persistence_and_meta_call() {
+        when(atendimentoRepository.findByIdAndClinicaId(10L, 1L)).thenReturn(Optional.of(atendimento));
+        when(usuarioRepository.findAtivoByIdAndClinicaId(20L, 1L)).thenReturn(Optional.of(usuario));
+        when(whatsappClient.configuracaoTemplatesKey()).thenReturn("graph|waba-1");
+        when(whatsappClient.listarTemplatesPagina(null))
+                .thenReturn(new WhatsappOutboundClient.TemplatePage(
+                        List.of(namedTemplate()), null
+                ));
+        var invalidRequest = new EnviarTemplateWhatsappRequest(
+                "confirmacao_nomeada",
+                "pt_BR",
+                List.of(new EnviarTemplateWhatsappRequest.Parametro(
+                        "BODY", 1, null, "nome_divergente", "Pessoa ficticia"
+                ))
+        );
+
+        assertThrows(WhatsappTemplateParametersException.class,
+                () -> service.enviar(10L, 1L, 20L, invalidRequest));
+
+        verify(mensagemRepository, never()).save(any(Mensagem.class));
+        verify(atendimentoRepository, never()).save(any(Atendimento.class));
+        verify(whatsappClient, never()).enviarTemplate(any(), any(), any(), any());
+    }
+
+    @Test
     void should_block_unknown_template_and_language() {
         prepareApprovedTemplate();
         when(usuarioRepository.findAtivoByIdAndClinicaId(20L, 1L)).thenReturn(Optional.of(usuario));
@@ -261,12 +287,27 @@ class WhatsappTemplateServiceTest {
         );
     }
 
+    private Map<String, Object> namedTemplate() {
+        return Map.of(
+                "id", "tpl-named",
+                "name", "confirmacao_nomeada",
+                "language", "pt_BR",
+                "status", "APPROVED",
+                "category", "UTILITY",
+                "parameter_format", "NAMED",
+                "components", List.of(Map.of(
+                        "type", "BODY",
+                        "text", "Ola {{vr_nome}}"
+                ))
+        );
+    }
+
     private EnviarTemplateWhatsappRequest request() {
         return new EnviarTemplateWhatsappRequest(
                 "confirmacao",
                 "pt_BR",
                 List.of(new EnviarTemplateWhatsappRequest.Parametro(
-                        "BODY", 1, null, "16/07/2026"
+                        "BODY", 1, null, null, "16/07/2026"
                 ))
         );
     }

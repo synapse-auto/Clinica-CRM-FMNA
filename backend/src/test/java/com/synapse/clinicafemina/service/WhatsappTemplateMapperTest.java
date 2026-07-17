@@ -2,8 +2,10 @@ package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.dto.EnviarTemplateWhatsappRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
+import com.synapse.clinicafemina.exception.WhatsappTemplateParametersException;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -14,7 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WhatsappTemplateMapperTest {
 
-    private final WhatsappTemplateMapper mapper = new WhatsappTemplateMapper();
+    private final WhatsappTemplateMapper mapper = new WhatsappTemplateMapper(
+            new WhatsappTemplateParameterMapper()
+    );
 
     @Test
     void should_map_supported_text_template_and_render_safe_preview() {
@@ -31,6 +35,9 @@ class WhatsappTemplateMapperTest {
         assertTrue(prepared.preview().contains("Paciente"));
         assertTrue(prepared.preview().contains("16/07/2026"));
         assertEquals(3, prepared.metaComponents().size());
+        assertTrue(prepared.metaComponents().stream()
+                .flatMap(component -> parameters(component).stream())
+                .noneMatch(parameter -> parameter.containsKey("parameter_name")));
     }
 
     @Test
@@ -48,6 +55,132 @@ class WhatsappTemplateMapperTest {
 
         assertEquals("Aviso confirmado", prepared.preview());
         assertTrue(prepared.metaComponents().isEmpty());
+    }
+
+    @Test
+    void should_keep_static_buttons_without_creating_parameters() {
+        Map<String, Object> raw = Map.of(
+                "id", "tpl-static-button",
+                "name", "aviso_com_botao",
+                "language", "pt_BR",
+                "status", "APPROVED",
+                "category", "UTILITY",
+                "components", List.of(
+                        Map.of("type", "BODY", "text", "Aviso confirmado"),
+                        Map.of("type", "BUTTONS", "buttons", List.of(
+                                Map.of("type", "URL", "text", "Abrir", "url", "https://example.test/aviso")
+                        ))
+                )
+        );
+
+        var definition = mapper.map(raw);
+        var prepared = mapper.prepare(definition, List.of());
+
+        assertTrue(definition.dto().variaveis().isEmpty());
+        assertTrue(prepared.metaComponents().isEmpty());
+    }
+
+    @Test
+    void should_detect_named_header_and_body_and_build_named_payload_and_preview() {
+        var definition = mapper.map(namedTemplate());
+
+        assertTrue(definition.dto().suportado());
+        assertEquals(2, definition.dto().variaveis().size());
+        assertTrue(definition.dto().variaveis().stream()
+                .anyMatch(variable -> "HEADER".equals(variable.componente())
+                        && "vr_titulo".equals(variable.nomeParametro())));
+        assertTrue(definition.dto().variaveis().stream()
+                .anyMatch(variable -> "BODY".equals(variable.componente())
+                        && "vr_nome".equals(variable.nomeParametro())));
+
+        var prepared = mapper.prepare(definition, List.of(
+                namedParameter("HEADER", 1, null, "vr_titulo", "Confirmacao"),
+                namedParameter("BODY", 1, null, "vr_nome", "Pessoa ficticia")
+        ));
+
+        assertTrue(prepared.preview().contains("Confirmacao"));
+        assertTrue(prepared.preview().contains("Pessoa ficticia"));
+        List<Map<String, Object>> parameters = prepared.metaComponents().stream()
+                .flatMap(component -> parameters(component).stream())
+                .toList();
+        assertTrue(parameters.stream()
+                .anyMatch(parameter -> "vr_titulo".equals(parameter.get("parameter_name"))));
+        assertTrue(parameters.stream()
+                .anyMatch(parameter -> "vr_nome".equals(parameter.get("parameter_name"))));
+    }
+
+    @Test
+    void should_infer_named_format_when_meta_omits_parameter_format() {
+        Map<String, Object> raw = new LinkedHashMap<>(namedTemplate());
+        raw.remove("parameter_format");
+
+        var result = mapper.map(raw).dto();
+
+        assertTrue(result.suportado());
+        assertTrue(result.variaveis().stream()
+                .anyMatch(variable -> "vr_nome".equals(variable.nomeParametro())));
+    }
+
+    @Test
+    void should_reject_missing_extra_or_divergent_named_parameters() {
+        var definition = mapper.map(namedTemplate());
+        var header = namedParameter("HEADER", 1, null, "vr_titulo", "Confirmacao");
+        var body = namedParameter("BODY", 1, null, "vr_nome", "Pessoa ficticia");
+
+        assertThrows(WhatsappTemplateParametersException.class,
+                () -> mapper.prepare(definition, List.of(header)));
+        assertThrows(WhatsappTemplateParametersException.class,
+                () -> mapper.prepare(definition, List.of(header, body,
+                        namedParameter("BODY", 2, null, "vr_data", "17/07/2026"))));
+        assertThrows(WhatsappTemplateParametersException.class,
+                () -> mapper.prepare(definition, List.of(header,
+                        namedParameter("BODY", 1, null, "nome_divergente", "Pessoa ficticia"))));
+    }
+
+    @Test
+    void should_mark_mixed_or_incomplete_placeholders_as_unsupported() {
+        Map<String, Object> mixed = Map.of(
+                "id", "tpl-mixed",
+                "name", "misturado",
+                "language", "pt_BR",
+                "status", "APPROVED",
+                "category", "UTILITY",
+                "components", List.of(Map.of("type", "BODY", "text", "Ola {{1}} {{vr_nome}}"))
+        );
+        Map<String, Object> incomplete = Map.of(
+                "id", "tpl-incomplete",
+                "name", "incompleto",
+                "language", "pt_BR",
+                "status", "APPROVED",
+                "category", "UTILITY",
+                "components", List.of(Map.of("type", "BODY", "text", "Ola {{vr_nome}"))
+        );
+
+        assertFalse(mapper.map(mixed).dto().suportado());
+        assertFalse(mapper.map(incomplete).dto().suportado());
+    }
+
+    @Test
+    void should_mark_named_dynamic_url_as_unsupported() {
+        Map<String, Object> raw = Map.of(
+                "id", "tpl-named-url",
+                "name", "url_nomeada",
+                "language", "pt_BR",
+                "status", "APPROVED",
+                "category", "UTILITY",
+                "parameter_format", "NAMED",
+                "components", List.of(
+                        Map.of("type", "BODY", "text", "Confira"),
+                        Map.of("type", "BUTTONS", "buttons", List.of(
+                                Map.of("type", "URL", "text", "Abrir", "url", "https://example.test/{{vr_id}}")
+                        ))
+                )
+        );
+
+        var result = mapper.map(raw).dto();
+
+        assertFalse(result.suportado());
+        assertTrue(result.motivoNaoSuportado().contains("URL dinamica"));
     }
 
     @Test
@@ -140,12 +273,44 @@ class WhatsappTemplateMapperTest {
         );
     }
 
+    private Map<String, Object> namedTemplate() {
+        return Map.of(
+                "id", "tpl-named",
+                "name", "confirmacao_nomeada",
+                "language", "pt_BR",
+                "status", "APPROVED",
+                "category", "UTILITY",
+                "parameter_format", "NAMED",
+                "components", List.of(
+                        Map.of("type", "HEADER", "format", "TEXT", "text", "{{vr_titulo}}"),
+                        Map.of("type", "BODY", "text", "Ola {{vr_nome}}")
+                )
+        );
+    }
+
     private EnviarTemplateWhatsappRequest.Parametro parameter(
             String component,
             int position,
             Integer buttonIndex,
             String value
     ) {
-        return new EnviarTemplateWhatsappRequest.Parametro(component, position, buttonIndex, value);
+        return new EnviarTemplateWhatsappRequest.Parametro(component, position, buttonIndex, null, value);
+    }
+
+    private EnviarTemplateWhatsappRequest.Parametro namedParameter(
+            String component,
+            int position,
+            Integer buttonIndex,
+            String parameterName,
+            String value
+    ) {
+        return new EnviarTemplateWhatsappRequest.Parametro(
+                component, position, buttonIndex, parameterName, value
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> parameters(Map<String, Object> component) {
+        return (List<Map<String, Object>>) component.get("parameters");
     }
 }

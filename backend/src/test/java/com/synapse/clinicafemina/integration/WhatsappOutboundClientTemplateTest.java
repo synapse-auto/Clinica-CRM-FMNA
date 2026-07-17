@@ -39,9 +39,10 @@ class WhatsappOutboundClientTemplateTest {
 
     @Test
     void should_list_template_page_using_cursor_without_following_next_url() {
-        server.expect(once(), requestTo(org.hamcrest.Matchers.allOf(
+                server.expect(once(), requestTo(org.hamcrest.Matchers.allOf(
                         org.hamcrest.Matchers.containsString("/waba-1/message_templates"),
-                        org.hamcrest.Matchers.containsString("after=cursor-1")
+                        org.hamcrest.Matchers.containsString("after=cursor-1"),
+                        org.hamcrest.Matchers.containsString("parameter_format")
                 )))
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header("Authorization", "Bearer token-test-only"))
@@ -93,6 +94,55 @@ class WhatsappOutboundClientTemplateTest {
 
         assertEquals("wamid-1", wamid);
         assertTrue(client.templatesDisponiveis());
+        server.verify();
+    }
+
+    @Test
+    void should_send_named_parameter_with_official_name() {
+        server.expect(once(), requestTo("https://graph.example/v20.0/phone-1/messages"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.template.components[0].parameters[0].parameter_name")
+                        .value("vr_nome"))
+                .andExpect(jsonPath("$.template.components[0].parameters[0].text")
+                        .value("Pessoa ficticia"))
+                .andRespond(withSuccess("{" + "\"messages\":[{\"id\":\"wamid-named\"}]}",
+                        MediaType.APPLICATION_JSON));
+
+        String wamid = client.enviarTemplate(
+                "5511999990000",
+                "confirmacao_nomeada",
+                "pt_BR",
+                List.of(Map.of(
+                        "type", "body",
+                        "parameters", List.of(Map.of(
+                                "type", "text",
+                                "parameter_name", "vr_nome",
+                                "text", "Pessoa ficticia"
+                        ))
+                ))
+        );
+
+        assertEquals("wamid-named", wamid);
+        server.verify();
+    }
+
+    @Test
+    void should_omit_components_for_static_template() {
+        server.expect(once(), requestTo("https://graph.example/v20.0/phone-1/messages"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.template.name").value("aviso_estatico"))
+                .andExpect(jsonPath("$.template.components").doesNotExist())
+                .andRespond(withSuccess("{" + "\"messages\":[{\"id\":\"wamid-static\"}]}",
+                        MediaType.APPLICATION_JSON));
+
+        String wamid = client.enviarTemplate(
+                "5511999990000",
+                "aviso_estatico",
+                "pt_BR",
+                List.of()
+        );
+
+        assertEquals("wamid-static", wamid);
         server.verify();
     }
 }

@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getWhatsappTemplates } from '@/services/atendimentos';
+import { AtendimentoApiError, getWhatsappTemplates } from '@/services/atendimentos';
 import type {
   EnviarTemplateWhatsappRequest,
   WhatsappTemplate,
@@ -42,7 +42,8 @@ export function WhatsappTemplateDialog({ open, atendimentoId, onOpenChange, onSe
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [validationVisible, setValidationVisible] = useState(false);
   const requestSequence = useRef(0);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -51,7 +52,8 @@ export function WhatsappTemplateDialog({ open, atendimentoId, onOpenChange, onSe
     if (!atendimentoId) return;
     const sequence = ++requestSequence.current;
     setLoading(true);
-    setError(null);
+    setLoadError(null);
+    setSendError(null);
     try {
       const result = await getWhatsappTemplates(atendimentoId);
       if (sequence !== requestSequence.current) return;
@@ -60,7 +62,7 @@ export function WhatsappTemplateDialog({ open, atendimentoId, onOpenChange, onSe
       setValues({});
     } catch (cause) {
       if (sequence !== requestSequence.current) return;
-      setError(errorMessage(cause));
+      setLoadError(errorMessage(cause));
       setTemplates([]);
       setSelected(null);
     } finally {
@@ -75,6 +77,7 @@ export function WhatsappTemplateDialog({ open, atendimentoId, onOpenChange, onSe
     }
     setSearch('');
     setValues({});
+    setSendError(null);
     setValidationVisible(false);
     void loadTemplates();
     return () => {
@@ -104,7 +107,7 @@ export function WhatsappTemplateDialog({ open, atendimentoId, onOpenChange, onSe
   function selectTemplate(template: WhatsappTemplate) {
     setSelected(template);
     setValues({});
-    setError(null);
+    setSendError(null);
     setValidationVisible(false);
   }
 
@@ -119,19 +122,22 @@ export function WhatsappTemplateDialog({ open, atendimentoId, onOpenChange, onSe
         componente: variable.componente,
         posicao: variable.posicao,
         indiceBotao: variable.indiceBotao,
+        nomeParametro: variable.nomeParametro ?? null,
         valor: values[templateParameterKey(variable)],
       })),
     };
     setSending(true);
-    setError(null);
+    setSendError(null);
     try {
       await onSend(request);
       setValues({});
       setSearch('');
       setSelected(null);
+      setLoadError(null);
+      setSendError(null);
       onOpenChange(false);
     } catch (cause) {
-      setError(errorMessage(cause));
+      setSendError(sendErrorMessage(cause));
     } finally {
       setSending(false);
     }
@@ -189,20 +195,20 @@ export function WhatsappTemplateDialog({ open, atendimentoId, onOpenChange, onSe
 
                   <div aria-live="polite" className="mt-3 max-h-[46vh] space-y-2 overflow-y-auto pr-1 custom-scrollbar lg:max-h-[58vh]">
                     {loading ? <LoadingState /> : null}
-                    {!loading && error ? (
+                    {!loading && loadError ? (
                       <div className="rounded-md border border-clinic-danger/30 bg-clinic-danger/10 p-3 text-xs text-clinic-danger">
-                        <p>{error}</p>
+                        <p>{loadError}</p>
                         <button type="button" onClick={() => void loadTemplates()} className="mt-3 inline-flex items-center gap-2 font-bold underline">
                           <RefreshCw className="h-3.5 w-3.5" /> Tentar novamente
                         </button>
                       </div>
                     ) : null}
-                    {!loading && !error && filteredTemplates.length === 0 ? (
+                    {!loading && !loadError && filteredTemplates.length === 0 ? (
                       <p className="py-8 text-center text-xs text-clinic-muted">
                         {templates.length ? 'Nenhum template encontrado.' : 'Nenhum template cadastrado na Meta.'}
                       </p>
                     ) : null}
-                    {!loading && !error ? filteredTemplates.map((template) => {
+                    {!loading && !loadError ? filteredTemplates.map((template) => {
                       const active = selected?.nome === template.nome && selected.idioma === template.idioma;
                       return (
                         <button
@@ -276,7 +282,7 @@ export function WhatsappTemplateDialog({ open, atendimentoId, onOpenChange, onSe
             </div>
 
             <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-clinic-border bg-clinic-surface px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <p role="status" aria-live="polite" className="min-h-5 text-xs text-clinic-danger">{error}</p>
+              <p role="status" aria-live="polite" className="min-h-5 text-xs text-clinic-danger">{sendError}</p>
               <div className="flex justify-end gap-2">
                 <button type="button" disabled={sending} onClick={() => onOpenChange(false)} className="h-10 rounded-md border border-clinic-border px-4 text-xs font-bold hover:bg-clinic-hover disabled:opacity-40">
                   Cancelar
@@ -334,15 +340,20 @@ export function renderComponentText(
   buttonIndex: number | null,
   values: ParameterValues,
 ) {
-  return text.replace(/\{\{(\d+)}}/g, (_, rawPosition: string) => {
-    const position = Number(rawPosition);
-    return values[templateParameterKey({ componente: component, posicao: position, indiceBotao: buttonIndex })]
-      || `[variável ${position}]`;
+  return text.replace(/\{\{(\d+|[A-Za-z_][A-Za-z0-9_]{0,63})}}/g, (_, token: string) => {
+    const numeric = /^\d+$/.test(token);
+    const variable: WhatsappTemplateVariable = {
+      componente: component,
+      posicao: numeric ? Number(token) : 1,
+      indiceBotao: buttonIndex,
+      nomeParametro: numeric ? null : token,
+    };
+    return values[templateParameterKey(variable)] || `[variável ${token}]`;
   });
 }
 
 export function templateParameterKey(variable: WhatsappTemplateVariable) {
-  return `${variable.componente}:${variable.posicao}:${variable.indiceBotao ?? '-'}`;
+  return `${variable.componente}:${variable.nomeParametro ?? variable.posicao}:${variable.indiceBotao ?? '-'}`;
 }
 
 export function normalizeTemplateSearch(value: string) {
@@ -370,11 +381,19 @@ function statusLabel(status: string) {
 }
 
 function variableLabel(variable: WhatsappTemplateVariable) {
-  if (variable.componente === 'HEADER') return `Cabeçalho — variável ${variable.posicao}`;
+  const identifier = variable.nomeParametro ?? `variável ${variable.posicao}`;
+  if (variable.componente === 'HEADER') return `Cabeçalho — ${identifier}`;
   if (variable.componente === 'BUTTON') return `Botão ${(variable.indiceBotao ?? 0) + 1} — complemento da URL`;
-  return `Mensagem — variável ${variable.posicao}`;
+  return `Mensagem — ${identifier}`;
 }
 
 function errorMessage(cause: unknown) {
   return cause instanceof Error ? cause.message : 'Não foi possível concluir a operação.';
+}
+
+function sendErrorMessage(cause: unknown) {
+  if (cause instanceof AtendimentoApiError && cause.code === 'WHATSAPP_TEMPLATE_SEND_FAILED') {
+    return 'A Meta não aceitou o envio deste template. Confira os campos obrigatórios e tente novamente.';
+  }
+  return errorMessage(cause);
 }

@@ -80,6 +80,7 @@ export type WhatsappTemplateVariable = {
   componente: WhatsappTemplateComponent;
   posicao: number;
   indiceBotao: number | null;
+  nomeParametro?: string | null;
 };
 
 export type WhatsappTemplateButton = {

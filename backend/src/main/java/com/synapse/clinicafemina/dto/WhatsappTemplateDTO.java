@@ -19,6 +19,11 @@ public record WhatsappTemplateDTO(
     public record ButtonDTO(String tipo, String texto, String url) {
     }
 
-    public record VariableDTO(String componente, int posicao, Integer indiceBotao) {
+    public record VariableDTO(
+            String componente,
+            int posicao,
+            Integer indiceBotao,
+            String nomeParametro
+    ) {
     }
 }

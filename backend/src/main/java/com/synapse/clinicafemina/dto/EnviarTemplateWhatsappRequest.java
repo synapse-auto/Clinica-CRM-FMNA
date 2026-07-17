@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
@@ -23,7 +24,7 @@ public final class EnviarTemplateWhatsappRequest {
 
     @Valid
     @Size(max = 50)
-    private final List<Parametro> parametros;
+    private final List<@NotNull @Valid Parametro> parametros;
 
     @JsonCreator
     public EnviarTemplateWhatsappRequest(
@@ -66,6 +67,10 @@ public final class EnviarTemplateWhatsappRequest {
         @Min(0)
         private final Integer indiceBotao;
 
+        @Size(max = 64)
+        @Pattern(regexp = "[A-Za-z_][A-Za-z0-9_]*")
+        private final String nomeParametro;
+
         @NotBlank
         @Size(max = 1024)
         private final String valor;
@@ -75,11 +80,13 @@ public final class EnviarTemplateWhatsappRequest {
                 @JsonProperty("componente") String componente,
                 @JsonProperty("posicao") Integer posicao,
                 @JsonProperty("indiceBotao") Integer indiceBotao,
+                @JsonProperty("nomeParametro") String nomeParametro,
                 @JsonProperty("valor") String valor
         ) {
             this.componente = componente;
             this.posicao = posicao;
             this.indiceBotao = indiceBotao;
+            this.nomeParametro = nomeParametro;
             this.valor = valor;
         }
 
@@ -98,6 +105,10 @@ public final class EnviarTemplateWhatsappRequest {
 
         public Integer indiceBotao() {
             return indiceBotao;
+        }
+
+        public String nomeParametro() {
+            return nomeParametro;
         }
 
         public String valor() {

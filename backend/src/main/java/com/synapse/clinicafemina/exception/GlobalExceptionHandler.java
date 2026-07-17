@@ -98,6 +98,20 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(WhatsappTemplateParametersException.class)
+    public ResponseEntity<Object> handleWhatsappTemplateParameters(
+            WhatsappTemplateParametersException ex,
+            WebRequest request
+    ) {
+        log.info("Parametros de template WhatsApp rejeitados antes do envio");
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                ex.getMessage(),
+                WhatsappTemplateParametersException.CODE,
+                request
+        );
+    }
+
     // ── 501 Não implementado ──────────────────────────────────────────────────
     @ExceptionHandler(UnsupportedOperationException.class)
     public ResponseEntity<Object> handleUnsupported(UnsupportedOperationException ex, WebRequest request) {

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getWhatsappTemplates } from '@/services/atendimentos';
+import { AtendimentoApiError, getWhatsappTemplates } from '@/services/atendimentos';
 import type { WhatsappTemplate } from '@/types/atendimento';
 import {
   normalizeTemplateSearch,
@@ -10,9 +10,10 @@ import {
   WhatsappTemplateDialog,
 } from './WhatsappTemplateDialog';
 
-vi.mock('@/services/atendimentos', () => ({
-  getWhatsappTemplates: vi.fn(),
-}));
+vi.mock('@/services/atendimentos', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/atendimentos')>();
+  return { ...actual, getWhatsappTemplates: vi.fn() };
+});
 
 const getTemplatesMock = vi.mocked(getWhatsappTemplates);
 
@@ -50,6 +51,29 @@ const unsupportedTemplate: WhatsappTemplate = {
   nome: 'formato_nao_suportado',
   suportado: false,
   motivoNaoSuportado: 'Cabeçalho de mídia ainda não suportado.',
+  variaveis: [],
+};
+
+const namedTemplate: WhatsappTemplate = {
+  ...approvedTemplate,
+  id: 'template-named',
+  nome: 'confirmacao_nomeada',
+  cabecalho: 'Confirmacao {{vr_titulo}}',
+  corpo: 'Ola {{vr_nome}}',
+  botoes: [],
+  variaveis: [
+    { componente: 'HEADER', posicao: 1, indiceBotao: null, nomeParametro: 'vr_titulo' },
+    { componente: 'BODY', posicao: 1, indiceBotao: null, nomeParametro: 'vr_nome' },
+  ],
+};
+
+const staticTemplate: WhatsappTemplate = {
+  ...approvedTemplate,
+  id: 'template-static',
+  nome: 'aviso_estatico',
+  cabecalho: null,
+  corpo: 'Aviso confirmado',
+  botoes: [],
   variaveis: [],
 };
 
@@ -127,16 +151,71 @@ describe('WhatsappTemplateDialog', () => {
       nome: 'confirmação_consulta',
       idioma: 'pt_BR',
       parametros: [
-        { componente: 'HEADER', posicao: 1, indiceBotao: null, valor: '<b>Ana</b>' },
-        { componente: 'BODY', posicao: 1, indiceBotao: null, valor: 'Ultrassonografia' },
-        { componente: 'BODY', posicao: 2, indiceBotao: null, valor: '15 de julho' },
-        { componente: 'BUTTON', posicao: 1, indiceBotao: 0, valor: 'consulta-15' },
+        { componente: 'HEADER', posicao: 1, indiceBotao: null, nomeParametro: null, valor: '<b>Ana</b>' },
+        { componente: 'BODY', posicao: 1, indiceBotao: null, nomeParametro: null, valor: 'Ultrassonografia' },
+        { componente: 'BODY', posicao: 2, indiceBotao: null, nomeParametro: null, valor: '15 de julho' },
+        { componente: 'BUTTON', posicao: 1, indiceBotao: 0, nomeParametro: null, valor: 'consulta-15' },
       ],
     });
     expect(screen.getByRole('button', { name: 'Enviando...' })).toBeDisabled();
 
     pendingSend.resolve();
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it('should_render_named_variables_in_preview_and_send_their_official_names', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    getTemplatesMock.mockResolvedValue([namedTemplate]);
+    renderDialog({ onSend });
+
+    await screen.findByText('confirmacao_nomeada');
+    expect(screen.queryByText(/não precisa de personalização/i)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Cabeçalho.*vr_titulo/), 'Lembrete');
+    await user.type(screen.getByLabelText(/Mensagem.*vr_nome/), 'Pessoa ficticia');
+
+    const preview = screen.getByRole('region', { name: /Prévia do template/i });
+    expect(preview).toHaveTextContent('Confirmacao Lembrete');
+    expect(preview).toHaveTextContent('Ola Pessoa ficticia');
+    await user.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    expect(onSend).toHaveBeenCalledWith({
+      nome: 'confirmacao_nomeada',
+      idioma: 'pt_BR',
+      parametros: [
+        {
+          componente: 'HEADER',
+          posicao: 1,
+          indiceBotao: null,
+          nomeParametro: 'vr_titulo',
+          valor: 'Lembrete',
+        },
+        {
+          componente: 'BODY',
+          posicao: 1,
+          indiceBotao: null,
+          nomeParametro: 'vr_nome',
+          valor: 'Pessoa ficticia',
+        },
+      ],
+    });
+  });
+
+  it('should_send_a_static_template_with_an_empty_parameter_list', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    getTemplatesMock.mockResolvedValue([staticTemplate]);
+    renderDialog({ onSend });
+
+    await screen.findByText('aviso_estatico');
+    expect(screen.getByText(/não precisa de personalização/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    expect(onSend).toHaveBeenCalledWith({
+      nome: 'aviso_estatico',
+      idioma: 'pt_BR',
+      parametros: [],
+    });
   });
 
   it('should_treat_name_and_language_as_unique_and_clear_incompatible_parameters', async () => {
@@ -183,6 +262,33 @@ describe('WhatsappTemplateDialog', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('should_keep_list_selection_and_values_on_502_then_clear_only_send_error_on_selection', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockRejectedValue(new AtendimentoApiError(
+      'Falha na operação (502)',
+      502,
+      'WHATSAPP_TEMPLATE_SEND_FAILED',
+    ));
+    getTemplatesMock.mockResolvedValue([namedTemplate, staticTemplate]);
+    renderDialog({ onSend });
+
+    await screen.findByText('confirmacao_nomeada');
+    await user.type(screen.getByLabelText(/Cabeçalho.*vr_titulo/), 'Lembrete');
+    await user.type(screen.getByLabelText(/Mensagem.*vr_nome/), 'Pessoa ficticia');
+    await user.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    expect(await screen.findByText(/A Meta não aceitou o envio deste template/i)).toBeInTheDocument();
+    expect(screen.getByText('confirmacao_nomeada')).toBeInTheDocument();
+    expect(screen.getByText('aviso_estatico')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Mensagem.*vr_nome/)).toHaveValue('Pessoa ficticia');
+    expect(screen.queryByRole('button', { name: 'Tentar novamente' })).not.toBeInTheDocument();
+    expect(getTemplatesMock).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole('button', { name: /aviso_estatico/i }));
+    expect(screen.queryByText(/A Meta não aceitou o envio deste template/i)).not.toBeInTheDocument();
+    expect(getTemplatesMock).toHaveBeenCalledOnce();
+  });
+
   it('should_offer_retry_and_render_empty_state', async () => {
     const user = userEvent.setup();
     getTemplatesMock
@@ -220,6 +326,15 @@ describe('template preview helpers', () => {
     expect(templateParameterKey({ componente: 'BODY', posicao: 2, indiceBotao: null })).toBe('BODY:2:-');
     expect(renderComponentText('Olá {{1}} e {{2}}', 'BODY', null, { 'BODY:1:-': 'Ana' }))
       .toBe('Olá Ana e [variável 2]');
+    expect(templateParameterKey({
+      componente: 'BODY',
+      posicao: 1,
+      indiceBotao: null,
+      nomeParametro: 'vr_nome',
+    })).toBe('BODY:vr_nome:-');
+    expect(renderComponentText('Olá {{vr_nome}}', 'BODY', null, {
+      'BODY:vr_nome:-': 'Pessoa ficticia',
+    })).toBe('Olá Pessoa ficticia');
   });
 });
 

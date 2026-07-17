@@ -30,6 +30,7 @@ import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -252,11 +253,13 @@ public class WhatsappTemplateService {
         parameters.stream()
                 .sorted(Comparator.comparing(EnviarTemplateWhatsappRequest.Parametro::componente)
                         .thenComparing(EnviarTemplateWhatsappRequest.Parametro::posicao)
-                        .thenComparing(parameter -> parameter.indiceBotao() == null ? -1 : parameter.indiceBotao()))
+                        .thenComparing(parameter -> parameter.indiceBotao() == null ? -1 : parameter.indiceBotao())
+                        .thenComparing(parameter -> Objects.requireNonNullElse(parameter.nomeParametro(), "")))
                 .forEach(parameter -> source.append('|')
                         .append(parameter.componente()).append(':')
                         .append(parameter.posicao()).append(':')
                         .append(parameter.indiceBotao()).append(':')
+                        .append(parameter.nomeParametro()).append(':')
                         .append(parameter.valor()));
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
