@@ -32,4 +32,12 @@ describe('Switch', () => {
     await user.click(control);
     expect(onCheckedChange).not.toHaveBeenCalled();
   });
+
+  it('should_support_compact_controls_with_an_accessible_name', () => {
+    render(<Switch label="" aria-label="Desativar tag" defaultChecked />);
+
+    const control = screen.getByRole('switch', { name: 'Desativar tag' });
+    expect(control).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByText('Desativar tag')).not.toBeInTheDocument();
+  });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { type FormEvent, type ReactNode, useState } from 'react';
-import { AlertCircle, Edit3, Plus, Tag, ToggleLeft, ToggleRight, Trash2, X } from 'lucide-react';
+import { AlertCircle, Edit3, Plus, Tag, Trash2, X } from 'lucide-react';
 import { EmptyState } from '@/components/demo/EmptyState';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { Switch } from '@/components/ui/switch';
@@ -150,10 +150,11 @@ export function TagsClient({ initialTags, initialError, canManage }: TagsClientP
               {canManage ? (
                 <div className="flex flex-wrap gap-2">
                   <IconButton label="Editar tag" onClick={() => openEdit(tagItem)} icon={<Edit3 className="h-3.5 w-3.5" />} />
-                  <IconButton
-                    label={tagItem.ativo ? 'Desativar tag' : 'Ativar tag'}
-                    onClick={() => void toggleStatus(tagItem)}
-                    icon={tagItem.ativo ? <ToggleRight className="h-3.5 w-3.5" /> : <ToggleLeft className="h-3.5 w-3.5" />}
+                  <Switch
+                    checked={tagItem.ativo}
+                    onCheckedChange={() => void toggleStatus(tagItem)}
+                    aria-label={tagItem.ativo ? 'Desativar tag' : 'Ativar tag'}
+                    label=""
                   />
                   <IconButton label="Excluir tag" onClick={() => void deleteTag(tagItem)} icon={<Trash2 className="h-3.5 w-3.5" />} danger />
                 </div>

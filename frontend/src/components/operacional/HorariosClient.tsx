@@ -1,7 +1,7 @@
 'use client';
 
 import { type FormEvent, type ReactNode, useState } from 'react';
-import { AlertCircle, Clock, Edit3, Plus, ToggleLeft, ToggleRight, Trash2, X } from 'lucide-react';
+import { AlertCircle, Clock, Edit3, Plus, Trash2, X } from 'lucide-react';
 import { EmptyState } from '@/components/demo/EmptyState';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { FormSelect, SearchableSelect } from '@/components/ui/form-select';
@@ -160,10 +160,11 @@ export function HorariosClient({
               {canManage ? (
                 <div className="flex flex-wrap gap-2">
                   <IconButton label="Editar horário" onClick={() => openEdit(schedule)} icon={<Edit3 className="h-3.5 w-3.5" />} />
-                  <IconButton
-                    label={schedule.ativo ? 'Desativar horário' : 'Ativar horário'}
-                    onClick={() => void toggleStatus(schedule)}
-                    icon={schedule.ativo ? <ToggleRight className="h-3.5 w-3.5" /> : <ToggleLeft className="h-3.5 w-3.5" />}
+                  <Switch
+                    checked={schedule.ativo}
+                    onCheckedChange={() => void toggleStatus(schedule)}
+                    aria-label={schedule.ativo ? 'Desativar horário' : 'Ativar horário'}
+                    label=""
                   />
                   <IconButton label="Excluir horário" onClick={() => void deleteSchedule(schedule)} icon={<Trash2 className="h-3.5 w-3.5" />} danger />
                 </div>

@@ -11,8 +11,6 @@ import {
   Plus,
   Settings2,
   Star,
-  ToggleLeft,
-  ToggleRight,
   X,
 } from 'lucide-react';
 import { DemoCard } from '@/components/demo/DemoCard';
@@ -297,10 +295,11 @@ function AutomationList<T extends FollowUpConfig | ConsultaLembreteConfig | Mens
               <p className="mt-3 line-clamp-3 text-[10px] leading-5 text-clinic-muted">{messageFor(item)}</p>
               <div className="mt-3 flex gap-2">
                 <IconButton label="Editar automação" onClick={() => onEdit(item)} icon={<Edit3 className="h-3.5 w-3.5" />} />
-                <IconButton
-                  label={item.ativo ? 'Pausar automação' : 'Ativar automação'}
-                  onClick={() => onToggle(item)}
-                  icon={item.ativo ? <ToggleRight className="h-3.5 w-3.5" /> : <ToggleLeft className="h-3.5 w-3.5" />}
+                <Switch
+                  checked={item.ativo}
+                  onCheckedChange={() => onToggle(item)}
+                  aria-label={item.ativo ? 'Pausar automação' : 'Ativar automação'}
+                  label=""
                 />
               </div>
             </article>

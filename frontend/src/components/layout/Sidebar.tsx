@@ -16,6 +16,7 @@ import {
   Moon,
   ChevronRight,
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 
 const MENU_ITEMS = [
   { name: 'Atendimentos', icon: MessageSquare, href: '/atendimentos', badge: 4 },
@@ -106,16 +107,18 @@ export function Sidebar({ clinicName = 'Clínica' }: SidebarProps) {
           <span className="flex-1 text-left">WhatsApp I...</span>
           <span className="text-[10px] bg-teal-900/50 text-teal-400 px-2 py-0.5 rounded border border-teal-800/50 uppercase font-semibold">Demo</span>
         </button>
-        <button className="flex items-center justify-between px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800/50 w-full rounded-lg transition-colors">
+        <div className="flex items-center justify-between px-3 py-2 text-sm text-slate-400 w-full rounded-lg">
           <div className="flex items-center gap-3">
             <Moon className="w-5 h-5 text-slate-500" />
             Tema Escuro
           </div>
-          {/* Simple toggle switch representation */}
-          <div className="w-7 h-4 bg-slate-700 rounded-full flex items-center px-0.5">
-            <div className="w-3 h-3 bg-slate-400 rounded-full"></div>
-          </div>
-        </button>
+          <Switch
+            label=""
+            aria-label="Alternar tema escuro"
+            className="min-h-5"
+            switchClassName="bg-slate-700 data-[checked]:bg-teal-500 focus-visible:ring-teal-400/40"
+          />
+        </div>
 
         {/* User Profile */}
         <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between px-2 cursor-pointer hover:bg-slate-800/50 p-2 rounded-lg transition-colors">

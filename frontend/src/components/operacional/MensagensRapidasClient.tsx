@@ -1,7 +1,7 @@
 'use client';
 
 import { type FormEvent, type ReactNode, useState } from 'react';
-import { AlertCircle, Copy, Edit3, Plus, ToggleLeft, ToggleRight, Trash2, X, Zap } from 'lucide-react';
+import { AlertCircle, Copy, Edit3, Plus, Trash2, X, Zap } from 'lucide-react';
 import { EmptyState } from '@/components/demo/EmptyState';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { FormSelect } from '@/components/ui/form-select';
@@ -156,10 +156,11 @@ export function MensagensRapidasClient({
               {canManage ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <IconButton label="Editar mensagem" onClick={() => openEdit(message)} icon={<Edit3 className="h-3.5 w-3.5" />} />
-                  <IconButton
-                    label={message.ativo ? 'Desativar mensagem' : 'Ativar mensagem'}
-                    onClick={() => void toggleStatus(message)}
-                    icon={message.ativo ? <ToggleRight className="h-3.5 w-3.5" /> : <ToggleLeft className="h-3.5 w-3.5" />}
+                  <Switch
+                    checked={message.ativo}
+                    onCheckedChange={() => void toggleStatus(message)}
+                    aria-label={message.ativo ? 'Desativar mensagem' : 'Ativar mensagem'}
+                    label=""
                   />
                   <IconButton label="Excluir mensagem" onClick={() => void deleteMessage(message)} icon={<Trash2 className="h-3.5 w-3.5" />} danger />
                 </div>
