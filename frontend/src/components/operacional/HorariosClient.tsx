@@ -5,6 +5,7 @@ import { AlertCircle, Clock, Edit3, Plus, ToggleLeft, ToggleRight, Trash2, X } f
 import { EmptyState } from '@/components/demo/EmptyState';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { FormSelect, SearchableSelect } from '@/components/ui/form-select';
+import { Switch } from '@/components/ui/switch';
 import type { AtendenteOption } from '@/types/atendimento';
 import type { HorarioAtendente, HorarioAtendentePayload } from '@/types/operacional';
 import { formatTime, getResponseMessage, isApiErrorBody, safeJson } from './client-helpers';
@@ -267,12 +268,7 @@ function DialogHeader({ id, title, onClose }: { id: string; title: string; onClo
 }
 
 function ActiveCheckbox({ defaultChecked }: { defaultChecked: boolean }) {
-  return (
-    <label className="flex items-center gap-2 text-[10px] font-bold text-clinic-text">
-      <input name="ativo" type="checkbox" defaultChecked={defaultChecked} className="h-4 w-4 accent-clinic-primary" />
-      Ativo
-    </label>
-  );
+  return <Switch name="ativo" defaultChecked={defaultChecked} label="Ativo" />;
 }
 
 function DialogActions({ isSubmitting, submitLabel, onClose }: { isSubmitting: boolean; submitLabel: string; onClose: () => void }) {

@@ -4,6 +4,7 @@ import { type FormEvent, type ReactNode, useState } from 'react';
 import { AlertCircle, Edit3, Plus, Tag, ToggleLeft, ToggleRight, Trash2, X } from 'lucide-react';
 import { EmptyState } from '@/components/demo/EmptyState';
 import { PageHeader } from '@/components/demo/PageHeader';
+import { Switch } from '@/components/ui/switch';
 import type { TagOperacional, TagPayload } from '@/types/operacional';
 import { getResponseMessage, isApiErrorBody, safeJson } from './client-helpers';
 
@@ -293,12 +294,7 @@ function Field({ label, name, defaultValue, required, pattern }: { label: string
 }
 
 function ActiveCheckbox({ defaultChecked }: { defaultChecked: boolean }) {
-  return (
-    <label className="flex items-center gap-2 text-[10px] font-bold text-clinic-text">
-      <input name="ativo" type="checkbox" defaultChecked={defaultChecked} className="h-4 w-4 accent-clinic-primary" />
-      Ativo
-    </label>
-  );
+  return <Switch name="ativo" defaultChecked={defaultChecked} label="Ativo" />;
 }
 
 function DialogActions({ isSubmitting, submitLabel, onClose }: { isSubmitting: boolean; submitLabel: string; onClose: () => void }) {

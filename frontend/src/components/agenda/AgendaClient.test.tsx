@@ -304,21 +304,21 @@ describe('AgendaClient (somente leitura)', () => {
 
     expect(screen.getAllByText('Paciente Fictício')).toHaveLength(1);
     expect(screen.getByText('4 procedimentos')).toBeInTheDocument();
-    expect(screen.queryByText('Procedimento Alfa')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Procedimento Alfa').length).toBeGreaterThan(1);
     const groupButton = screen.getByLabelText(/Paciente Fictício/);
     expect(groupButton).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(groupButton);
-    expect(screen.getByText('Procedimento Alfa')).toBeInTheDocument();
-    expect(screen.getByText('Procedimento Beta')).toBeInTheDocument();
-    expect(screen.getByText('Procedimento Gama')).toBeInTheDocument();
-    expect(screen.getByText('Procedimento Delta')).toBeInTheDocument();
+    expect(screen.getAllByText('Procedimento Alfa').length).toBeGreaterThan(2);
+    expect(screen.getAllByText('Procedimento Beta').length).toBeGreaterThan(2);
+    expect(screen.getAllByText('Procedimento Gama').length).toBeGreaterThan(2);
+    expect(screen.getAllByText('Procedimento Delta').length).toBeGreaterThan(2);
     expect(groupButton).toHaveAttribute('aria-expanded', 'true');
     expect(groupButton).toHaveAttribute(
       'data-appointment-ids',
       '102,104,101,103',
     );
     fireEvent.click(groupButton);
-    expect(screen.queryByText('Procedimento Alfa')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Procedimento Alfa').length).toBeGreaterThan(1);
   });
 
   it('should_keep_groups_separate_by_doctor_status_and_patient', () => {
@@ -354,7 +354,7 @@ describe('AgendaClient (somente leitura)', () => {
       />,
     );
 
-    expect(screen.getByText('Procedimento Único')).toBeInTheDocument();
+    expect(screen.getAllByText('Procedimento Único').length).toBeGreaterThan(1);
     expect(screen.queryByText(/procedimentos$/i)).not.toBeInTheDocument();
     expect(screen.getByText(/17:45/)).toBeInTheDocument();
   });
@@ -481,5 +481,51 @@ describe('AgendaClient (somente leitura)', () => {
     expect(screen.getByText('Paciente Hoje')).toBeInTheDocument();
     expect(screen.queryByText('Paciente Segunda')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /qua.*15.*1 agendamento/i })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('should_distribute_real_services_independently_by_doctor', () => {
+    const appointments = [
+      appointment({
+        id: 801,
+        medicoId: 1,
+        medicoNome: 'Medico A',
+        dataHoraInicio: '2026-07-15T08:15:00-03:00',
+        servicoNome: 'Ultrassonografia',
+      }),
+      appointment({
+        id: 802,
+        medicoId: 1,
+        medicoNome: 'Medico A',
+        dataHoraInicio: '2026-07-15T09:15:00-03:00',
+        servicoNome: 'Ultrassonografia',
+      }),
+      appointment({
+        id: 803,
+        medicoId: 2,
+        medicoNome: 'Medico B',
+        dataHoraInicio: '2026-07-15T10:15:00-03:00',
+        servicoNome: 'Consulta ginecologica',
+      }),
+    ];
+
+    render(
+      <AgendaClient
+        initialAppointments={appointments}
+        initialOptions={{
+          pacientes: [],
+          medicos: [
+            { id: 1, nome: 'Medico A', codigoExterno: null, origem: 'CRM' },
+            { id: 2, nome: 'Medico B', codigoExterno: null, origem: 'CRM' },
+          ],
+        }}
+        initialError={null}
+        weekStart="2026-07-13"
+      />,
+    );
+
+    expect(screen.getByLabelText('Medico A, Ultrassonografia: 2')).toBeInTheDocument();
+    expect(screen.getByLabelText('Medico B, Ultrassonografia: 0')).toBeInTheDocument();
+    expect(screen.getByLabelText('Medico A, Consulta ginecologica: 0')).toBeInTheDocument();
+    expect(screen.getByLabelText('Medico B, Consulta ginecologica: 1')).toBeInTheDocument();
   });
 });

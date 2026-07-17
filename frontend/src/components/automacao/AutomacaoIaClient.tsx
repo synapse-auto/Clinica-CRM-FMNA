@@ -20,6 +20,7 @@ import { EmptyState } from '@/components/demo/EmptyState';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { StatusBadge } from '@/components/demo/StatusBadge';
 import { FormSelect } from '@/components/ui/form-select';
+import { Switch } from '@/components/ui/switch';
 import type {
   ConsultaLembreteConfig,
   ConsultaLembreteConfigPayload,
@@ -350,10 +351,7 @@ function AutomationDialog({
             <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Mensagem</span>
             <textarea name="mensagemTemplate" required defaultValue={messageFor(editing.item)} className="h-28 w-full resize-none rounded-lg border border-clinic-border bg-clinic-input p-3 text-sm text-clinic-text outline-none focus:border-clinic-primary" />
           </label>
-          <label className="flex items-center gap-2 text-[10px] font-bold text-clinic-text">
-            <input name="ativo" type="checkbox" defaultChecked={editing.item?.ativo ?? true} className="h-4 w-4 accent-clinic-primary" />
-            Ativo
-          </label>
+          <Switch name="ativo" defaultChecked={editing.item?.ativo ?? true} label="Ativo" />
           <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
             <button type="button" onClick={onClose} className="h-9 rounded-lg border border-clinic-border px-4 text-[10px] font-bold text-clinic-text hover:bg-clinic-soft">Cancelar</button>
             <button type="submit" disabled={isSubmitting} className="h-9 rounded-lg bg-clinic-primary px-4 text-[10px] font-bold text-white disabled:cursor-wait disabled:opacity-70">
@@ -443,12 +441,7 @@ function SelectField({ label, name, defaultValue, options }: { label: string; na
 }
 
 function CheckboxField({ label, name, defaultChecked }: { label: string; name: string; defaultChecked: boolean }) {
-  return (
-    <label className="flex items-center gap-2 rounded-lg border border-clinic-border bg-clinic-input px-3 py-2 text-[10px] font-bold text-clinic-text">
-      <input name={name} type="checkbox" defaultChecked={defaultChecked} className="h-4 w-4 accent-clinic-primary" />
-      {label}
-    </label>
-  );
+  return <Switch name={name} defaultChecked={defaultChecked} label={label} className="rounded-lg border border-clinic-border bg-clinic-input px-3 py-2" />;
 }
 
 function AutomationMetric({ icon: Icon, label, value }: { icon: typeof Bot; label: string; value: number | string }) {

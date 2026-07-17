@@ -20,6 +20,11 @@ import { MetricCard } from '@/components/demo/MetricCard';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { DatePicker } from '@/components/ui/date-picker';
 import { normalizeSearchText } from '@/lib/search';
+import {
+  aggregateServices,
+  normalizeServiceName,
+  serviceColor,
+} from '@/lib/service-distribution';
 import type {
   Agendamento,
   AgendaOptions,
@@ -83,9 +88,13 @@ export function AgendaClient({
     ),
     [selectedDay, visibleAppointments],
   );
+  const filteredActiveAppointments = useMemo(
+    () => visibleAppointments.filter((item) => item.status !== 'CANCELADO'),
+    [visibleAppointments],
+  );
   const metrics = buildMetrics(activeAppointments, options);
-  const donutItems = buildDonutItems(activeAppointments);
-  const barData = buildBarData(activeAppointments, options);
+  const donutItems = buildDonutItems(filteredActiveAppointments);
+  const barData = buildBarData(filteredActiveAppointments, options, selectedDoctor);
 
   useEffect(() => {
     setSelectedDay(preferredDay(days, visibleAppointments));
@@ -263,9 +272,15 @@ export function AgendaClient({
       </DemoCard>
 
       <DemoCard className="mt-3" title="Tipos de Atendimento" description="Distribuição no período">
-        <div className="flex min-h-[190px] items-center justify-center px-5 pb-4">
-          <DonutChart items={donutItems} valueMode="value" />
-        </div>
+        {donutItems.length > 0 ? (
+          <div className="flex min-h-[190px] items-center justify-center px-5 pb-4">
+            <DonutChart items={donutItems} valueMode="value" />
+          </div>
+        ) : (
+          <p className="flex min-h-[190px] items-center justify-center px-5 pb-4 text-center text-[10px] text-clinic-muted">
+            Sem dados de serviços no período.
+          </p>
+        )}
       </DemoCard>
 
       <DemoCard className="mt-3" title="Agenda por Médico" description="Distribuição de atendimentos no período">
@@ -567,8 +582,7 @@ export function groupAppointmentsForAgenda(
 function appointmentProcedureName(appointment: Agendamento) {
   const serviceName = appointment.servicoNome?.trim();
   if (serviceName) return serviceName;
-  const type = appointment.tipo?.trim();
-  return type || 'Procedimento não informado';
+  return normalizeServiceName(appointment);
 }
 
 function formatStatus(status: string) {
@@ -592,37 +606,70 @@ function buildMetrics(
 }
 
 function buildDonutItems(appointments: Agendamento[]) {
-  const definitions = [
-    { key: 'CONSULTA', label: 'Consultas', color: 'var(--clinic-primary)' },
-    { key: 'EXAME', label: 'Exames', color: 'var(--clinic-cyan)' },
-    { key: 'CIRURGIA', label: 'Cirurgias', color: 'var(--clinic-indigo)' },
-    { key: 'RETORNO', label: 'Retornos', color: 'var(--clinic-orange)' },
-  ];
-  return definitions.map((definition) => ({
-    label: definition.label,
-    color: definition.color,
-    value: appointments.filter((item) => item.tipo === definition.key).length,
+  return aggregateServices(appointments).map((item, index) => ({
+    label: item.label,
+    color: serviceColor(index),
+    value: item.total,
   }));
 }
 
-function buildBarData(appointments: Agendamento[], options: AgendaOptions) {
-  const doctors = options.medicos.length > 0 ? options.medicos : [];
-  const definitions = [
-    { key: 'CONSULTA', label: 'Consultas', color: 'var(--clinic-primary)' },
-    { key: 'EXAME', label: 'Exames', color: 'var(--clinic-orange)' },
-    { key: 'CIRURGIA', label: 'Cirurgias', color: 'var(--clinic-indigo)' },
-  ];
+function buildBarData(
+  appointments: Agendamento[],
+  options: AgendaOptions,
+  selectedDoctor: string | 'all',
+) {
+  const doctors = buildDoctorBuckets(appointments, options, selectedDoctor);
+  const serviceCatalog = aggregateServices(appointments);
+  const visibleServices = serviceCatalog.slice(0, 6);
+  const visibleLabels = new Set(visibleServices.map((item) => item.label));
+  const hasOverflow = serviceCatalog.length > visibleServices.length;
+
   return {
-    labels: doctors.map((doctor) => doctor.nome),
-    series: definitions.map((definition) => ({
-      label: definition.label,
-      color: definition.color,
-      values: doctors.map((doctor) => appointments.filter((item) => (
-        item.tipo === definition.key
-        && appointmentDoctorKey(item) === doctorKey(doctor)
-      )).length),
-    })),
+    labels: doctors.map((doctor) => doctor.label),
+    series: [
+      ...visibleServices.map((service, index) => ({
+        label: service.label,
+        color: serviceColor(index),
+        values: doctors.map((doctor) => countServiceForDoctor(appointments, doctor.key, service.label)),
+      })),
+      ...(hasOverflow ? [{
+        label: 'Outros',
+        color: serviceColor(visibleServices.length),
+        values: doctors.map((doctor) => appointments.filter((item) => (
+          appointmentDoctorKey(item) === doctor.key
+          && !visibleLabels.has(normalizeServiceName(item))
+        )).length),
+      }] : []),
+    ],
   };
+}
+
+function buildDoctorBuckets(
+  appointments: Agendamento[],
+  options: AgendaOptions,
+  selectedDoctor: string | 'all',
+) {
+  const buckets = new Map<string, { key: string; label: string }>();
+  options.medicos.forEach((doctor) => {
+    const key = doctorKey(doctor);
+    buckets.set(key, { key, label: doctor.nome || 'Sem profissional' });
+  });
+  appointments.forEach((appointment) => {
+    const key = appointmentDoctorKey(appointment);
+    if (!buckets.has(key)) {
+      buckets.set(key, { key, label: appointment.medicoNome?.trim() || 'Sem profissional' });
+    }
+  });
+
+  const all = Array.from(buckets.values());
+  return selectedDoctor === 'all' ? all : all.filter((doctor) => doctor.key === selectedDoctor);
+}
+
+function countServiceForDoctor(appointments: Agendamento[], doctorKeyValue: string, serviceLabel: string) {
+  return appointments.filter((appointment) => (
+    appointmentDoctorKey(appointment) === doctorKeyValue
+    && normalizeServiceName(appointment) === serviceLabel
+  )).length;
 }
 
 function doctorKey(doctor: { id: number | null; nome: string; codigoExterno: string | null; origem: string | null }) {

@@ -1,9 +1,7 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import {
   Activity,
   AlertCircle,
-  Calendar as CalendarIcon,
   CalendarDays,
   CheckCircle2,
   Clock,
@@ -23,7 +21,14 @@ import { GroupedBarChart } from '@/components/demo/GroupedBarChart';
 import { LineAreaChart } from '@/components/demo/LineAreaChart';
 import { MetricCard } from '@/components/demo/MetricCard';
 import { PageHeader } from '@/components/demo/PageHeader';
-import { SegmentedTabs } from '@/components/demo/SegmentedTabs';
+import { DashboardPeriodFilter } from '@/components/dashboard/DashboardPeriodFilter';
+import { DashboardPeriodLabel } from '@/components/dashboard/DashboardPeriodLabel';
+import {
+  getDashboardPeriod,
+  getSaoPauloDate,
+  normalizeDashboardFilter,
+} from '@/lib/dashboard-period';
+import { normalizeServiceName } from '@/lib/service-distribution';
 import {
   getClinicaAtual,
   getDashboardData,
@@ -31,7 +36,6 @@ import {
 } from '@/services/backend';
 import type {
   ClinicaAtualResponse,
-  DashboardPeriodo,
   DashboardResponse,
 } from '@/types/dashboard';
 
@@ -42,16 +46,11 @@ type DashboardPageProps = {
   }>;
 };
 
-const periodos: Array<{ label: string; value: DashboardPeriodo }> = [
-  { label: 'Dia', value: 'DIA' },
-  { label: 'Semanal', value: 'SEMANA' },
-  { label: 'Mensal', value: 'MES' },
-];
-
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const params = (await searchParams) ?? {};
-  const periodo = normalizePeriodo(params.periodo);
-  const data = normalizeDate(params.data);
+  const today = getSaoPauloDate();
+  const filter = normalizeDashboardFilter(params.periodo, params.data, today);
+  const period = getDashboardPeriod(filter, today);
 
   let clinica: ClinicaAtualResponse | null = null;
   let dashboard: DashboardResponse | null = null;
@@ -60,7 +59,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   try {
     [clinica, dashboard] = await Promise.all([
       getClinicaAtual(),
-      getDashboardData(periodo, data),
+      getDashboardData(period.backendPeriod, period.data),
     ]);
   } catch (error) {
     if (isBackendAuthorizationError(error)) {
@@ -73,24 +72,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const header = (
     <PageHeader
       title="Dashboard"
-      description={formatDisplayDate(data)}
+      description="Indicadores operacionais da clínica"
       actions={
-        <>
-          <SegmentedTabs
-            items={periodos.map((item) => ({
-              label: item.label,
-              href: `/dashboard?periodo=${item.value}&data=${data}`,
-              active: item.value === periodo,
-            }))}
-          />
-          <Link
-            href={`/dashboard?periodo=${periodo}&data=${data}`}
-            className="flex h-8 items-center gap-2 rounded-lg border border-clinic-border bg-clinic-surface px-3 text-[10px] font-semibold text-clinic-text"
-          >
-            <CalendarIcon className="h-3.5 w-3.5 text-clinic-muted" />
-            {formatShortDate(data)}
-          </Link>
-        </>
+        <DashboardPeriodFilter selected={filter} today={today} />
       }
     />
   );
@@ -122,6 +106,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   return (
     <div className="h-full overflow-auto bg-clinic-canvas p-4 custom-scrollbar">
       {header}
+      <DashboardPeriodLabel period={period} />
 
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6">
         <MetricCard
@@ -134,14 +119,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <MetricCard
           title="Novos Pacientes"
           value={dashboard.novosPacientes}
-          subtitle={periodoLabel(periodo)}
+          subtitle={periodoLabel(period.backendPeriod)}
           icon={Users}
           tone="blue"
         />
         <MetricCard
           title="Mensagens"
           value={dashboard.totalMensagens}
-          subtitle={periodoLabel(periodo)}
+          subtitle={periodoLabel(period.backendPeriod)}
           icon={MessageSquare}
           tone="purple"
         />
@@ -313,7 +298,7 @@ function buildServiceItems(dashboard: DashboardResponse) {
   ];
 
   return dashboard.distribuicaoServicos.slice(0, 5).map((item, index) => ({
-    label: item.servico,
+    label: normalizeServiceName({ servicoNome: item.servico }),
     value: item.total || item.percentual,
     color: colors[index % colors.length],
   }));
@@ -330,39 +315,6 @@ function calculateConfirmationRate(dashboard: DashboardResponse) {
   );
 }
 
-function normalizePeriodo(value: string | undefined): DashboardPeriodo {
-  if (value === 'SEMANA' || value === 'MES') {
-    return value;
-  }
-  return 'DIA';
-}
-
-function normalizeDate(value: string | undefined): string {
-  if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return value;
-  }
-  return new Date().toISOString().slice(0, 10);
-}
-
-function formatDisplayDate(value: string): string {
-  return new Intl.DateTimeFormat('pt-BR', {
-    weekday: 'long',
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'America/Sao_Paulo',
-  }).format(new Date(`${value}T12:00:00-03:00`));
-}
-
-function formatShortDate(value: string): string {
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    timeZone: 'America/Sao_Paulo',
-  }).format(new Date(`${value}T12:00:00-03:00`));
-}
-
 function formatWeekday(value: string): string {
   const formatted = new Intl.DateTimeFormat('pt-BR', {
     weekday: 'short',
@@ -372,11 +324,11 @@ function formatWeekday(value: string): string {
   return formatted.replace('.', '');
 }
 
-function periodoLabel(periodo: DashboardPeriodo): string {
-  if (periodo === 'SEMANA') {
+function periodoLabel(_periodo: string): string {
+  if (_periodo === 'SEMANA') {
     return 'na semana';
   }
-  if (periodo === 'MES') {
+  if (_periodo === 'MES') {
     return 'no mês';
   }
   return 'hoje';
