@@ -113,6 +113,30 @@ class DataSeederTest {
     }
 
     @Test
+    void should_not_overwrite_existing_name_after_restart() {
+        Clinica clinica = clinic();
+        Gestor existing = new Gestor();
+        existing.setNome("Nome Alterado no CRM");
+        existing.setSenhaHash("$2a$12$existing");
+        DataSeeder seeder = seeder(true, """
+                [{
+                  "nome": "Nome Antigo do Seeder",
+                  "email": "gestor@local.test",
+                  "perfil": "GESTOR",
+                  "password": "NovaSenha2026"
+                }]
+                """);
+
+        when(clinicaRepository.findBySlug("fmna")).thenReturn(Optional.of(clinica));
+        when(usuarioRepository.findByEmail("gestor@local.test")).thenReturn(Optional.of(existing));
+
+        seeder.run();
+
+        assertEquals("Nome Alterado no CRM", existing.getNome());
+        verify(usuarioRepository, never()).save(any());
+    }
+
+    @Test
     void should_preserve_existing_user_management_permission_after_restart() {
         Clinica clinica = clinic();
         Gestor existing = new Gestor();

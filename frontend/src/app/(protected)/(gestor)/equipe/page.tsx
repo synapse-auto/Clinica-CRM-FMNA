@@ -32,7 +32,7 @@ export default async function EquipePage() {
 
   return (
     <div className="h-full overflow-auto bg-clinic-canvas p-4 custom-scrollbar">
-      <EquipeClient initialData={equipe} initialError={erroCarregamento} />
+      <EquipeClient initialData={equipe} initialError={erroCarregamento} currentUserId={user.id} />
     </div>
   );
 }

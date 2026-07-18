@@ -5,6 +5,7 @@ import com.synapse.clinicafemina.domain.Gestor;
 import com.synapse.clinicafemina.domain.Medico;
 import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.domain.Usuario;
+import com.synapse.clinicafemina.dto.equipe.AlterarNomeUsuarioRequest;
 import com.synapse.clinicafemina.dto.equipe.EquipeGrupoResponse;
 import com.synapse.clinicafemina.dto.equipe.EquipeResponse;
 import com.synapse.clinicafemina.dto.equipe.EquipeUsuarioCreateRequest;
@@ -16,6 +17,7 @@ import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import com.synapse.clinicafemina.security.PasswordPolicy;
 import com.synapse.clinicafemina.service.audit.UsuarioPermissionAuditEvent;
+import com.synapse.clinicafemina.service.audit.UsuarioNomeAuditEvent;
 import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -37,6 +39,10 @@ public class EquipeService {
 
     private static final Pattern PLAIN_EMAIL = Pattern.compile(
             "^[^\\s@\\[\\]()]+@[^\\s@\\[\\]()]+\\.[^\\s@\\[\\]()]+$"
+    );
+    private static final Pattern REPEATED_WHITESPACE = Pattern.compile(
+            "\\s+",
+            Pattern.UNICODE_CHARACTER_CLASS
     );
     private static final List<GroupDefinition> GROUPS = List.of(
             new GroupDefinition("GESTOR", "Gestores"),
@@ -143,6 +149,37 @@ public class EquipeService {
         return response;
     }
 
+    @Transactional
+    public EquipeUsuarioResponse alterarNome(
+            Long usuarioId,
+            AlterarNomeUsuarioRequest request,
+            Authentication authentication
+    ) {
+        Usuario executor = usuarioPermissionService.exigirGerenciador(authentication);
+        Long clinicaId = executor.getClinica().getId();
+        Usuario alvo = usuarioRepository.findByIdAndClinicaIdForUpdate(usuarioId, clinicaId)
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado."));
+
+        validarAlvoDaAlteracaoDeNome(alvo);
+        String nomeNormalizado = normalizeUserName(request == null ? null : request.nome());
+        if (nomeNormalizado.equals(alvo.getNome())) {
+            return toResponse(alvo);
+        }
+
+        alvo.setNome(nomeNormalizado);
+        EquipeUsuarioResponse response = toResponse(usuarioRepository.save(alvo));
+        applicationEventPublisher.publishEvent(new UsuarioNomeAuditEvent(
+                "NOME_USUARIO_ALTERADO",
+                executor.getId(),
+                alvo.getId(),
+                clinicaId,
+                "nome",
+                OffsetDateTime.now()
+        ));
+        clinicDataChangePublisher.publish(clinicaId);
+        return response;
+    }
+
     private void validarAlvoDaPermissao(Usuario alvo) {
         if (Boolean.TRUE.equals(alvo.getAdminInterno())) {
             throw new AccessDeniedException("Usuário interno não pode receber esta permissão.");
@@ -153,6 +190,34 @@ public class EquipeService {
         if (!"GESTOR".equals(resolvePerfil(alvo).perfil())) {
             throw new BadRequestException("A permissão só pode ser concedida a gestores.");
         }
+    }
+
+    private void validarAlvoDaAlteracaoDeNome(Usuario alvo) {
+        if (Boolean.TRUE.equals(alvo.getAdminInterno())) {
+            throw new AccessDeniedException("Usuário interno não pode ser alterado por esta operação.");
+        }
+        if (!Boolean.TRUE.equals(alvo.getAtivo()) || alvo.getDeletadoEm() != null) {
+            throw new BadRequestException("O nome só pode ser alterado para um usuário ativo e não deletado.");
+        }
+        String perfil = resolvePerfil(alvo).perfil();
+        if (!perfil.equals("GESTOR") && !perfil.equals("MEDICO") && !perfil.equals("RECEPCIONISTA")) {
+            throw new BadRequestException("Perfil de usuário não permitido para alteração de nome.");
+        }
+    }
+
+    private String normalizeUserName(String value) {
+        if (value == null || value.isBlank()) {
+            throw new BadRequestException("Nome é obrigatório.");
+        }
+        if (value.codePoints().anyMatch(Character::isISOControl)) {
+            throw new BadRequestException("Nome não pode conter quebras de linha ou caracteres de controle.");
+        }
+        String normalized = REPEATED_WHITESPACE.matcher(value.strip()).replaceAll(" ");
+        int length = normalized.codePointCount(0, normalized.length());
+        if (length < 2 || length > 200) {
+            throw new BadRequestException("Nome deve ter entre 2 e 200 caracteres.");
+        }
+        return normalized;
     }
 
     private Usuario createProfile(String perfil) {

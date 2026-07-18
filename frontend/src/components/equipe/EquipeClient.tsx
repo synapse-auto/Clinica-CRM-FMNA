@@ -1,10 +1,12 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
   Mail,
   Phone,
+  Pencil,
   ShieldCheck,
   Stethoscope,
   UserPlus,
@@ -34,6 +36,7 @@ import {
 type EquipeClientProps = {
   initialData: EquipeResponse;
   initialError: string | null;
+  currentUserId?: number;
 };
 
 const PROFILE_LABELS: Record<EquipePerfil, string> = {
@@ -57,13 +60,20 @@ const AVATAR_TONES = [
   'bg-clinic-pink text-white',
 ];
 
-export function EquipeClient({ initialData, initialError }: EquipeClientProps) {
+export function EquipeClient({ initialData, initialError, currentUserId }: EquipeClientProps) {
+  const router = useRouter();
   const [grupos, setGrupos] = useState<EquipeGrupo[]>(initialData.grupos);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingPermissionIds, setPendingPermissionIds] = useState<Set<number>>(new Set());
   const [permissionFeedback, setPermissionFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+  const [editingUser, setEditingUser] = useState<EquipeUsuario | null>(null);
+  const [pendingNameIds, setPendingNameIds] = useState<Set<number>>(new Set());
+  const [nameFeedback, setNameFeedback] = useState<{
     type: 'success' | 'error';
     message: string;
   } | null>(null);
@@ -139,10 +149,56 @@ export function EquipeClient({ initialData, initialError }: EquipeClientProps) {
   function updateUser(usuarioId: number, updater: (usuario: EquipeUsuario) => EquipeUsuario) {
     setGrupos((current) => current.map((grupo) => ({
       ...grupo,
-      usuarios: grupo.usuarios.map((usuario) => (
-        usuario.id === usuarioId ? updater(usuario) : usuario
-      )),
+      usuarios: grupo.usuarios
+        .map((usuario) => (usuario.id === usuarioId ? updater(usuario) : usuario))
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
     })));
+  }
+
+  async function handleNameChange(nome: string) {
+    if (!editingUser || pendingNameIds.has(editingUser.id)) return;
+    const usuarioId = editingUser.id;
+    const normalizedName = normalizeUserName(nome);
+    const validationError = validateUserName(normalizedName, nome);
+    if (validationError) {
+      setNameFeedback({ type: 'error', message: validationError });
+      return;
+    }
+
+    setNameFeedback(null);
+    setPendingNameIds((current) => new Set(current).add(usuarioId));
+    try {
+      const response = await fetch(`/api/equipe/usuarios/${usuarioId}/nome`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: normalizedName }),
+      });
+      const body = await safeJson(response);
+      if (!response.ok) {
+        setNameFeedback({
+          type: 'error',
+          message: getResponseMessage(body) ?? 'Não foi possível alterar o nome.',
+        });
+        return;
+      }
+
+      const updated = body as EquipeUsuario;
+      updateUser(usuarioId, () => updated);
+      setEditingUser(null);
+      setNameFeedback({ type: 'success', message: 'Nome atualizado com sucesso.' });
+      if (usuarioId === currentUserId) router.refresh();
+    } catch {
+      setNameFeedback({
+        type: 'error',
+        message: 'Serviço de equipe indisponível. Tente novamente em instantes.',
+      });
+    } finally {
+      setPendingNameIds((current) => {
+        const next = new Set(current);
+        next.delete(usuarioId);
+        return next;
+      });
+    }
   }
 
   async function handlePermissionChange(usuario: EquipeUsuario, checked: boolean) {
@@ -243,6 +299,19 @@ export function EquipeClient({ initialData, initialError }: EquipeClientProps) {
         </p>
       ) : null}
 
+      {nameFeedback && !editingUser ? (
+        <p
+          role={nameFeedback.type === 'error' ? 'alert' : 'status'}
+          className={`mb-3 rounded-lg border px-3 py-2 text-[10px] font-semibold ${
+            nameFeedback.type === 'error'
+              ? 'border-clinic-danger/30 bg-clinic-danger/10 text-clinic-danger'
+              : 'border-clinic-primary/30 bg-clinic-primary/10 text-clinic-primary'
+          }`}
+        >
+          {nameFeedback.message}
+        </p>
+      ) : null}
+
       {totalUsuarios === 0 && !initialError ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-clinic-border bg-clinic-surface py-16 text-center">
           <UsersRound className="mb-3 h-10 w-10 text-clinic-muted" />
@@ -259,7 +328,12 @@ export function EquipeClient({ initialData, initialError }: EquipeClientProps) {
               grupo={grupo}
               gestoresAutorizadosAtivos={gestoresAutorizadosAtivos}
               pendingPermissionIds={pendingPermissionIds}
+              pendingNameIds={pendingNameIds}
               onPermissionChange={handlePermissionChange}
+              onEditName={(usuario) => {
+                setNameFeedback(null);
+                setEditingUser(usuario);
+              }}
             />
           ))}
         </div>
@@ -273,6 +347,17 @@ export function EquipeClient({ initialData, initialError }: EquipeClientProps) {
           onSubmit={handleCreateUser}
         />
       ) : null}
+      {editingUser ? (
+        <EditUserNameDialog
+          usuario={editingUser}
+          isSubmitting={pendingNameIds.has(editingUser.id)}
+          error={nameFeedback?.type === 'error' ? nameFeedback.message : null}
+          onClose={() => {
+            if (!pendingNameIds.has(editingUser.id)) setEditingUser(null);
+          }}
+          onSubmit={handleNameChange}
+        />
+      ) : null}
     </>
   );
 }
@@ -281,12 +366,16 @@ function TeamGroup({
   grupo,
   gestoresAutorizadosAtivos,
   pendingPermissionIds,
+  pendingNameIds,
   onPermissionChange,
+  onEditName,
 }: {
   grupo: EquipeGrupo;
   gestoresAutorizadosAtivos: number;
   pendingPermissionIds: Set<number>;
+  pendingNameIds: Set<number>;
   onPermissionChange: (usuario: EquipeUsuario, checked: boolean) => void;
+  onEditName: (usuario: EquipeUsuario) => void;
 }) {
   const Icon = GROUP_ICONS[grupo.perfil] ?? UsersRound;
 
@@ -310,12 +399,14 @@ function TeamGroup({
               usuario={usuario}
               avatarTone={AVATAR_TONES[index % AVATAR_TONES.length]}
               isPermissionPending={pendingPermissionIds.has(usuario.id)}
+              isNamePending={pendingNameIds.has(usuario.id)}
               isLastAuthorizedManager={usuario.perfil === 'GESTOR'
                 && usuario.ativo
                 && usuario.podeGerenciarUsuarios
                 && gestoresAutorizadosAtivos === 1
                 && pendingPermissionIds.size === 0}
               onPermissionChange={onPermissionChange}
+              onEditName={onEditName}
             />
           ))
         ) : (
@@ -332,14 +423,18 @@ function TeamMember({
   usuario,
   avatarTone,
   isPermissionPending,
+  isNamePending,
   isLastAuthorizedManager,
   onPermissionChange,
+  onEditName,
 }: {
   usuario: EquipeUsuario;
   avatarTone: string;
   isPermissionPending: boolean;
+  isNamePending: boolean;
   isLastAuthorizedManager: boolean;
   onPermissionChange: (usuario: EquipeUsuario, checked: boolean) => void;
+  onEditName: (usuario: EquipeUsuario) => void;
 }) {
   return (
     <article className="flex min-h-[76px] flex-col gap-3 border-b border-clinic-border/80 px-4 py-3 last:border-b-0 md:flex-row md:items-center md:justify-between">
@@ -350,6 +445,16 @@ function TeamMember({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate text-[11px] font-extrabold text-clinic-text">{usuario.nome}</h3>
+            <button
+              type="button"
+              title="Alterar nome"
+              aria-label={`Alterar nome de ${usuario.nome}`}
+              disabled={isNamePending}
+              onClick={() => onEditName(usuario)}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary disabled:cursor-wait disabled:opacity-50"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
             <span className="rounded-full bg-clinic-primary/10 px-2 py-0.5 text-[8px] font-bold text-clinic-primary">
               {PROFILE_LABELS[usuario.perfil]}
             </span>
@@ -513,6 +618,118 @@ function CreateUserDialog({
       </section>
     </div>
   );
+}
+
+function EditUserNameDialog({
+  usuario,
+  isSubmitting,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  usuario: EquipeUsuario;
+  isSubmitting: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSubmit: (nome: string) => void;
+}) {
+  const [nome, setNome] = useState(usuario.nome);
+
+  useEffect(() => {
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape' && !isSubmitting) onClose();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isSubmitting, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="alterar-nome-title"
+        className="w-full max-w-md rounded-2xl border border-clinic-border bg-clinic-surface p-5 shadow-xl"
+      >
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 id="alterar-nome-title" className="text-[15px] font-extrabold text-clinic-text">
+              Alterar nome
+            </h2>
+            <p className="mt-1 text-[10px] text-clinic-muted">
+              Atualize o nome exibido para este usuário.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-clinic-muted transition hover:bg-clinic-soft hover:text-clinic-text disabled:opacity-50"
+            aria-label="Fechar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {error ? (
+          <p role="alert" className="mb-3 rounded-lg border border-clinic-danger/30 bg-clinic-danger/10 px-3 py-2 text-[10px] font-semibold text-clinic-danger">
+            {error}
+          </p>
+        ) : null}
+
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit(nome);
+          }}
+        >
+          <label className="block">
+            <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Nome</span>
+            <input
+              autoFocus
+              aria-label="Nome"
+              value={nome}
+              disabled={isSubmitting}
+              onChange={(event) => setNome(event.target.value)}
+              className="h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-sm text-clinic-text outline-none transition focus:border-clinic-primary focus:ring-2 focus:ring-clinic-primary/15 disabled:opacity-60"
+            />
+          </label>
+          <p className="mt-1 text-[9px] text-clinic-muted">Entre 2 e 200 caracteres.</p>
+
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="h-9 rounded-lg border border-clinic-border px-4 text-[10px] font-bold text-clinic-text transition hover:bg-clinic-soft disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="h-9 rounded-lg bg-clinic-primary px-4 text-[10px] font-bold text-white transition hover:bg-clinic-primary-strong disabled:cursor-wait disabled:opacity-70"
+            >
+              {isSubmitting ? 'Salvando...' : 'Salvar nome'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function normalizeUserName(value: string) {
+  return value.trim().replace(/\s+/gu, ' ');
+}
+
+function validateUserName(normalized: string, original: string) {
+  if (/\p{Cc}/u.test(original)) {
+    return 'Nome não pode conter quebras de linha ou caracteres de controle.';
+  }
+  const length = [...normalized].length;
+  if (length < 2 || length > 200) return 'Nome deve ter entre 2 e 200 caracteres.';
+  return null;
 }
 
 async function safeJson(response: Response): Promise<{ message?: string } | EquipeUsuario | null> {

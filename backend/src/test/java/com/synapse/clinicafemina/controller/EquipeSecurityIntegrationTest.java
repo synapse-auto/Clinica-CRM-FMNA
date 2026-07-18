@@ -338,6 +338,85 @@ class EquipeSecurityIntegrationTest {
                         .value("A clínica precisa manter ao menos um gestor com essa permissão."));
     }
 
+    @Test
+    void authorized_manager_should_rename_visible_user_and_preserve_other_fields() throws Exception {
+        String token = login(gestorEmail);
+        Usuario before = usuarioRepository.findById(recepcionistaId).orElseThrow();
+        String emailBefore = before.getEmail();
+        String passwordBefore = before.getSenhaHash();
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/nome", recepcionistaId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"  Recepção   D'Ávila-Souza  "}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nome").value("Recepção D'Ávila-Souza"))
+                .andExpect(jsonPath("$.senhaHash").doesNotExist());
+
+        entityManager.flush();
+        entityManager.clear();
+        Usuario updated = usuarioRepository.findById(recepcionistaId).orElseThrow();
+        assertTrue(updated.getNome().equals("Recepção D'Ávila-Souza"));
+        assertTrue(updated.getEmail().equals(emailBefore));
+        assertTrue(updated.getSenhaHash().equals(passwordBefore));
+    }
+
+    @Test
+    void name_endpoint_should_enforce_permission_and_hide_cross_clinic_user() throws Exception {
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/nome", recepcionistaId)
+                        .header("Authorization", "Bearer " + login(gestorComumEmail))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nome\":\"Nome Válido\"}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/nome", recepcionistaId)
+                        .header("Authorization", "Bearer " + login(medicoEmail))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nome\":\"Nome Válido\"}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/nome", internoId)
+                        .header("Authorization", "Bearer " + login(gestorEmail))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nome\":\"Nome Válido\"}"))
+                .andExpect(status().isForbidden());
+
+        Clinica otherClinic = new Clinica();
+        otherClinic.setNome("Outra clinica nome");
+        otherClinic.setSlug("outra-nome-" + UUID.randomUUID());
+        otherClinic.setRazaoSocial("Outra clinica nome LTDA");
+        otherClinic.setCnpj("44.444.444/0001-44");
+        otherClinic.setEmailContato("outra.nome@clinica.test");
+        otherClinic.setTelefoneContato("44977777777");
+        otherClinic = clinicaRepository.save(otherClinic);
+        Long otherUserId = saveUser(
+                new Recepcionista(), otherClinic, "Outro Usuário",
+                "outro-nome-" + UUID.randomUUID() + "@clinica.test", false, false, false
+        ).getId();
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/nome", otherUserId)
+                        .header("Authorization", "Bearer " + login(gestorEmail))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nome\":\"Nome Válido\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void name_endpoint_should_reject_invalid_values_before_persisting() throws Exception {
+        String token = login(gestorEmail);
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/nome", recepcionistaId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nome\":\"A\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Nome deve ter entre 2 e 200 caracteres."));
+    }
+
     private String login(String email) throws Exception {
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

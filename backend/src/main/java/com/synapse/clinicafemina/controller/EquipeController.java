@@ -2,6 +2,7 @@ package com.synapse.clinicafemina.controller;
 
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Usuario;
+import com.synapse.clinicafemina.dto.equipe.AlterarNomeUsuarioRequest;
 import com.synapse.clinicafemina.dto.equipe.EquipeResponse;
 import com.synapse.clinicafemina.dto.equipe.EquipeUsuarioCreateRequest;
 import com.synapse.clinicafemina.dto.equipe.EquipeUsuarioResponse;
@@ -54,6 +55,15 @@ public class EquipeController {
             Authentication authentication
     ) {
         return equipeService.alterarPermissaoGerenciamento(usuarioId, request, authentication);
+    }
+
+    @PatchMapping("/usuarios/{usuarioId}/nome")
+    public EquipeUsuarioResponse alterarNome(
+            @PathVariable Long usuarioId,
+            @RequestBody AlterarNomeUsuarioRequest request,
+            Authentication authentication
+    ) {
+        return equipeService.alterarNome(usuarioId, request, authentication);
     }
 
     private Clinica clinicaAutenticada(Authentication authentication) {

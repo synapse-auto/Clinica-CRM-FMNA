@@ -1,7 +1,7 @@
 'use client';
 
 import { Menu } from '@base-ui/react/menu';
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import {
   AlertCircle,
   Check,
@@ -35,6 +35,8 @@ type Props = {
   onSendTemplate?: (request: EnviarTemplateWhatsappRequest) => Promise<void>;
 };
 
+const NEAR_BOTTOM_THRESHOLD = 96;
+
 export function ChatWindow({ detail, messages, quickMessages, busy, error, onSend, onAttach, onSendTemplate }: Props) {
   const [content, setContent] = useState('');
   const [quickOpen, setQuickOpen] = useState(false);
@@ -48,61 +50,106 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
   const addButton = useRef<HTMLButtonElement>(null);
   const templateOpener = useRef<HTMLElement | null>(null);
   const messageScrollContainer = useRef<HTMLDivElement>(null);
-  const messageEnd = useRef<HTMLDivElement>(null);
   const previousConversationId = useRef<number | null>(null);
-  const previousLastMessageId = useRef<number | null>(null);
+  const previousMessageIds = useRef<number[]>([]);
+  const previousScrollHeight = useRef(0);
+  const previousScrollTop = useRef(0);
   const isNearBottom = useRef(true);
   const filteredQuickMessages = filterQuickMessages(quickMessages, quickSearch);
-  const lastMessage = messages.at(-1);
   const windowOpen = detail?.janelaWhatsappAberta !== false;
   const templatesAvailable = detail?.whatsappTemplatesDisponiveis === true;
 
   const scrollToLastMessage = useCallback((behavior: ScrollBehavior = 'auto') => {
-    window.requestAnimationFrame(() => {
-      const container = messageScrollContainer.current;
-      if (!container) return;
+    const container = messageScrollContainer.current;
+    if (!container) return;
+    if (behavior === 'smooth' && typeof container.scrollTo === 'function') {
+      container.scrollTo({ top: container.scrollHeight, behavior });
+    } else {
       container.scrollTop = container.scrollHeight;
-      messageEnd.current?.scrollIntoView?.({ behavior, block: 'end' });
-      isNearBottom.current = true;
-      setShowNewMessagesNotice(false);
-    });
+    }
+    previousScrollTop.current = container.scrollTop;
+    previousScrollHeight.current = container.scrollHeight;
+    isNearBottom.current = true;
+    setShowNewMessagesNotice(false);
   }, []);
 
   function handleMessageScroll() {
     const container = messageScrollContainer.current;
     if (!container) return;
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    const nextIsNearBottom = distanceFromBottom <= 96;
+    const nextIsNearBottom = isContainerNearBottom(container);
     isNearBottom.current = nextIsNearBottom;
+    previousScrollTop.current = container.scrollTop;
+    previousScrollHeight.current = container.scrollHeight;
     if (nextIsNearBottom) setShowNewMessagesNotice(false);
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const container = messageScrollContainer.current;
     const currentConversationId = detail?.id ?? null;
-    const currentLastMessageId = lastMessage?.id ?? null;
+    const currentMessageIds = messages.map((message) => message.id);
     const conversationChanged = previousConversationId.current !== currentConversationId;
-    const messageChanged = previousLastMessageId.current !== currentLastMessageId;
 
-    if (!currentConversationId) {
+    if (!currentConversationId || !container) {
       previousConversationId.current = null;
-      previousLastMessageId.current = null;
+      previousMessageIds.current = [];
+      previousScrollHeight.current = 0;
+      previousScrollTop.current = 0;
+      isNearBottom.current = true;
       setShowNewMessagesNotice(false);
       return;
     }
 
     if (conversationChanged) {
       scrollToLastMessage('auto');
-    } else if (messageChanged && currentLastMessageId) {
-      if (isNearBottom.current || lastMessage?.direcao === 'SAIDA') {
-        scrollToLastMessage(lastMessage?.direcao === 'SAIDA' ? 'smooth' : 'auto');
+    } else {
+      const previousIds = previousMessageIds.current;
+      const prepended = isPrependedSequence(previousIds, currentMessageIds);
+      const appended = isAppendedSequence(previousIds, currentMessageIds);
+
+      if (prepended) {
+        const addedHeight = Math.max(0, container.scrollHeight - previousScrollHeight.current);
+        container.scrollTop = previousScrollTop.current + addedHeight;
+        isNearBottom.current = isContainerNearBottom(container);
+      } else if (appended) {
+        const appendedMessages = messages.slice(previousIds.length);
+        const ownMessageAppended = appendedMessages.some((message) => message.direcao === 'SAIDA');
+        if (isNearBottom.current || ownMessageAppended) {
+          scrollToLastMessage('auto');
+        } else {
+          setShowNewMessagesNotice(true);
+        }
+      } else if (sameSequence(previousIds, currentMessageIds)) {
+        // Atualizações de status não alteram a posição de leitura.
       } else {
-        setShowNewMessagesNotice(true);
+        isNearBottom.current = isContainerNearBottom(container);
       }
     }
 
     previousConversationId.current = currentConversationId;
-    previousLastMessageId.current = currentLastMessageId;
-  }, [detail?.id, lastMessage?.direcao, lastMessage?.id, scrollToLastMessage]);
+    previousMessageIds.current = currentMessageIds;
+    previousScrollTop.current = container.scrollTop;
+    previousScrollHeight.current = container.scrollHeight;
+  }, [detail?.id, messages, scrollToLastMessage]);
+
+  const handleMediaLayoutChanged = useCallback((conversationId: number) => {
+    if (previousConversationId.current !== conversationId) return;
+    const container = messageScrollContainer.current;
+    if (!container) return;
+    if (isNearBottom.current) {
+      scrollToLastMessage('auto');
+      return;
+    }
+    previousScrollTop.current = container.scrollTop;
+    previousScrollHeight.current = container.scrollHeight;
+  }, [scrollToLastMessage]);
+
+  useEffect(() => {
+    function handleResize() {
+      if (isNearBottom.current) scrollToLastMessage('auto');
+    }
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [scrollToLastMessage]);
 
   useEffect(() => {
     setContent('');
@@ -268,15 +315,19 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
             Ainda não há mensagens nesta conversa.
           </p>
         ) : messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            onMediaLayoutChanged={detail ? () => handleMediaLayoutChanged(detail.id) : undefined}
+          />
         ))}
-          <div ref={messageEnd} aria-hidden="true" data-testid="message-scroll-end" />
+          <div aria-hidden="true" data-testid="message-scroll-end" />
           </div>
         </div>
         {showNewMessagesNotice ? (
           <button
             type="button"
-            aria-label="Ir para novas mensagens"
+            aria-label="Ir para o final da conversa"
             className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-clinic-border bg-clinic-surface px-3 py-1.5 text-[10px] font-extrabold text-clinic-primary shadow-lg transition hover:bg-clinic-hover"
             onClick={() => scrollToLastMessage('smooth')}
           >
@@ -491,7 +542,13 @@ function WhatsappWindowIndicator({ expiresAt }: { expiresAt: string | null }) {
   );
 }
 
-function MessageBubble({ message }: { message: MensagemAtendimento }) {
+function MessageBubble({
+  message,
+  onMediaLayoutChanged,
+}: {
+  message: MensagemAtendimento;
+  onMediaLayoutChanged?: () => void;
+}) {
   const outbound = message.direcao === 'SAIDA';
   const failed = message.whatsappStatus === 'FALHA';
   const template = message.tipoMedia === 'TEMPLATE';
@@ -513,7 +570,9 @@ function MessageBubble({ message }: { message: MensagemAtendimento }) {
             {message.templateIdioma ? <span className="opacity-70">· {message.templateIdioma}</span> : null}
           </div>
         ) : null}
-        <div className="whitespace-pre-wrap">{message.midia ? <MediaContent message={message} /> : message.conteudo}</div>
+        <div className="whitespace-pre-wrap">{message.midia ? (
+          <MediaContent message={message} onLayoutChanged={onMediaLayoutChanged} />
+        ) : message.conteudo}</div>
       </div>
       <div className="mt-1 flex items-center gap-1 text-[10px] text-clinic-muted">
         {new Intl.DateTimeFormat('pt-BR', {
@@ -539,7 +598,13 @@ function mensagemFalhaAmigavel(reason: string | null) {
   return reason ?? 'Falha no envio';
 }
 
-function MediaContent({ message }: { message: MensagemAtendimento }) {
+function MediaContent({
+  message,
+  onLayoutChanged,
+}: {
+  message: MensagemAtendimento;
+  onLayoutChanged?: () => void;
+}) {
   const media = message.midia;
   const [error, setError] = useState(false);
 
@@ -560,6 +625,7 @@ function MediaContent({ message }: { message: MensagemAtendimento }) {
         <img
           src={media.url}
           alt={media.nomeArquivo ?? 'Imagem recebida'}
+          onLoad={onLayoutChanged}
           onError={() => setError(true)}
           className="max-h-56 w-auto rounded-lg object-contain"
         />
@@ -572,6 +638,7 @@ function MediaContent({ message }: { message: MensagemAtendimento }) {
         controls
         preload="none"
         src={media.url}
+        onLoadedMetadata={onLayoutChanged}
         onError={() => setError(true)}
         className="max-w-full"
       />
@@ -588,6 +655,26 @@ function MediaContent({ message }: { message: MensagemAtendimento }) {
       {media.nomeArquivo ?? 'Abrir documento'}
     </a>
   );
+}
+
+function isContainerNearBottom(container: HTMLElement) {
+  return container.scrollHeight - container.scrollTop - container.clientHeight <= NEAR_BOTTOM_THRESHOLD;
+}
+
+function sameSequence(previousIds: number[], currentIds: number[]) {
+  return previousIds.length === currentIds.length
+    && previousIds.every((id, index) => id === currentIds[index]);
+}
+
+function isAppendedSequence(previousIds: number[], currentIds: number[]) {
+  return currentIds.length > previousIds.length
+    && previousIds.every((id, index) => id === currentIds[index]);
+}
+
+function isPrependedSequence(previousIds: number[], currentIds: number[]) {
+  if (currentIds.length <= previousIds.length || previousIds.length === 0) return false;
+  const offset = currentIds.length - previousIds.length;
+  return previousIds.every((id, index) => id === currentIds[index + offset]);
 }
 
 function StatusIcon({ status }: { status: string | null }) {

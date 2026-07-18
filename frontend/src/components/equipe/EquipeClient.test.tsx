@@ -4,6 +4,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EquipeClient } from './EquipeClient';
 import type { EquipeResponse } from '@/types/equipe';
 
+const routerRefreshMock = vi.hoisted(() => vi.fn());
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: routerRefreshMock }),
+}));
+
 const emptyTeam: EquipeResponse = {
   grupos: [
     { perfil: 'GESTOR', titulo: 'Gestores', usuarios: [] },
@@ -56,6 +62,7 @@ describe('EquipeClient', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    routerRefreshMock.mockClear();
   });
 
   it('should_render_real_users_without_fake_team_metrics', () => {
@@ -248,6 +255,83 @@ describe('EquipeClient', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Não foi possível alterar a permissão.',
     );
+  });
+
+  it('should_edit_name_with_only_the_name_in_payload_and_without_reload', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ...realTeam.grupos[1].usuarios[0],
+      nome: "Maria D'Ávila-Souza",
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<EquipeClient initialData={realTeam} initialError={null} />);
+
+    await user.click(screen.getByRole('button', { name: 'Alterar nome de Medico Real' }));
+    const input = screen.getByRole('textbox', { name: 'Nome' });
+    await user.clear(input);
+    await user.type(input, "  Maria   D'Ávila-Souza  {enter}");
+
+    await waitFor(() => expect(screen.getByText("Maria D'Ávila-Souza")).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith('/api/equipe/usuarios/2/nome', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: "Maria D'Ávila-Souza" }),
+    });
+    expect(await screen.findByRole('status')).toHaveTextContent('Nome atualizado com sucesso.');
+    expect(screen.queryByRole('dialog', { name: 'Alterar nome' })).not.toBeInTheDocument();
+  });
+
+  it('should_keep_current_name_and_dialog_when_backend_rejects_update', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      message: 'Nome inválido.',
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+    render(<EquipeClient initialData={realTeam} initialError={null} />);
+
+    await user.click(screen.getByRole('button', { name: 'Alterar nome de Medico Real' }));
+    const input = screen.getByRole('textbox', { name: 'Nome' });
+    await user.clear(input);
+    await user.type(input, 'Nome Recusado');
+    await user.click(screen.getByRole('button', { name: 'Salvar nome' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nome inválido.');
+    expect(screen.getByText('Medico Real')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Alterar nome' })).toBeInTheDocument();
+  });
+
+  it('should_cancel_name_edit_with_escape_without_request', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<EquipeClient initialData={realTeam} initialError={null} />);
+
+    await user.click(screen.getByRole('button', { name: 'Alterar nome de Medico Real' }));
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', { name: 'Alterar nome' })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('should_refresh_server_shell_after_renaming_current_user', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ...realTeam.grupos[0].usuarios[0],
+      nome: 'Gestora Atualizada',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+    render(<EquipeClient initialData={realTeam} initialError={null} currentUserId={1} />);
+
+    await user.click(screen.getByRole('button', { name: 'Alterar nome de Gestora Real' }));
+    const input = screen.getByRole('textbox', { name: 'Nome' });
+    await user.clear(input);
+    await user.type(input, 'Gestora Atualizada{enter}');
+
+    await waitFor(() => expect(routerRefreshMock).toHaveBeenCalledTimes(1));
   });
 });
 
