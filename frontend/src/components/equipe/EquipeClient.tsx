@@ -16,6 +16,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { FormSelect } from '@/components/ui/form-select';
+import { Switch } from '@/components/ui/switch';
 import type {
   EquipeGrupo,
   EquipePerfil,
@@ -61,9 +62,24 @@ export function EquipeClient({ initialData, initialError }: EquipeClientProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingPermissionIds, setPendingPermissionIds] = useState<Set<number>>(new Set());
+  const [permissionFeedback, setPermissionFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const totalUsuarios = useMemo(
     () => grupos.reduce((total, grupo) => total + grupo.usuarios.length, 0),
+    [grupos],
+  );
+
+  const gestoresAutorizadosAtivos = useMemo(
+    () => grupos
+      .flatMap((grupo) => grupo.usuarios)
+      .filter((usuario) => usuario.perfil === 'GESTOR'
+        && usuario.ativo
+        && usuario.podeGerenciarUsuarios)
+      .length,
     [grupos],
   );
 
@@ -120,6 +136,74 @@ export function EquipeClient({ initialData, initialError }: EquipeClientProps) {
     )));
   }
 
+  function updateUser(usuarioId: number, updater: (usuario: EquipeUsuario) => EquipeUsuario) {
+    setGrupos((current) => current.map((grupo) => ({
+      ...grupo,
+      usuarios: grupo.usuarios.map((usuario) => (
+        usuario.id === usuarioId ? updater(usuario) : usuario
+      )),
+    })));
+  }
+
+  async function handlePermissionChange(usuario: EquipeUsuario, checked: boolean) {
+    if (pendingPermissionIds.has(usuario.id)) return;
+    if (!checked && usuario.podeGerenciarUsuarios && gestoresAutorizadosAtivos <= 1) {
+      setPermissionFeedback({
+        type: 'error',
+        message: 'A clínica precisa manter ao menos um gestor com essa permissão.',
+      });
+      return;
+    }
+
+    const previousValue = usuario.podeGerenciarUsuarios;
+    setPermissionFeedback(null);
+    setPendingPermissionIds((current) => new Set(current).add(usuario.id));
+    updateUser(usuario.id, (current) => ({ ...current, podeGerenciarUsuarios: checked }));
+
+    try {
+      const response = await fetch(`/api/equipe/usuarios/${usuario.id}/permissao-gerenciamento`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ podeGerenciarUsuarios: checked }),
+      });
+      const body = await safeJson(response);
+
+      if (!response.ok) {
+        updateUser(usuario.id, (current) => ({
+          ...current,
+          podeGerenciarUsuarios: previousValue,
+        }));
+        setPermissionFeedback({
+          type: 'error',
+          message: getResponseMessage(body) ?? 'Não foi possível alterar a permissão.',
+        });
+        return;
+      }
+
+      const updated = body as EquipeUsuario;
+      updateUser(usuario.id, () => updated);
+      setPermissionFeedback({
+        type: 'success',
+        message: `Permissão de ${updated.nome} atualizada com sucesso.`,
+      });
+    } catch {
+      updateUser(usuario.id, (current) => ({
+        ...current,
+        podeGerenciarUsuarios: previousValue,
+      }));
+      setPermissionFeedback({
+        type: 'error',
+        message: 'Serviço de equipe indisponível. Tente novamente em instantes.',
+      });
+    } finally {
+      setPendingPermissionIds((current) => {
+        const next = new Set(current);
+        next.delete(usuario.id);
+        return next;
+      });
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -146,6 +230,19 @@ export function EquipeClient({ initialData, initialError }: EquipeClientProps) {
         </p>
       ) : null}
 
+      {permissionFeedback ? (
+        <p
+          role={permissionFeedback.type === 'error' ? 'alert' : 'status'}
+          className={`mb-3 rounded-lg border px-3 py-2 text-[10px] font-semibold ${
+            permissionFeedback.type === 'error'
+              ? 'border-clinic-danger/30 bg-clinic-danger/10 text-clinic-danger'
+              : 'border-clinic-primary/30 bg-clinic-primary/10 text-clinic-primary'
+          }`}
+        >
+          {permissionFeedback.message}
+        </p>
+      ) : null}
+
       {totalUsuarios === 0 && !initialError ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-clinic-border bg-clinic-surface py-16 text-center">
           <UsersRound className="mb-3 h-10 w-10 text-clinic-muted" />
@@ -157,7 +254,13 @@ export function EquipeClient({ initialData, initialError }: EquipeClientProps) {
       ) : (
         <div className="space-y-4">
           {grupos.map((grupo) => (
-            <TeamGroup key={grupo.perfil} grupo={grupo} />
+            <TeamGroup
+              key={grupo.perfil}
+              grupo={grupo}
+              gestoresAutorizadosAtivos={gestoresAutorizadosAtivos}
+              pendingPermissionIds={pendingPermissionIds}
+              onPermissionChange={handlePermissionChange}
+            />
           ))}
         </div>
       )}
@@ -174,7 +277,17 @@ export function EquipeClient({ initialData, initialError }: EquipeClientProps) {
   );
 }
 
-function TeamGroup({ grupo }: { grupo: EquipeGrupo }) {
+function TeamGroup({
+  grupo,
+  gestoresAutorizadosAtivos,
+  pendingPermissionIds,
+  onPermissionChange,
+}: {
+  grupo: EquipeGrupo;
+  gestoresAutorizadosAtivos: number;
+  pendingPermissionIds: Set<number>;
+  onPermissionChange: (usuario: EquipeUsuario, checked: boolean) => void;
+}) {
   const Icon = GROUP_ICONS[grupo.perfil] ?? UsersRound;
 
   return (
@@ -196,6 +309,13 @@ function TeamGroup({ grupo }: { grupo: EquipeGrupo }) {
               key={usuario.id}
               usuario={usuario}
               avatarTone={AVATAR_TONES[index % AVATAR_TONES.length]}
+              isPermissionPending={pendingPermissionIds.has(usuario.id)}
+              isLastAuthorizedManager={usuario.perfil === 'GESTOR'
+                && usuario.ativo
+                && usuario.podeGerenciarUsuarios
+                && gestoresAutorizadosAtivos === 1
+                && pendingPermissionIds.size === 0}
+              onPermissionChange={onPermissionChange}
             />
           ))
         ) : (
@@ -211,9 +331,15 @@ function TeamGroup({ grupo }: { grupo: EquipeGrupo }) {
 function TeamMember({
   usuario,
   avatarTone,
+  isPermissionPending,
+  isLastAuthorizedManager,
+  onPermissionChange,
 }: {
   usuario: EquipeUsuario;
   avatarTone: string;
+  isPermissionPending: boolean;
+  isLastAuthorizedManager: boolean;
+  onPermissionChange: (usuario: EquipeUsuario, checked: boolean) => void;
 }) {
   return (
     <article className="flex min-h-[76px] flex-col gap-3 border-b border-clinic-border/80 px-4 py-3 last:border-b-0 md:flex-row md:items-center md:justify-between">
@@ -245,6 +371,32 @@ function TeamMember({
           <Phone className="h-3 w-3" />
           {usuario.telefone ?? 'Telefone não informado'}
         </p>
+        {usuario.perfil === 'GESTOR' ? (
+          <div className="min-w-[250px] rounded-lg border border-clinic-border bg-clinic-soft/50 px-3 py-2">
+            <div className="flex min-h-8 items-center gap-2">
+              <Switch
+                checked={usuario.podeGerenciarUsuarios}
+                disabled={!usuario.ativo || isPermissionPending || isLastAuthorizedManager}
+                onCheckedChange={(checked) => void onPermissionChange(usuario, checked)}
+                aria-label={`Pode gerenciar usuários e senhas: ${usuario.nome}`}
+              />
+              <span className="text-[10px] font-bold text-clinic-text">
+                Pode gerenciar usuários e senhas
+              </span>
+            </div>
+            <p className="mt-0.5 text-[9px] leading-relaxed text-clinic-muted">
+              Permite criar usuários e administrar credenciais da equipe.
+            </p>
+            {isPermissionPending ? (
+              <p className="mt-1 text-[9px] font-semibold text-clinic-primary">Salvando...</p>
+            ) : null}
+            {isLastAuthorizedManager ? (
+              <p className="mt-1 text-[9px] font-semibold text-clinic-orange">
+                A clínica precisa manter ao menos um gestor com essa permissão.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </article>
   );

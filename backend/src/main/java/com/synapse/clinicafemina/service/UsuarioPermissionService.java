@@ -3,33 +3,49 @@ package com.synapse.clinicafemina.service;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class UsuarioPermissionService {
 
-    private final UsuarioRepository usuarioRepository;
-    private final ClinicaConfigService clinicaConfigService;
+    private static final String ACCESS_DENIED_MESSAGE = "Usuário não autorizado a gerenciar a equipe.";
 
+    private final UsuarioRepository usuarioRepository;
+
+    @Transactional(readOnly = true)
     public boolean podeGerenciarUsuarios(Authentication authentication) {
-        if (authentication == null || !authentication.isAuthenticated()) {
+        try {
+            exigirGerenciador(authentication);
+            return true;
+        } catch (AccessDeniedException exception) {
             return false;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Usuario exigirGerenciador(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException(ACCESS_DENIED_MESSAGE);
         }
 
         Object principal = authentication.getPrincipal();
-        if (!(principal instanceof Usuario usuario)) {
-            return false;
+        if (!(principal instanceof Usuario usuario) || usuario.getId() == null) {
+            throw new AccessDeniedException(ACCESS_DENIED_MESSAGE);
         }
 
-        // Buscar do banco de dados para garantir que a permissão é a mais recente
-        Long clinicaAtualId = clinicaConfigService.obterClinicaAtual().getId();
-        return usuarioRepository.findById(usuario.getId())
-                .map(u -> "GESTOR".equals(u.getPerfil())
-                        && Boolean.TRUE.equals(u.getPodeGerenciarUsuarios())
-                        && u.getClinica() != null
-                        && clinicaAtualId.equals(u.getClinica().getId()))
-                .orElse(false);
+        Usuario atual = usuarioRepository.findById(usuario.getId())
+                .orElseThrow(() -> new AccessDeniedException(ACCESS_DENIED_MESSAGE));
+        if (!Boolean.TRUE.equals(atual.getAtivo())
+                || atual.getDeletadoEm() != null
+                || !"GESTOR".equals(atual.getPerfil())
+                || !Boolean.TRUE.equals(atual.getPodeGerenciarUsuarios())
+                || atual.getClinica() == null) {
+            throw new AccessDeniedException(ACCESS_DENIED_MESSAGE);
+        }
+        return atual;
     }
 }

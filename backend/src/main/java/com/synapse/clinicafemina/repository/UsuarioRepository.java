@@ -1,9 +1,11 @@
 package com.synapse.clinicafemina.repository;
 
 import com.synapse.clinicafemina.domain.Usuario;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -25,6 +27,38 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
             @Param("id") Long id,
             @Param("clinicaId") Long clinicaId
     );
+
+    @Query("""
+            SELECT u FROM Usuario u
+            WHERE u.id = :id
+              AND u.clinica.id = :clinicaId
+            """)
+    Optional<Usuario> findByIdAndClinicaId(
+            @Param("id") Long id,
+            @Param("clinicaId") Long clinicaId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT u FROM Usuario u
+            WHERE u.id = :id
+              AND u.clinica.id = :clinicaId
+            """)
+    Optional<Usuario> findByIdAndClinicaIdForUpdate(
+            @Param("id") Long id,
+            @Param("clinicaId") Long clinicaId
+    );
+
+    @Query("""
+            SELECT COUNT(u) FROM Usuario u
+            WHERE u.clinica.id = :clinicaId
+              AND u.perfil = 'GESTOR'
+              AND u.ativo = true
+              AND u.adminInterno = false
+              AND u.podeGerenciarUsuarios = true
+              AND u.deletadoEm IS NULL
+            """)
+    long countGestoresAutorizadosAtivosByClinicaId(@Param("clinicaId") Long clinicaId);
 
     @Query("""
             SELECT u FROM Usuario u

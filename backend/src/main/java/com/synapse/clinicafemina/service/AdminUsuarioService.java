@@ -11,6 +11,7 @@ import com.synapse.clinicafemina.dto.operacional.StatusRequest;
 import com.synapse.clinicafemina.dto.auth.ResetPasswordRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
+import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import com.synapse.clinicafemina.security.PasswordPolicy;
 import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
@@ -33,6 +34,7 @@ public class AdminUsuarioService {
     );
 
     private final UsuarioRepository usuarioRepository;
+    private final ClinicaRepository clinicaRepository;
     private final PasswordEncoder passwordEncoder;
     private final ClinicDataChangePublisher clinicDataChangePublisher;
 
@@ -78,17 +80,22 @@ public class AdminUsuarioService {
 
     @Transactional
     public EquipeUsuarioResponse alterarStatus(Clinica clinica, Long id, StatusRequest request) {
-        Usuario usuario = usuarioRepository.findById(id)
+        clinicaRepository.findByIdForUpdate(clinica.getId())
+                .orElseThrow(() -> new NotFoundException("Clínica não encontrada."));
+        Usuario usuario = usuarioRepository.findByIdAndClinicaIdForUpdate(id, clinica.getId())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado."));
-
-        if (!usuario.getClinica().getId().equals(clinica.getId())) {
-            throw new BadRequestException("Acesso negado. Usuário pertence a outra clínica.");
-        }
 
         // Impedir auto-desativação
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         if (principal instanceof Usuario currentAuthUser && currentAuthUser.getId().equals(usuario.getId()) && !request.ativo()) {
             throw new BadRequestException("Não é permitido desativar a si mesmo.");
+        }
+
+        if (!request.ativo()
+                && Boolean.TRUE.equals(usuario.getAtivo())
+                && isGestorAutorizadoAtivo(usuario)
+                && usuarioRepository.countGestoresAutorizadosAtivosByClinicaId(clinica.getId()) <= 1) {
+            throw new BadRequestException("A clínica precisa manter ao menos um gestor com essa permissão.");
         }
 
         usuario.setAtivo(request.ativo());
@@ -99,12 +106,8 @@ public class AdminUsuarioService {
 
     @Transactional
     public EquipeUsuarioResponse resetarSenha(Clinica clinica, Long id, ResetPasswordRequest request) {
-        Usuario usuario = usuarioRepository.findById(id)
+        Usuario usuario = usuarioRepository.findByIdAndClinicaId(id, clinica.getId())
                 .orElseThrow(() -> new NotFoundException("Usuário não encontrado."));
-
-        if (!usuario.getClinica().getId().equals(clinica.getId())) {
-            throw new BadRequestException("Acesso negado. Usuário pertence a outra clínica.");
-        }
 
         String senhaTemporaria = request.senhaTemporaria();
         if (senhaTemporaria == null || senhaTemporaria.isBlank()) {
@@ -118,6 +121,14 @@ public class AdminUsuarioService {
         usuario.setSenhaHash(passwordEncoder.encode(senhaTemporaria));
         usuario.setMustChangePassword(true);
         return toResponse(usuarioRepository.save(usuario));
+    }
+
+    private boolean isGestorAutorizadoAtivo(Usuario usuario) {
+        return "GESTOR".equals(usuario.getPerfil())
+                && Boolean.TRUE.equals(usuario.getAtivo())
+                && usuario.getDeletadoEm() == null
+                && !Boolean.TRUE.equals(usuario.getAdminInterno())
+                && Boolean.TRUE.equals(usuario.getPodeGerenciarUsuarios());
     }
 
     private Usuario createProfile(String perfil) {
@@ -189,6 +200,7 @@ public class AdminUsuarioService {
                 perfil,
                 usuario.getAtivo(),
                 usuario.getMustChangePassword(),
+                Boolean.TRUE.equals(usuario.getPodeGerenciarUsuarios()),
                 usuario.getCriadoEm()
         );
     }

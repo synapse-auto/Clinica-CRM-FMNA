@@ -23,6 +23,7 @@ const mockUsuarios = [
     perfil: 'GESTOR',
     ativo: true,
     mustChangePassword: false,
+    podeGerenciarUsuarios: true,
     criadoEm: '2026-06-29T12:00:00Z',
   },
   {
@@ -33,6 +34,7 @@ const mockUsuarios = [
     perfil: 'MEDICO',
     ativo: true,
     mustChangePassword: true,
+    podeGerenciarUsuarios: false,
     criadoEm: '2026-06-29T12:00:00Z',
   },
 ];
@@ -81,6 +83,7 @@ describe('AcessosClient', () => {
           perfil: 'RECEPCIONISTA',
           ativo: true,
           mustChangePassword: true,
+          podeGerenciarUsuarios: false,
           criadoEm: '2026-06-29T12:00:00Z',
         }), {
           status: 201,

@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -65,6 +66,11 @@ class EquipeSecurityIntegrationTest {
     private String recepcionistaEmail;
     private String medicoEmail;
     private String senha;
+    private Long gestorId;
+    private Long gestorComumId;
+    private Long recepcionistaId;
+    private Long medicoId;
+    private Long internoId;
 
     @BeforeEach
     void setUp() {
@@ -83,11 +89,11 @@ class EquipeSecurityIntegrationTest {
         recepcionistaEmail = "recepcao-" + UUID.randomUUID() + "@clinica.local";
         medicoEmail = "medico-" + UUID.randomUUID() + "@clinica.local";
 
-        saveUser(new Gestor(), clinica, "Gestora Real", gestorEmail, false, false, true);
-        saveUser(new Gestor(), clinica, "Gestor Comum", gestorComumEmail, false, false, false);
-        saveUser(new Recepcionista(), clinica, "Recepcao Real", recepcionistaEmail, false, false, false);
-        saveUser(new Medico(), clinica, "Medico Real", medicoEmail, false, false, false);
-        saveUser(new Gestor(), clinica, "Admin Interno", "interno-" + UUID.randomUUID() + "@clinica.local", false, true, false);
+        gestorId = saveUser(new Gestor(), clinica, "Gestora Real", gestorEmail, false, false, true).getId();
+        gestorComumId = saveUser(new Gestor(), clinica, "Gestor Comum", gestorComumEmail, false, false, false).getId();
+        recepcionistaId = saveUser(new Recepcionista(), clinica, "Recepcao Real", recepcionistaEmail, false, false, false).getId();
+        medicoId = saveUser(new Medico(), clinica, "Medico Real", medicoEmail, false, false, false).getId();
+        internoId = saveUser(new Gestor(), clinica, "Admin Interno", "interno-" + UUID.randomUUID() + "@clinica.local", false, true, false).getId();
         entityManager.flush();
         entityManager.clear();
     }
@@ -217,6 +223,121 @@ class EquipeSecurityIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void authorized_manager_should_grant_permission_and_existing_session_should_be_recognized_immediately() throws Exception {
+        String authorizedToken = login(gestorEmail);
+        String commonManagerToken = login(gestorComumEmail);
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/permissao-gerenciamento", gestorComumId)
+                        .header("Authorization", "Bearer " + authorizedToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"podeGerenciarUsuarios":true}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(gestorComumId))
+                .andExpect(jsonPath("$.podeGerenciarUsuarios").value(true))
+                .andExpect(jsonPath("$.senhaHash").doesNotExist());
+
+        entityManager.flush();
+        entityManager.clear();
+        assertTrue(usuarioRepository.findById(gestorComumId).orElseThrow().getPodeGerenciarUsuarios());
+
+        mockMvc.perform(get("/api/equipe")
+                        .header("Authorization", "Bearer " + commonManagerToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void authorized_manager_should_revoke_permission_when_another_manager_remains() throws Exception {
+        Usuario commonManager = usuarioRepository.findById(gestorComumId).orElseThrow();
+        commonManager.setPodeGerenciarUsuarios(true);
+        usuarioRepository.saveAndFlush(commonManager);
+        entityManager.clear();
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/permissao-gerenciamento", gestorComumId)
+                        .header("Authorization", "Bearer " + login(gestorEmail))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"podeGerenciarUsuarios":false}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.podeGerenciarUsuarios").value(false));
+    }
+
+    @Test
+    void permission_endpoint_should_reject_invalid_targets_without_cross_clinic_disclosure() throws Exception {
+        String token = login(gestorEmail);
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/permissao-gerenciamento", medicoId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"podeGerenciarUsuarios\":true}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/permissao-gerenciamento", recepcionistaId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"podeGerenciarUsuarios\":true}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/permissao-gerenciamento", internoId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"podeGerenciarUsuarios\":true}"))
+                .andExpect(status().isForbidden());
+
+        Clinica otherClinic = new Clinica();
+        otherClinic.setNome("Outra clinica");
+        otherClinic.setSlug("outra-" + UUID.randomUUID());
+        otherClinic.setRazaoSocial("Outra clinica LTDA");
+        otherClinic.setCnpj("33.333.333/0001-33");
+        otherClinic.setEmailContato("outra@clinica.test");
+        otherClinic.setTelefoneContato("44988888888");
+        otherClinic = clinicaRepository.save(otherClinic);
+        Long otherUserId = saveUser(
+                new Gestor(),
+                otherClinic,
+                "Gestor Externo",
+                "externo-" + UUID.randomUUID() + "@clinica.test",
+                false,
+                false,
+                false
+        ).getId();
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/permissao-gerenciamento", otherUserId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"podeGerenciarUsuarios\":true}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Usuário não encontrado."));
+    }
+
+    @Test
+    void permission_endpoint_should_reject_inactive_deleted_and_last_authorized_manager() throws Exception {
+        String token = login(gestorEmail);
+
+        Usuario inactive = usuarioRepository.findById(gestorComumId).orElseThrow();
+        inactive.setAtivo(false);
+        usuarioRepository.saveAndFlush(inactive);
+        entityManager.clear();
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/permissao-gerenciamento", gestorComumId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"podeGerenciarUsuarios\":true}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(patch("/api/equipe/usuarios/{id}/permissao-gerenciamento", gestorId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"podeGerenciarUsuarios\":false}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("A clínica precisa manter ao menos um gestor com essa permissão."));
+    }
+
     private String login(String email) throws Exception {
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -231,7 +352,7 @@ class EquipeSecurityIntegrationTest {
         return json.get("token").asText();
     }
 
-    private void saveUser(
+    private Usuario saveUser(
             Usuario usuario,
             Clinica clinica,
             String nome,
@@ -248,6 +369,6 @@ class EquipeSecurityIntegrationTest {
         usuario.setAdminInterno(adminInterno);
         usuario.setPodeGerenciarUsuarios(podeGerenciarUsuarios);
         usuario.setAtivo(true);
-        usuarioRepository.save(usuario);
+        return usuarioRepository.save(usuario);
     }
 }

@@ -9,16 +9,24 @@ import com.synapse.clinicafemina.dto.equipe.EquipeGrupoResponse;
 import com.synapse.clinicafemina.dto.equipe.EquipeResponse;
 import com.synapse.clinicafemina.dto.equipe.EquipeUsuarioCreateRequest;
 import com.synapse.clinicafemina.dto.equipe.EquipeUsuarioResponse;
+import com.synapse.clinicafemina.dto.equipe.PermissaoGerenciamentoRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
+import com.synapse.clinicafemina.exception.NotFoundException;
+import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import com.synapse.clinicafemina.security.PasswordPolicy;
+import com.synapse.clinicafemina.service.audit.UsuarioPermissionAuditEvent;
 import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,8 +45,11 @@ public class EquipeService {
     );
 
     private final UsuarioRepository usuarioRepository;
+    private final ClinicaRepository clinicaRepository;
     private final PasswordEncoder passwordEncoder;
     private final ClinicDataChangePublisher clinicDataChangePublisher;
+    private final UsuarioPermissionService usuarioPermissionService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional(readOnly = true)
     public EquipeResponse listar(Clinica clinica) {
@@ -84,11 +95,64 @@ public class EquipeService {
         usuario.setAtivo(true);
         usuario.setMustChangePassword(true);
         usuario.setAdminInterno(false);
+        usuario.setPodeGerenciarUsuarios(false);
         usuario.setTemaPreferencia("CLARO");
 
         EquipeUsuarioResponse response = toResponse(usuarioRepository.save(usuario), perfil);
         clinicDataChangePublisher.publish(clinica.getId());
         return response;
+    }
+
+    @Transactional
+    public EquipeUsuarioResponse alterarPermissaoGerenciamento(
+            Long usuarioId,
+            PermissaoGerenciamentoRequest request,
+            Authentication authentication
+    ) {
+        Usuario executor = usuarioPermissionService.exigirGerenciador(authentication);
+        Long clinicaId = executor.getClinica().getId();
+
+        clinicaRepository.findByIdForUpdate(clinicaId)
+                .orElseThrow(() -> new AccessDeniedException("Acesso negado."));
+        Usuario alvo = usuarioRepository.findByIdAndClinicaIdForUpdate(usuarioId, clinicaId)
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado."));
+
+        validarAlvoDaPermissao(alvo);
+
+        boolean valorAnterior = Boolean.TRUE.equals(alvo.getPodeGerenciarUsuarios());
+        boolean valorNovo = Boolean.TRUE.equals(request.podeGerenciarUsuarios());
+        if (valorAnterior == valorNovo) {
+            return toResponse(alvo);
+        }
+
+        if (!valorNovo && usuarioRepository.countGestoresAutorizadosAtivosByClinicaId(clinicaId) <= 1) {
+            throw new BadRequestException("A clínica precisa manter ao menos um gestor com essa permissão.");
+        }
+
+        alvo.setPodeGerenciarUsuarios(valorNovo);
+        EquipeUsuarioResponse response = toResponse(usuarioRepository.save(alvo));
+        applicationEventPublisher.publishEvent(new UsuarioPermissionAuditEvent(
+                "PERMISSAO_GERENCIAMENTO_USUARIOS_ALTERADA",
+                executor.getId(),
+                alvo.getId(),
+                clinicaId,
+                valorAnterior,
+                valorNovo,
+                OffsetDateTime.now()
+        ));
+        return response;
+    }
+
+    private void validarAlvoDaPermissao(Usuario alvo) {
+        if (Boolean.TRUE.equals(alvo.getAdminInterno())) {
+            throw new AccessDeniedException("Usuário interno não pode receber esta permissão.");
+        }
+        if (!Boolean.TRUE.equals(alvo.getAtivo()) || alvo.getDeletadoEm() != null) {
+            throw new BadRequestException("A permissão só pode ser alterada para um usuário ativo e não deletado.");
+        }
+        if (!"GESTOR".equals(resolvePerfil(alvo).perfil())) {
+            throw new BadRequestException("A permissão só pode ser concedida a gestores.");
+        }
     }
 
     private Usuario createProfile(String perfil) {
@@ -152,6 +216,7 @@ public class EquipeService {
                 perfil,
                 usuario.getAtivo(),
                 usuario.getMustChangePassword(),
+                Boolean.TRUE.equals(usuario.getPodeGerenciarUsuarios()),
                 usuario.getCriadoEm()
         );
     }

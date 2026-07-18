@@ -208,13 +208,13 @@ class AdminUsuarioSecurityIntegrationTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"ativo\": false}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isNotFound());
 
         mockMvc.perform(patch("/api/admin/usuarios/%d/resetar-senha".formatted(outroUsuario.getId()))
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"senhaTemporaria\": \"Senha@123\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isNotFound());
 
         assertTrue(usuarioRepository.findById(outroUsuario.getId()).orElseThrow().getAtivo());
     }

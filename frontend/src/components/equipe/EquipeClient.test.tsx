@@ -25,6 +25,7 @@ const realTeam: EquipeResponse = {
         perfil: 'GESTOR',
         ativo: true,
         mustChangePassword: false,
+        podeGerenciarUsuarios: true,
         criadoEm: '2026-06-29T12:00:00Z',
       }],
     },
@@ -39,6 +40,7 @@ const realTeam: EquipeResponse = {
         perfil: 'MEDICO',
         ativo: true,
         mustChangePassword: true,
+        podeGerenciarUsuarios: false,
         criadoEm: '2026-06-29T12:00:00Z',
       }],
     },
@@ -87,6 +89,7 @@ describe('EquipeClient', () => {
       perfil: 'RECEPCIONISTA',
       ativo: true,
       mustChangePassword: true,
+      podeGerenciarUsuarios: false,
       criadoEm: '2026-06-29T12:00:00Z',
     }), {
       status: 201,
@@ -139,4 +142,138 @@ describe('EquipeClient', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Email já cadastrado.');
   });
+
+  it('should_show_permission_switch_only_for_managers_with_backend_state', () => {
+    render(<EquipeClient initialData={realTeam} initialError={null} />);
+
+    expect(screen.getByRole('switch', {
+      name: 'Pode gerenciar usuários e senhas: Gestora Real',
+    })).toBeChecked();
+    expect(screen.queryByRole('switch', {
+      name: 'Pode gerenciar usuários e senhas: Medico Real',
+    })).not.toBeInTheDocument();
+  });
+
+  it('should_block_last_manager_and_show_friendly_message', () => {
+    render(<EquipeClient initialData={realTeam} initialError={null} />);
+
+    expect(screen.getByRole('switch', {
+      name: 'Pode gerenciar usuários e senhas: Gestora Real',
+    })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText('A clínica precisa manter ao menos um gestor com essa permissão.'))
+      .toBeInTheDocument();
+  });
+
+  it('should_send_correct_boolean_and_update_permission_without_reload', async () => {
+    const user = userEvent.setup();
+    const team = withSecondManager(false);
+    const updated = team.grupos[0].usuarios[1];
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ...updated,
+      podeGerenciarUsuarios: true,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<EquipeClient initialData={team} initialError={null} />);
+
+    const permissionSwitch = screen.getByRole('switch', {
+      name: 'Pode gerenciar usuários e senhas: Gestor Segundo',
+    });
+    expect(permissionSwitch).not.toBeChecked();
+
+    await user.click(permissionSwitch);
+
+    await waitFor(() => expect(permissionSwitch).toBeChecked());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/equipe/usuarios/3/permissao-gerenciamento',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ podeGerenciarUsuarios: true }),
+      }),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Permissão de Gestor Segundo atualizada com sucesso.',
+    );
+  });
+
+  it('should_disable_only_changed_switch_while_request_is_pending', async () => {
+    const user = userEvent.setup();
+    const team = withSecondManager(true);
+    let resolveRequest: ((response: Response) => void) | undefined;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => {
+      resolveRequest = resolve;
+    })));
+    render(<EquipeClient initialData={team} initialError={null} />);
+
+    const first = screen.getByRole('switch', {
+      name: 'Pode gerenciar usuários e senhas: Gestora Real',
+    });
+    const second = screen.getByRole('switch', {
+      name: 'Pode gerenciar usuários e senhas: Gestor Segundo',
+    });
+    await user.click(second);
+
+    expect(second).toHaveAttribute('aria-disabled', 'true');
+    expect(first).not.toHaveAttribute('aria-disabled', 'true');
+
+    resolveRequest?.(new Response(JSON.stringify({
+      ...team.grupos[0].usuarios[1],
+      podeGerenciarUsuarios: false,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    await waitFor(() => expect(second).not.toHaveAttribute('aria-disabled', 'true'));
+  });
+
+  it('should_rollback_permission_when_backend_rejects_update', async () => {
+    const user = userEvent.setup();
+    const team = withSecondManager(true);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      message: 'Não foi possível alterar a permissão.',
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+    render(<EquipeClient initialData={team} initialError={null} />);
+
+    const permissionSwitch = screen.getByRole('switch', {
+      name: 'Pode gerenciar usuários e senhas: Gestor Segundo',
+    });
+    await user.click(permissionSwitch);
+
+    await waitFor(() => expect(permissionSwitch).toBeChecked());
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Não foi possível alterar a permissão.',
+    );
+  });
 });
+
+function withSecondManager(permission: boolean): EquipeResponse {
+  return {
+    ...realTeam,
+    grupos: realTeam.grupos.map((grupo) => (
+      grupo.perfil === 'GESTOR'
+        ? {
+            ...grupo,
+            usuarios: [
+              ...grupo.usuarios,
+              {
+                id: 3,
+                nome: 'Gestor Segundo',
+                email: 'gestor.segundo@clinica.local',
+                telefone: null,
+                perfil: 'GESTOR',
+                ativo: true,
+                mustChangePassword: false,
+                podeGerenciarUsuarios: permission,
+                criadoEm: '2026-06-29T12:00:00Z',
+              },
+            ],
+          }
+        : grupo
+    )),
+  };
+}

@@ -11,6 +11,7 @@ import com.synapse.clinicafemina.dto.operacional.StatusRequest;
 import com.synapse.clinicafemina.dto.auth.ResetPasswordRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
+import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +39,9 @@ class AdminUsuarioServiceTest {
     private UsuarioRepository usuarioRepository;
 
     @Mock
+    private ClinicaRepository clinicaRepository;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @Mock
@@ -54,7 +58,12 @@ class AdminUsuarioServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AdminUsuarioService(usuarioRepository, passwordEncoder, clinicDataChangePublisher);
+        service = new AdminUsuarioService(
+                usuarioRepository,
+                clinicaRepository,
+                passwordEncoder,
+                clinicDataChangePublisher
+        );
         clinica = new Clinica();
         clinica.setId(10L);
         SecurityContextHolder.setContext(securityContext);
@@ -146,7 +155,8 @@ class AdminUsuarioServiceTest {
     @Test
     void should_alter_user_status_with_clinic_isolation() {
         Gestor gestor = usuario(new Gestor(), 1L, "Gestor", "gestor@clinica.local", "GESTOR", 10L);
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(gestor));
+        when(clinicaRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(clinica));
+        when(usuarioRepository.findByIdAndClinicaIdForUpdate(1L, 10L)).thenReturn(Optional.of(gestor));
         when(usuarioRepository.save(any(Usuario.class))).thenReturn(gestor);
 
         // Mock current authenticated user to be different from 1L to avoid self-deactivation check
@@ -163,17 +173,18 @@ class AdminUsuarioServiceTest {
 
     @Test
     void should_reject_status_alteration_for_different_clinic() {
-        Gestor gestor = usuario(new Gestor(), 1L, "Gestor", "gestor@clinica.local", "GESTOR", 20L); // Clinica 20L
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(gestor));
+        when(clinicaRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(clinica));
+        when(usuarioRepository.findByIdAndClinicaIdForUpdate(1L, 10L)).thenReturn(Optional.empty());
 
-        assertThrows(BadRequestException.class, () -> service.alterarStatus(clinica, 1L, new StatusRequest(false))); // Current clinica is 10L
+        assertThrows(NotFoundException.class, () -> service.alterarStatus(clinica, 1L, new StatusRequest(false)));
         verify(usuarioRepository, never()).save(any());
     }
 
     @Test
     void should_prevent_self_deactivation() {
         Gestor gestor = usuario(new Gestor(), 1L, "Gestor", "gestor@clinica.local", "GESTOR", 10L);
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(gestor));
+        when(clinicaRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(clinica));
+        when(usuarioRepository.findByIdAndClinicaIdForUpdate(1L, 10L)).thenReturn(Optional.of(gestor));
 
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.getPrincipal()).thenReturn(gestor);
@@ -185,7 +196,7 @@ class AdminUsuarioServiceTest {
     @Test
     void should_reset_user_password_temporarily() {
         Medico medico = usuario(new Medico(), 2L, "Medico", "medico@clinica.local", "MEDICO", 10L);
-        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(medico));
+        when(usuarioRepository.findByIdAndClinicaId(2L, 10L)).thenReturn(Optional.of(medico));
         when(passwordEncoder.encode("Medico@Temp123")).thenReturn("newEncodedPassword");
         when(usuarioRepository.save(any(Usuario.class))).thenReturn(medico);
 
@@ -196,6 +207,27 @@ class AdminUsuarioServiceTest {
         assertTrue(response.mustChangePassword());
         verify(passwordEncoder).encode("Medico@Temp123");
         verify(clinicDataChangePublisher, never()).publish(any());
+    }
+
+    @Test
+    void should_not_deactivate_last_authorized_manager() {
+        Gestor gestor = usuario(new Gestor(), 1L, "Gestor", "gestor@clinica.local", "GESTOR", 10L);
+        gestor.setPodeGerenciarUsuarios(true);
+        when(clinicaRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(clinica));
+        when(usuarioRepository.findByIdAndClinicaIdForUpdate(1L, 10L)).thenReturn(Optional.of(gestor));
+        when(usuarioRepository.countGestoresAutorizadosAtivosByClinicaId(10L)).thenReturn(1L);
+
+        Gestor current = usuario(new Gestor(), 99L, "Current", "curr@clinica.local", "GESTOR", 10L);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        when(authentication.getPrincipal()).thenReturn(current);
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> service.alterarStatus(clinica, 1L, new StatusRequest(false))
+        );
+
+        assertEquals("A clínica precisa manter ao menos um gestor com essa permissão.", exception.getMessage());
+        verify(usuarioRepository, never()).save(any());
     }
 
     private <T extends Usuario> T usuario(T usuario, Long id, String nome, String email, String perfil, Long clinicaId) {

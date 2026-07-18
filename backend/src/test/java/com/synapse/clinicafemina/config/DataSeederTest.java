@@ -113,6 +113,31 @@ class DataSeederTest {
     }
 
     @Test
+    void should_preserve_existing_user_management_permission_after_restart() {
+        Clinica clinica = clinic();
+        Gestor existing = new Gestor();
+        existing.setSenhaHash("$2a$12$existing");
+        existing.setPodeGerenciarUsuarios(true);
+        DataSeeder seeder = seeder(true, """
+                [{
+                  "nome": "Gestor Existente",
+                  "email": "gestor.existente@local.test",
+                  "perfil": "GESTOR",
+                  "password": "SenhaTemporaria1"
+                }]
+                """);
+
+        when(clinicaRepository.findBySlug("fmna")).thenReturn(Optional.of(clinica));
+        when(usuarioRepository.findByEmail("gestor.existente@local.test")).thenReturn(Optional.of(existing));
+
+        seeder.run();
+
+        assertTrue(existing.getPodeGerenciarUsuarios());
+        verify(usuarioRepository, never()).save(any());
+        verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    @Test
     void should_reset_existing_password_only_when_json_explicitly_requests_it() {
         Clinica clinica = clinic();
         Gestor existing = new Gestor();

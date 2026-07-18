@@ -8,6 +8,7 @@ export type EquipeUsuario = {
   perfil: EquipePerfil;
   ativo: boolean;
   mustChangePassword: boolean;
+  podeGerenciarUsuarios: boolean;
   criadoEm: string | null;
 };
 

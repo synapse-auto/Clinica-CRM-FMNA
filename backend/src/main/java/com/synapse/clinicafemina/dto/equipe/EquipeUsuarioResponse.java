@@ -10,6 +10,7 @@ public record EquipeUsuarioResponse(
         String perfil,
         Boolean ativo,
         Boolean mustChangePassword,
+        Boolean podeGerenciarUsuarios,
         OffsetDateTime criadoEm
 ) {
 }

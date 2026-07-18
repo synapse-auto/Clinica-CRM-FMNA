@@ -9,6 +9,7 @@ import com.synapse.clinicafemina.dto.equipe.EquipeGrupoResponse;
 import com.synapse.clinicafemina.dto.equipe.EquipeUsuarioCreateRequest;
 import com.synapse.clinicafemina.dto.equipe.EquipeUsuarioResponse;
 import com.synapse.clinicafemina.exception.BadRequestException;
+import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
 import java.util.List;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,17 +40,33 @@ class EquipeServiceTest {
     private UsuarioRepository usuarioRepository;
 
     @Mock
+    private ClinicaRepository clinicaRepository;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @Mock
     private ClinicDataChangePublisher clinicDataChangePublisher;
+
+    @Mock
+    private UsuarioPermissionService usuarioPermissionService;
+
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
 
     private EquipeService service;
     private Clinica clinica;
 
     @BeforeEach
     void setUp() {
-        service = new EquipeService(usuarioRepository, passwordEncoder, clinicDataChangePublisher);
+        service = new EquipeService(
+                usuarioRepository,
+                clinicaRepository,
+                passwordEncoder,
+                clinicDataChangePublisher,
+                usuarioPermissionService,
+                applicationEventPublisher
+        );
         clinica = new Clinica();
         clinica.setId(7L);
     }
