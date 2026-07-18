@@ -15,6 +15,7 @@ import com.synapse.clinicafemina.domain.Medico;
 import com.synapse.clinicafemina.repository.AgendamentoRepository;
 import com.synapse.clinicafemina.repository.IntegrationSyncLogRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
+import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -79,6 +80,9 @@ class ExternalSyncServiceTest {
     @Mock
     private EntityManager entityManager;
 
+    @Mock
+    private ClinicDataChangePublisher clinicDataChangePublisher;
+
     private ExternalSyncService service;
     private Clinica clinica;
 
@@ -90,6 +94,7 @@ class ExternalSyncServiceTest {
                 usuarioRepository,
                 new ObjectMapper(),
                 entityManager,
+                clinicDataChangePublisher,
                 100
         );
         service = new ExternalSyncService(
@@ -150,6 +155,7 @@ class ExternalSyncServiceTest {
         assertEquals("MARIA DA SILVA", saved.getNomeBusca());
         assertEquals(1, result.pacientesCriados());
         assertEquals(0, result.pacientesAtualizados());
+        verify(clinicDataChangePublisher).publish(7L);
     }
 
     @Test
@@ -196,6 +202,7 @@ class ExternalSyncServiceTest {
         assertEquals(1, result.pacientesProcessados());
         assertEquals(1, result.pacientesCriados());
         assertEquals(1, finalProgress.getPacientesProcessados());
+        verify(clinicDataChangePublisher).publish(7L);
     }
 
     @Test
@@ -966,6 +973,7 @@ class ExternalSyncServiceTest {
         );
         assertFalse(errorCaptor.getValue().contains("detalhe interno simulado"));
         verifyNoInteractions(agendamentoRepository);
+        verify(clinicDataChangePublisher, never()).publish(any());
     }
 
     @Test

@@ -12,6 +12,7 @@ import com.synapse.clinicafemina.dto.auth.ResetPasswordRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
+import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +41,9 @@ class AdminUsuarioServiceTest {
     private PasswordEncoder passwordEncoder;
 
     @Mock
+    private ClinicDataChangePublisher clinicDataChangePublisher;
+
+    @Mock
     private SecurityContext securityContext;
 
     @Mock
@@ -50,7 +54,7 @@ class AdminUsuarioServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AdminUsuarioService(usuarioRepository, passwordEncoder);
+        service = new AdminUsuarioService(usuarioRepository, passwordEncoder, clinicDataChangePublisher);
         clinica = new Clinica();
         clinica.setId(10L);
         SecurityContextHolder.setContext(securityContext);
@@ -106,6 +110,7 @@ class AdminUsuarioServiceTest {
         assertTrue(saved.getMustChangePassword());
         assertFalse(saved.getPodeGerenciarUsuarios());
         verify(passwordEncoder).encode(" Senha@123 ");
+        verify(clinicDataChangePublisher).publish(10L);
     }
 
     @Test
@@ -153,6 +158,7 @@ class AdminUsuarioServiceTest {
 
         assertFalse(gestor.getAtivo());
         assertFalse(response.ativo());
+        verify(clinicDataChangePublisher).publish(10L);
     }
 
     @Test
@@ -189,6 +195,7 @@ class AdminUsuarioServiceTest {
         assertTrue(medico.getMustChangePassword());
         assertTrue(response.mustChangePassword());
         verify(passwordEncoder).encode("Medico@Temp123");
+        verify(clinicDataChangePublisher, never()).publish(any());
     }
 
     private <T extends Usuario> T usuario(T usuario, Long id, String nome, String email, String perfil, Long clinicaId) {

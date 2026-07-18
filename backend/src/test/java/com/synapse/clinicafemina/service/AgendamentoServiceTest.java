@@ -9,11 +9,13 @@ import com.synapse.clinicafemina.dto.agendamento.AgendamentoCancelRequest;
 import com.synapse.clinicafemina.dto.agendamento.AgendamentoCreateRequest;
 import com.synapse.clinicafemina.dto.agendamento.AgendamentoResponse;
 import com.synapse.clinicafemina.dto.agendamento.AgendamentoUpdateRequest;
+import com.synapse.clinicafemina.dto.agendamento.AgendaOptionResponse;
 import com.synapse.clinicafemina.dto.agendamento.AgendaOptionsResponse;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.repository.AgendamentoRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
+import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +51,12 @@ class AgendamentoServiceTest {
     @Mock
     private AgendaExternalDoctorResolver externalDoctorResolver;
 
+    @Mock
+    private AgendaDoctorDistributionService agendaDoctorDistributionService;
+
+    @Mock
+    private ClinicDataChangePublisher clinicDataChangePublisher;
+
     private AgendamentoService service;
     private Clinica clinica;
     private Paciente paciente;
@@ -60,7 +68,9 @@ class AgendamentoServiceTest {
                 agendamentoRepository,
                 pacienteRepository,
                 usuarioRepository,
-                externalDoctorResolver
+                externalDoctorResolver,
+                agendaDoctorDistributionService,
+                clinicDataChangePublisher
         );
         clinica = new Clinica();
         clinica.setId(7L);
@@ -229,7 +239,9 @@ class AgendamentoServiceTest {
     void should_list_patient_options_without_loading_encrypted_patient_entity() {
         when(pacienteRepository.findOpcoesDisponiveisByClinicaId(7L))
                 .thenReturn(List.of(pacienteOption(20L, "maria da silva")));
-        when(usuarioRepository.findMedicosAtivosByClinicaId(7L)).thenReturn(List.of(medico));
+        when(agendaDoctorDistributionService.list(any())).thenReturn(List.of(
+                new AgendaOptionResponse(30L, "Dra. Renata")
+        ));
 
         AgendaOptionsResponse response = service.listarOpcoes(clinica);
 
@@ -245,15 +257,10 @@ class AgendamentoServiceTest {
         clinica.setExternalProvider(ExternalProviderType.MEDWARE);
         OffsetDateTime inicio = OffsetDateTime.parse("2026-07-01T00:00:00-03:00");
         OffsetDateTime fim = OffsetDateTime.parse("2026-07-08T00:00:00-03:00");
-        Agendamento imported = appointment();
-        imported.setExternalSource(ExternalProviderType.MEDWARE);
         when(pacienteRepository.findOpcoesDisponiveisByClinicaId(7L)).thenReturn(List.of());
-        when(agendamentoRepository
-                .findByClinicaIdAndDataHoraInicioGreaterThanEqualAndDataHoraInicioLessThanOrderByDataHoraInicioAsc(
-                        7L, inicio, fim))
-                .thenReturn(List.of(imported));
-        when(externalDoctorResolver.resolve(imported)).thenReturn(Optional.of(
-                new AgendaExternalDoctorResolver.ExternalDoctor("M-17", "Dra. Renata")));
+        when(agendaDoctorDistributionService.list(any())).thenReturn(List.of(
+                new AgendaOptionResponse(null, "Dra. Renata", "M-17", "MEDWARE")
+        ));
 
         AgendaOptionsResponse response = service.listarOpcoes(clinica, inicio, fim);
 

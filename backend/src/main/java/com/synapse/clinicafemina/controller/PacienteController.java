@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.controller;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import com.synapse.clinicafemina.dto.paciente.PacienteResumoDTO;
+import com.synapse.clinicafemina.dto.paciente.PacientePageResponse;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.PacienteService;
 import com.synapse.clinicafemina.service.PacienteTagService;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -42,6 +44,18 @@ public class PacienteController {
     public List<PacienteResumoDTO> listar() {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
         return pacienteService.listar(clinica);
+    }
+
+    @GetMapping("/pesquisa")
+    public PacientePageResponse pesquisar(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long tag
+    ) {
+        Clinica clinica = clinicaConfigService.obterClinicaAtual();
+        return pacienteService.pesquisar(clinica, q, page, size, status, tag);
     }
 
     /**

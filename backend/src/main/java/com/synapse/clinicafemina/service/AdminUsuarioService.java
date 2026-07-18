@@ -13,6 +13,7 @@ import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import com.synapse.clinicafemina.security.PasswordPolicy;
+import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,6 +34,7 @@ public class AdminUsuarioService {
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ClinicDataChangePublisher clinicDataChangePublisher;
 
     @Transactional(readOnly = true)
     public List<EquipeUsuarioResponse> listar(Clinica clinica) {
@@ -69,7 +71,9 @@ public class AdminUsuarioService {
         usuario.setTemaPreferencia("CLARO");
         usuario.setPodeGerenciarUsuarios(false);
 
-        return toResponse(usuarioRepository.save(usuario));
+        EquipeUsuarioResponse response = toResponse(usuarioRepository.save(usuario));
+        clinicDataChangePublisher.publish(clinica.getId());
+        return response;
     }
 
     @Transactional
@@ -88,7 +92,9 @@ public class AdminUsuarioService {
         }
 
         usuario.setAtivo(request.ativo());
-        return toResponse(usuarioRepository.save(usuario));
+        EquipeUsuarioResponse response = toResponse(usuarioRepository.save(usuario));
+        clinicDataChangePublisher.publish(clinica.getId());
+        return response;
     }
 
     @Transactional

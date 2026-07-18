@@ -4,6 +4,9 @@ import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Tag;
 import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import com.synapse.clinicafemina.dto.paciente.PacienteResumoDTO;
+import com.synapse.clinicafemina.dto.paciente.PacientePageResponse;
+import com.synapse.clinicafemina.dto.paciente.PacienteStatusCountsDTO;
+import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.repository.PacienteTagRepository;
@@ -14,6 +17,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.synapse.clinicafemina.service.search.SmartSearchCriteria;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +43,64 @@ public class PacienteService {
         return pacientes.stream()
                 .map(paciente -> toResumo(paciente, tagsPorPaciente))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PacientePageResponse pesquisar(
+            Clinica clinica,
+            String query,
+            int page,
+            int size,
+            String status,
+            Long tagId
+    ) {
+        if (page < 0) {
+            throw new BadRequestException("A pagina deve ser maior ou igual a zero");
+        }
+        if (size < 1 || size > 100) {
+            throw new BadRequestException("O tamanho da pagina deve estar entre 1 e 100");
+        }
+        SmartSearchCriteria criteria = SmartSearchCriteria.from(query);
+        Page<PacienteRepository.PacienteResumoProjection> result = pacienteRepository.pesquisarResumos(
+                clinica.getId(),
+                status == null ? "" : status.trim().toUpperCase(),
+                tagId,
+                criteria.mode(),
+                criteria.normalized(),
+                criteria.externalExact(),
+                criteria.digits(),
+                criteria.localPhoneDigits(),
+                criteria.phoneWithCountryCode(),
+                criteria.exactId(),
+                criteria.token(0),
+                criteria.token(1),
+                criteria.token(2),
+                criteria.token(3),
+                criteria.token(4),
+                PageRequest.of(page, size)
+        );
+        Map<Long, List<TagResponse>> tags = tagsDosPacientes(result.getContent(), clinica.getId());
+        List<PacienteResumoDTO> content = result.getContent().stream()
+                .map(paciente -> toResumo(paciente, tags))
+                .toList();
+        PacienteRepository.PacienteStatusCountsProjection counts =
+                pacienteRepository.countStatusByClinicaId(clinica.getId());
+        long total = counts == null || counts.getTotal() == null ? 0 : counts.getTotal();
+        long emAtendimento = counts == null || counts.getEmAtendimento() == null
+                ? 0 : counts.getEmAtendimento();
+        long agendado = counts == null || counts.getAgendado() == null ? 0 : counts.getAgendado();
+        long finalizado = counts == null || counts.getFinalizado() == null ? 0 : counts.getFinalizado();
+        return new PacientePageResponse(
+                content,
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages(),
+                new PacienteStatusCountsDTO(
+                        total, emAtendimento, agendado, finalizado,
+                        Math.max(0, total - emAtendimento - agendado - finalizado)
+                )
+        );
     }
 
     /**

@@ -10,6 +10,7 @@ import com.synapse.clinicafemina.dto.equipe.EquipeUsuarioCreateRequest;
 import com.synapse.clinicafemina.dto.equipe.EquipeUsuarioResponse;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
+import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,12 +40,15 @@ class EquipeServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private ClinicDataChangePublisher clinicDataChangePublisher;
+
     private EquipeService service;
     private Clinica clinica;
 
     @BeforeEach
     void setUp() {
-        service = new EquipeService(usuarioRepository, passwordEncoder);
+        service = new EquipeService(usuarioRepository, passwordEncoder, clinicDataChangePublisher);
         clinica = new Clinica();
         clinica.setId(7L);
     }
@@ -102,6 +106,7 @@ class EquipeServiceTest {
         assertTrue(usuario.getMustChangePassword());
         assertFalse(usuario.getAdminInterno());
         assertEquals("RECEPCIONISTA", response.perfil());
+        verify(clinicDataChangePublisher).publish(7L);
     }
 
     @Test
@@ -142,6 +147,7 @@ class EquipeServiceTest {
 
         assertThrows(BadRequestException.class, () -> service.criarUsuario(clinica, request));
         verify(usuarioRepository, never()).save(any());
+        verify(clinicDataChangePublisher, never()).publish(any());
     }
 
     @Test

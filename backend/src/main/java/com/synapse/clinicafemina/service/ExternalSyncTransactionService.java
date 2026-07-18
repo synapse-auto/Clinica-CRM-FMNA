@@ -15,6 +15,7 @@ import com.synapse.clinicafemina.integration.external.PageResult;
 import com.synapse.clinicafemina.repository.AgendamentoRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
+import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
 import jakarta.persistence.EntityManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,6 +51,7 @@ public class ExternalSyncTransactionService {
     private final UsuarioRepository usuarioRepository;
     private final ObjectMapper objectMapper;
     private final EntityManager entityManager;
+    private final ClinicDataChangePublisher clinicDataChangePublisher;
     private final int pageSize;
 
     public ExternalSyncTransactionService(
@@ -58,6 +60,7 @@ public class ExternalSyncTransactionService {
             UsuarioRepository usuarioRepository,
             ObjectMapper objectMapper,
             EntityManager entityManager,
+            ClinicDataChangePublisher clinicDataChangePublisher,
             @Value("${app.integrations.page-size:100}") int pageSize
     ) {
         this.pacienteRepository = pacienteRepository;
@@ -65,6 +68,7 @@ public class ExternalSyncTransactionService {
         this.usuarioRepository = usuarioRepository;
         this.objectMapper = objectMapper;
         this.entityManager = entityManager;
+        this.clinicDataChangePublisher = clinicDataChangePublisher;
         this.pageSize = pageSize;
     }
 
@@ -83,6 +87,7 @@ public class ExternalSyncTransactionService {
             entityManager.flush();
             return null;
         });
+        clinicDataChangePublisher.publish(clinica.getId());
     }
 
     private void syncPatients(

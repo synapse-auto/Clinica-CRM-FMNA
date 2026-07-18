@@ -18,6 +18,7 @@ import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteTagRepository;
 import com.synapse.clinicafemina.repository.TransferenciaAtendimentoRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
+import com.synapse.clinicafemina.service.search.SmartSearchCriteria;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -70,6 +71,7 @@ public class AtendimentoService {
         String filtroNormalizado = filtro == null ? "TODOS" : filtro.toUpperCase();
         String statusEfetivo = "FINALIZADOS".equals(filtroNormalizado) ? "ENCERRADO" : normalizar(status);
 
+        SmartSearchCriteria search = SmartSearchCriteria.from(busca);
         Page<Atendimento> atendimentos = atendimentoRepository.findByClinica(
                 clinicaId,
                 statusEfetivo,
@@ -78,7 +80,17 @@ public class AtendimentoService {
                 "NAO_LIDOS".equals(filtroNormalizado),
                 "AGUARDANDO".equals(filtroNormalizado),
                 "REVISAO".equals(filtroNormalizado),
-                normalizarBusca(busca),
+                search.mode(),
+                search.externalExact(),
+                search.digits(),
+                search.localPhoneDigits(),
+                search.phoneWithCountryCode(),
+                search.exactId(),
+                search.token(0),
+                search.token(1),
+                search.token(2),
+                search.token(3),
+                search.token(4),
                 pageable
         );
         Map<Long, String> previasPorAtendimento = ultimasPrevias(atendimentos.getContent());
@@ -387,8 +399,4 @@ public class AtendimentoService {
         return valor == null || valor.isBlank() ? null : valor.trim();
     }
 
-    private String normalizarBusca(String valor) {
-        String normalizado = normalizar(valor);
-        return normalizado == null ? "" : normalizado.toUpperCase(Locale.ROOT);
-    }
 }

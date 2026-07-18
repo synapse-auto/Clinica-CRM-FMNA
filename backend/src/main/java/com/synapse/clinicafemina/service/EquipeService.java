@@ -12,6 +12,7 @@ import com.synapse.clinicafemina.dto.equipe.EquipeUsuarioResponse;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import com.synapse.clinicafemina.security.PasswordPolicy;
+import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -37,6 +38,7 @@ public class EquipeService {
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ClinicDataChangePublisher clinicDataChangePublisher;
 
     @Transactional(readOnly = true)
     public EquipeResponse listar(Clinica clinica) {
@@ -84,7 +86,9 @@ public class EquipeService {
         usuario.setAdminInterno(false);
         usuario.setTemaPreferencia("CLARO");
 
-        return toResponse(usuarioRepository.save(usuario), perfil);
+        EquipeUsuarioResponse response = toResponse(usuarioRepository.save(usuario), perfil);
+        clinicDataChangePublisher.publish(clinica.getId());
+        return response;
     }
 
     private Usuario createProfile(String perfil) {

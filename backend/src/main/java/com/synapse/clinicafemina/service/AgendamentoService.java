@@ -18,12 +18,12 @@ import com.synapse.clinicafemina.repository.AgendamentoRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import java.time.OffsetDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import com.synapse.clinicafemina.service.cache.AgendaDoctorCacheKey;
+import com.synapse.clinicafemina.service.cache.ClinicDataChangePublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +40,8 @@ public class AgendamentoService {
     private final PacienteRepository pacienteRepository;
     private final UsuarioRepository usuarioRepository;
     private final AgendaExternalDoctorResolver externalDoctorResolver;
+    private final AgendaDoctorDistributionService agendaDoctorDistributionService;
+    private final ClinicDataChangePublisher clinicDataChangePublisher;
 
     @Transactional(readOnly = true)
     public List<AgendamentoResponse> listar(
@@ -72,36 +74,14 @@ public class AgendamentoService {
                 .stream()
                 .map(paciente -> new AgendaOptionResponse(paciente.getId(), paciente.getNomeBusca()))
                 .toList();
-        List<AgendaOptionResponse> medicos = listarMedicosDaAgenda(clinica, inicio, fim);
+        List<AgendaOptionResponse> medicos = agendaDoctorDistributionService.list(
+                new AgendaDoctorCacheKey(
+                        clinica.getId(),
+                        clinica.getExternalProvider(),
+                        clinica.getExternalProvider() == ExternalProviderType.MEDWARE ? inicio : null,
+                        clinica.getExternalProvider() == ExternalProviderType.MEDWARE ? fim : null
+                ));
         return new AgendaOptionsResponse(pacientes, medicos);
-    }
-
-    private List<AgendaOptionResponse> listarMedicosDaAgenda(
-            Clinica clinica,
-            OffsetDateTime inicio,
-            OffsetDateTime fim
-    ) {
-        if (clinica.getExternalProvider() == ExternalProviderType.MEDWARE) {
-            Map<String, AgendaExternalDoctorResolver.ExternalDoctor> doctors = new LinkedHashMap<>();
-            List<Agendamento> appointments = inicio != null && fim != null
-                    ? agendamentoRepository
-                    .findByClinicaIdAndDataHoraInicioGreaterThanEqualAndDataHoraInicioLessThanOrderByDataHoraInicioAsc(
-                            clinica.getId(), inicio, fim)
-                    : agendamentoRepository.findByClinicaIdOrderByDataHoraInicioAsc(clinica.getId());
-            appointments
-                    .stream()
-                    .map(externalDoctorResolver::resolve)
-                    .flatMap(Optional::stream)
-                    .forEach(doctor -> doctors.putIfAbsent(externalDoctorResolver.key(doctor), doctor));
-            return doctors.values().stream()
-                    .map(doctor -> new AgendaOptionResponse(
-                            null, doctor.nome(), doctor.codigoExterno(), "MEDWARE"))
-                    .toList();
-        }
-        return usuarioRepository.findMedicosAtivosByClinicaId(clinica.getId())
-                .stream()
-                .map(medico -> new AgendaOptionResponse(medico.getId(), medico.getNome()))
-                .toList();
     }
 
     @Transactional
@@ -116,7 +96,9 @@ public class AgendamentoService {
         agendamento.setConfirmacaoEnviada(0);
         aplicarDados(agendamento, clinica, request.pacienteId(), request.medicoId(),
                 request.dataHoraInicio(), request.dataHoraFim(), request.tipo(), request.servicoNome());
-        return toResponse(agendamentoRepository.save(agendamento));
+        AgendamentoResponse response = toResponse(agendamentoRepository.save(agendamento));
+        clinicDataChangePublisher.publish(clinica.getId());
+        return response;
     }
 
     @Transactional
@@ -132,7 +114,9 @@ public class AgendamentoService {
         }
         aplicarDados(agendamento, clinica, request.pacienteId(), request.medicoId(),
                 request.dataHoraInicio(), request.dataHoraFim(), request.tipo(), request.servicoNome());
-        return toResponse(agendamentoRepository.save(agendamento));
+        AgendamentoResponse response = toResponse(agendamentoRepository.save(agendamento));
+        clinicDataChangePublisher.publish(clinica.getId());
+        return response;
     }
 
     @Transactional
@@ -148,7 +132,9 @@ public class AgendamentoService {
             agendamento.setMotivoCancelamento(request.motivo().trim());
             agendamento = agendamentoRepository.save(agendamento);
         }
-        return toResponse(agendamento);
+        AgendamentoResponse response = toResponse(agendamento);
+        clinicDataChangePublisher.publish(clinica.getId());
+        return response;
     }
 
     private void aplicarDados(

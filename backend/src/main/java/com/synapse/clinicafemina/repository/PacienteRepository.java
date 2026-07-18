@@ -3,6 +3,8 @@ package com.synapse.clinicafemina.repository;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -39,6 +41,16 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
         Long getId();
 
         String getNomeBusca();
+    }
+
+    interface PacienteStatusCountsProjection {
+        Long getTotal();
+
+        Long getEmAtendimento();
+
+        Long getAgendado();
+
+        Long getFinalizado();
     }
 
     Optional<Paciente> findByIdAndClinicaId(Long id, Long clinicaId);
@@ -81,6 +93,124 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
             ORDER BY nome_busca ASC
             """, nativeQuery = true)
     List<PacienteResumoProjection> findResumosDisponiveisByClinicaId(@Param("clinicaId") Long clinicaId);
+
+    @Query(value = """
+            SELECT
+                p.id AS id,
+                p.clinica_id AS "clinicaId",
+                COALESCE(NULLIF(p.nome_busca, ''), CONCAT('Paciente ', p.id)) AS "nomeBusca",
+                p.telefone_normalizado AS "telefoneNormalizado",
+                p.status AS status,
+                p.external_source AS "externalSource",
+                p.external_id AS "externalId",
+                p.foto_url AS "fotoUrl",
+                p.criado_em AS "criadoEm",
+                p.ultima_interacao_em AS "ultimaInteracaoEm"
+            FROM paciente p
+            WHERE p.clinica_id = :clinicaId
+              AND p.deletado_em IS NULL
+              AND (:status = '' OR p.status = :status)
+              AND (:tagId IS NULL OR EXISTS (
+                    SELECT 1
+                    FROM paciente_tag pt
+                    JOIN tag t ON t.id = pt.tag_id
+                    WHERE pt.paciente_id = p.id
+                      AND pt.tag_id = :tagId
+                      AND t.clinica_id = :clinicaId
+                      AND t.deletado_em IS NULL
+              ))
+              AND (
+                    :mode = 0
+                    OR (:exactId IS NOT NULL AND p.id = :exactId)
+                    OR UPPER(COALESCE(p.external_id, '')) = :externalExact
+                    OR (:mode = 2 AND (
+                        p.telefone_normalizado = :digits
+                        OR p.telefone_normalizado = :localPhone
+                        OR p.telefone_normalizado = :phoneWithCountryCode
+                    ))
+                    OR (:mode = 1 AND
+                        (:token1 = '' OR p.nome_busca LIKE CONCAT('%', :token1, '%')) AND
+                        (:token2 = '' OR p.nome_busca LIKE CONCAT('%', :token2, '%')) AND
+                        (:token3 = '' OR p.nome_busca LIKE CONCAT('%', :token3, '%')) AND
+                        (:token4 = '' OR p.nome_busca LIKE CONCAT('%', :token4, '%')) AND
+                        (:token5 = '' OR p.nome_busca LIKE CONCAT('%', :token5, '%'))
+                    )
+              )
+            ORDER BY
+              CASE
+                WHEN :exactId IS NOT NULL AND p.id = :exactId THEN 0
+                WHEN :mode = 2 AND p.telefone_normalizado IN (:digits, :localPhone, :phoneWithCountryCode) THEN 1
+                WHEN UPPER(COALESCE(p.external_id, '')) = :externalExact THEN 2
+                WHEN :mode = 1 AND p.nome_busca = :normalized THEN 3
+                WHEN :mode = 1 AND p.nome_busca LIKE CONCAT(:normalized, '%') THEN 4
+                ELSE 5
+              END,
+              p.ultima_interacao_em DESC NULLS LAST,
+              p.nome_busca ASC,
+              p.id ASC
+            """, countQuery = """
+            SELECT COUNT(*)
+            FROM paciente p
+            WHERE p.clinica_id = :clinicaId
+              AND p.deletado_em IS NULL
+              AND (:status = '' OR p.status = :status)
+              AND (:tagId IS NULL OR EXISTS (
+                    SELECT 1
+                    FROM paciente_tag pt
+                    JOIN tag t ON t.id = pt.tag_id
+                    WHERE pt.paciente_id = p.id
+                      AND pt.tag_id = :tagId
+                      AND t.clinica_id = :clinicaId
+                      AND t.deletado_em IS NULL
+              ))
+              AND (
+                    :mode = 0
+                    OR (:exactId IS NOT NULL AND p.id = :exactId)
+                    OR UPPER(COALESCE(p.external_id, '')) = :externalExact
+                    OR (:mode = 2 AND (
+                        p.telefone_normalizado = :digits
+                        OR p.telefone_normalizado = :localPhone
+                        OR p.telefone_normalizado = :phoneWithCountryCode
+                    ))
+                    OR (:mode = 1 AND
+                        (:token1 = '' OR p.nome_busca LIKE CONCAT('%', :token1, '%')) AND
+                        (:token2 = '' OR p.nome_busca LIKE CONCAT('%', :token2, '%')) AND
+                        (:token3 = '' OR p.nome_busca LIKE CONCAT('%', :token3, '%')) AND
+                        (:token4 = '' OR p.nome_busca LIKE CONCAT('%', :token4, '%')) AND
+                        (:token5 = '' OR p.nome_busca LIKE CONCAT('%', :token5, '%'))
+                    )
+              )
+            """, nativeQuery = true)
+    Page<PacienteResumoProjection> pesquisarResumos(
+            @Param("clinicaId") Long clinicaId,
+            @Param("status") String status,
+            @Param("tagId") Long tagId,
+            @Param("mode") int mode,
+            @Param("normalized") String normalized,
+            @Param("externalExact") String externalExact,
+            @Param("digits") String digits,
+            @Param("localPhone") String localPhone,
+            @Param("phoneWithCountryCode") String phoneWithCountryCode,
+            @Param("exactId") Long exactId,
+            @Param("token1") String token1,
+            @Param("token2") String token2,
+            @Param("token3") String token3,
+            @Param("token4") String token4,
+            @Param("token5") String token5,
+            Pageable pageable
+    );
+
+    @Query(value = """
+            SELECT
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN status = 'EM_ATENDIMENTO' THEN 1 ELSE 0 END), 0) AS "emAtendimento",
+                COALESCE(SUM(CASE WHEN status = 'AGENDADO' THEN 1 ELSE 0 END), 0) AS agendado,
+                COALESCE(SUM(CASE WHEN status = 'FINALIZADO' THEN 1 ELSE 0 END), 0) AS finalizado
+            FROM paciente
+            WHERE clinica_id = :clinicaId
+              AND deletado_em IS NULL
+            """, nativeQuery = true)
+    PacienteStatusCountsProjection countStatusByClinicaId(@Param("clinicaId") Long clinicaId);
 
     @Query(value = """
             SELECT

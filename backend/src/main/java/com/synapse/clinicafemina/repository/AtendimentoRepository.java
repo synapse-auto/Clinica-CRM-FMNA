@@ -19,15 +19,31 @@ public interface AtendimentoRepository extends JpaRepository<Atendimento, Long> 
     @Query("""
             SELECT a FROM Atendimento a
             WHERE a.clinica.id = :clinicaId
+              AND a.paciente.clinica.id = :clinicaId
+              AND a.paciente.deletadoEm IS NULL
               AND (:status IS NULL OR a.status = :status)
               AND (:tratadoPorIa IS NULL OR a.tratadoPorIa = :tratadoPorIa)
               AND (:atendenteId IS NULL OR a.atendentePrincipal.id = :atendenteId)
               AND (:somenteNaoLidos = false OR a.naoLidas > 0)
               AND (:somenteAguardando = false OR (a.status = 'ATIVO' AND a.atendentePrincipal IS NULL))
               AND (:somenteRevisao = false OR a.paciente.requerRevisao = true)
-              AND (:busca = '' OR
-                   a.paciente.nomeBusca LIKE CONCAT('%', :busca, '%') OR
-                   a.paciente.telefoneNormalizado LIKE CONCAT('%', :busca, '%'))
+              AND (
+                   :searchMode = 0
+                   OR (:exactId IS NOT NULL AND (a.id = :exactId OR a.paciente.id = :exactId))
+                   OR UPPER(COALESCE(a.paciente.externalId, '')) = :externalExact
+                   OR (:searchMode = 2 AND (
+                       a.paciente.telefoneNormalizado = :digits
+                       OR a.paciente.telefoneNormalizado = :localPhone
+                       OR a.paciente.telefoneNormalizado = :phoneWithCountryCode
+                   ))
+                   OR (:searchMode = 1 AND
+                       (:token1 = '' OR a.paciente.nomeBusca LIKE CONCAT('%', :token1, '%')) AND
+                       (:token2 = '' OR a.paciente.nomeBusca LIKE CONCAT('%', :token2, '%')) AND
+                       (:token3 = '' OR a.paciente.nomeBusca LIKE CONCAT('%', :token3, '%')) AND
+                       (:token4 = '' OR a.paciente.nomeBusca LIKE CONCAT('%', :token4, '%')) AND
+                       (:token5 = '' OR a.paciente.nomeBusca LIKE CONCAT('%', :token5, '%'))
+                   )
+              )
             ORDER BY a.ultimaMensagemEm DESC NULLS LAST
             """)
     Page<Atendimento> findByClinica(
@@ -38,7 +54,17 @@ public interface AtendimentoRepository extends JpaRepository<Atendimento, Long> 
             @Param("somenteNaoLidos") boolean somenteNaoLidos,
             @Param("somenteAguardando") boolean somenteAguardando,
             @Param("somenteRevisao") boolean somenteRevisao,
-            @Param("busca") String busca,
+            @Param("searchMode") int searchMode,
+            @Param("externalExact") String externalExact,
+            @Param("digits") String digits,
+            @Param("localPhone") String localPhone,
+            @Param("phoneWithCountryCode") String phoneWithCountryCode,
+            @Param("exactId") Long exactId,
+            @Param("token1") String token1,
+            @Param("token2") String token2,
+            @Param("token3") String token3,
+            @Param("token4") String token4,
+            @Param("token5") String token5,
             Pageable pageable
     );
 

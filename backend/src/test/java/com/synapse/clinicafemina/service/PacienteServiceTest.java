@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -23,6 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
+import com.synapse.clinicafemina.exception.BadRequestException;
 
 @ExtendWith(MockitoExtension.class)
 class PacienteServiceTest {
@@ -198,6 +206,47 @@ class PacienteServiceTest {
                 .thenReturn(Optional.empty());
 
         assertThrows(NotFoundException.class, () -> service.buscarPorId(999L, clinica));
+    }
+
+    @Test
+    void pesquisar_paginaNoServidorECarregaTagsSomenteParaIdsDaPagina() {
+        PacienteRepository.PacienteResumoProjection paciente =
+                resumoProjection(21L, "JOAO DA SILVA", "5583999990000", "MEDWARE", "MW-21");
+        PacienteRepository.PacienteStatusCountsProjection counts =
+                org.mockito.Mockito.mock(PacienteRepository.PacienteStatusCountsProjection.class);
+        when(counts.getTotal()).thenReturn(10L);
+        when(counts.getEmAtendimento()).thenReturn(4L);
+        when(counts.getAgendado()).thenReturn(3L);
+        when(counts.getFinalizado()).thenReturn(2L);
+        when(pacienteRepository.pesquisarResumos(
+                anyLong(), anyString(), isNull(), anyInt(), anyString(), anyString(),
+                anyString(), anyString(), anyString(), isNull(),
+                anyString(), anyString(), anyString(), anyString(), anyString(), any()
+        )).thenReturn(new PageImpl<>(List.of(paciente), PageRequest.of(0, 25), 1));
+        when(pacienteRepository.countStatusByClinicaId(1L)).thenReturn(counts);
+
+        var result = service.pesquisar(clinica, "silva joao", 0, 25, null, null);
+
+        assertEquals(1, result.content().size());
+        assertEquals(10L, result.counts().total());
+        assertEquals(1L, result.counts().outros());
+        verify(pacienteTagRepository).findTagsByPacienteIdsAndClinicaId(List.of(21L), 1L);
+        verify(pacienteTagRepository, never()).findTagsByPacienteIdAndClinicaId(21L, 1L);
+    }
+
+    @Test
+    void pesquisar_rejeitaLimitesInvalidosAntesDeConsultarBanco() {
+        assertThrows(BadRequestException.class,
+                () -> service.pesquisar(clinica, "a".repeat(101), 0, 25, null, null));
+        assertThrows(BadRequestException.class,
+                () -> service.pesquisar(clinica, "joao", -1, 25, null, null));
+        assertThrows(BadRequestException.class,
+                () -> service.pesquisar(clinica, "joao", 0, 101, null, null));
+        verify(pacienteRepository, never()).pesquisarResumos(
+                anyLong(), anyString(), any(), anyInt(), anyString(), anyString(),
+                anyString(), anyString(), anyString(), any(),
+                anyString(), anyString(), anyString(), anyString(), anyString(), any()
+        );
     }
 
     private PacienteRepository.PacienteResumoProjection resumoProjection(Long id, String nomeBusca, String telefone) {

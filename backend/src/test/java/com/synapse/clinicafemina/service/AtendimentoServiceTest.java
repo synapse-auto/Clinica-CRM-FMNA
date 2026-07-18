@@ -81,16 +81,29 @@ class AtendimentoServiceTest {
 
     @Test
     void should_apply_real_filters_when_listing() {
-        when(atendimentoRepository.findByClinica(
-                eq(1L), isNull(), isNull(), eq(10L),
-                eq(false), eq(false), eq(false), eq(""), any()
-        )).thenReturn(new PageImpl<>(List.of(atendimento)));
+        stubList(List.of(atendimento));
 
         var result = service.listar(
                 1L, null, "TODOS", "MEUS", null, 10L, PageRequest.of(0, 20)
         );
 
         assertFalse(result.isEmpty());
+    }
+
+    @Test
+    void should_combine_smart_search_with_existing_filters() {
+        stubList(List.of(atendimento));
+
+        service.listar(
+                1L, "ATIVO", "HUMANO", "MEUS", "silva joao", 10L, PageRequest.of(0, 20)
+        );
+
+        verify(atendimentoRepository).findByClinica(
+                1L, "ATIVO", false, 10L,
+                false, false, false, 1,
+                "SILVA JOAO", "", "", "", null,
+                "SILVA", "JOAO", "", "", "", PageRequest.of(0, 20)
+        );
     }
 
     @Test
@@ -102,10 +115,7 @@ class AtendimentoServiceTest {
         segundoAtendimento.setStatus("ATIVO");
         segundoAtendimento.setTratadoPorIa(false);
         segundoAtendimento.setNaoLidas(0);
-        when(atendimentoRepository.findByClinica(
-                eq(1L), isNull(), isNull(), isNull(),
-                eq(false), eq(false), eq(false), eq(""), any()
-        )).thenReturn(new PageImpl<>(List.of(atendimento, segundoAtendimento)));
+        stubList(List.of(atendimento, segundoAtendimento));
 
         var result = service.listar(
                 1L, null, "TODOS", "TODOS", null, null, PageRequest.of(0, 20)
@@ -136,10 +146,7 @@ class AtendimentoServiceTest {
         Tag tagAtendimento = criarTag(100L, "Retorno", "#0d9488");
         Tag tagPaciente = criarTag(101L, "Particular", "#f97316");
 
-        when(atendimentoRepository.findByClinica(
-                eq(1L), isNull(), isNull(), isNull(),
-                eq(false), eq(false), eq(false), eq(""), any()
-        )).thenReturn(new PageImpl<>(List.of(atendimento, segundoAtendimento)));
+        stubList(List.of(atendimento, segundoAtendimento));
         when(atendimentoTagRepository.findTagsByAtendimentoIdsAndClinicaId(any(Collection.class), eq(1L)))
                 .thenReturn(List.<Object[]>of(new Object[] {3L, tagAtendimento}));
         when(pacienteTagRepository.findTagsByPacienteIdsAndClinicaId(any(Collection.class), eq(1L)))
@@ -247,6 +254,15 @@ class AtendimentoServiceTest {
 
         assertEquals(0, total);
         verify(atendimentoRepository, never()).save(any());
+    }
+
+    private void stubList(List<Atendimento> atendimentos) {
+        when(atendimentoRepository.findByClinica(
+                anyLong(), nullable(String.class), nullable(Boolean.class), nullable(Long.class),
+                anyBoolean(), anyBoolean(), anyBoolean(), anyInt(),
+                anyString(), anyString(), anyString(), anyString(), nullable(Long.class),
+                anyString(), anyString(), anyString(), anyString(), anyString(), any()
+        )).thenReturn(new PageImpl<>(atendimentos));
     }
 
     private Tag criarTag(Long id, String nome, String cor) {

@@ -36,6 +36,9 @@ resilience4j:
 
 app:
   environment: ${APP_ENV:${APP_ENVIRONMENT:producao}}
+  performance:
+    cache:
+      enabled: ${PERFORMANCE_CACHE_ENABLED:true}
   clinic:
     slug: ${CLINIC_SLUG:}
     name: ${CLINIC_NAME:Clínica Femina CRM}
