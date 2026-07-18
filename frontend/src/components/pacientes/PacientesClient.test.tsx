@@ -1,9 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PacientesClient } from './PacientesClient';
 import type { TagOperacional } from '@/types/operacional';
-import type { PacienteResumo } from '@/types/paciente';
+import type { PacientePage, PacienteResumo } from '@/types/paciente';
 
 const tags: TagOperacional[] = [
   {
@@ -52,7 +52,7 @@ describe('PacientesClient', () => {
 
     render(
       <PacientesClient
-        initialPacientes={[paciente]}
+        initialPage={pageWith([paciente])}
         availableTags={tags}
         initialError={null}
         canManage
@@ -82,7 +82,7 @@ describe('PacientesClient', () => {
   it('should_hide_tag_mutations_when_user_cannot_manage', () => {
     render(
       <PacientesClient
-        initialPacientes={[paciente]}
+        initialPage={pageWith([paciente])}
         availableTags={tags}
         initialError={null}
         canManage={false}
@@ -94,41 +94,88 @@ describe('PacientesClient', () => {
     expect(screen.queryByRole('button', { name: 'Remover tag Prioridade de Maria Silva' })).not.toBeInTheDocument();
   });
 
-  it('should_search_by_normalized_name_phone_and_identifiers_without_fetching', async () => {
+  it('should_search_server_side_by_normalized_name_and_preserve_current_results_while_loading', async () => {
     const user = userEvent.setup();
     const joao: PacienteResumo = { ...paciente, id: 42, nome: 'Jo\u00e3o  L\u00f3pes', telefone: '(83) 99999-9999', externalId: 'MW-42' };
-    const fetchMock = vi.fn();
+    let resolveSearch: ((response: Response) => void) | undefined;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
+      resolveSearch = resolve;
+    }));
     vi.stubGlobal('fetch', fetchMock);
-    render(<PacientesClient initialPacientes={[paciente, joao]} availableTags={tags} initialError={null} canManage />);
+    render(<PacientesClient initialPage={pageWith([paciente, joao])} availableTags={tags} initialError={null} canManage />);
 
     const search = screen.getByRole('searchbox', { name: 'Buscar pacientes' });
-    await user.type(search, 'joao lopes');
-    expect(screen.getByText(/Jo\u00e3o/)).toBeInTheDocument();
-    expect(screen.queryByText('Maria Silva')).not.toBeInTheDocument();
-    expect(screen.getByText('1 de 2 pacientes')).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
-
-    await user.clear(search);
-    await user.type(search, '83999999999');
-    expect(screen.getByText(/Jo\u00e3o/)).toBeInTheDocument();
-    await user.clear(search);
-    await user.type(search, 'MW-42');
-    expect(screen.getByText(/Jo\u00e3o/)).toBeInTheDocument();
-    await user.clear(search);
-    await user.type(search, '12');
+    await user.type(search, '  JO\u00c3O   LOPES ');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(screen.getByText('Maria Silva')).toBeInTheDocument();
+    expect(screen.getByText(/Jo\u00e3o/)).toBeInTheDocument();
+    expect(screen.getByText('Pesquisando...')).toBeInTheDocument();
+    resolveSearch?.(jsonResponse(pageWith([joao])));
+    await waitFor(() => expect(screen.queryByText('Maria Silva')).not.toBeInTheDocument());
+    expect(screen.getByText(/Jo\u00e3o/)).toBeInTheDocument();
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/pacientes/pesquisa?');
   });
 
   it('should_show_search_empty_state_and_keep_tags_actions_after_clearing', async () => {
     const user = userEvent.setup();
-    render(<PacientesClient initialPacientes={[paciente]} availableTags={tags} initialError={null} canManage />);
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse(pageWith([], 0, 1)))
+      .mockResolvedValueOnce(jsonResponse(pageWith([paciente]))));
+    render(<PacientesClient initialPage={pageWith([paciente])} availableTags={tags} initialError={null} canManage />);
     const search = screen.getByRole('searchbox', { name: 'Buscar pacientes' });
     await user.type(search, 'inexistente');
-    expect(screen.getByText(/Nenhum paciente encontrado para/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Nenhum paciente encontrado para/)).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: 'Limpar pesquisa' }));
-    expect(screen.getByRole('button', { name: 'Adicionar tag para Maria Silva' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Adicionar tag para Maria Silva' })).toBeInTheDocument());
+  });
+
+  it('should_abort_previous_search_and_ignore_its_late_response', async () => {
+    const user = userEvent.setup();
+    const joao = { ...paciente, id: 31, nome: 'Joao Lima' };
+    const ana = { ...paciente, id: 32, nome: 'Ana Costa' };
+    const resolvers: Array<(response: Response) => void> = [];
+    const fetchMock = vi.fn((_path: string, _init?: RequestInit) => new Promise<Response>((resolve) => {
+      resolvers.push(resolve);
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<PacientesClient initialPage={pageWith([paciente])} availableTags={tags} initialError={null} canManage />);
+
+    const search = screen.getByRole('searchbox', { name: 'Buscar pacientes' });
+    await user.type(search, 'joao');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await user.clear(search);
+    await user.type(search, 'ana');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    const firstSignal = (fetchMock.mock.calls[0][1] as RequestInit).signal;
+    expect(firstSignal?.aborted).toBe(true);
+    resolvers[0](jsonResponse(pageWith([joao])));
+    resolvers[1](jsonResponse(pageWith([ana])));
+    await waitFor(() => expect(screen.getByText('Ana Costa')).toBeInTheDocument());
+    expect(screen.queryByText('Joao Lima')).not.toBeInTheDocument();
   });
 });
+
+function pageWith(
+  content: PacienteResumo[],
+  totalElements = content.length,
+  globalTotal = totalElements,
+): PacientePage {
+  return {
+    content,
+    number: 0,
+    size: 25,
+    totalElements,
+    totalPages: totalElements > 0 ? 1 : 0,
+    counts: {
+      total: globalTotal,
+      emAtendimento: globalTotal,
+      agendado: 0,
+      finalizado: 0,
+      outros: 0,
+    },
+  };
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

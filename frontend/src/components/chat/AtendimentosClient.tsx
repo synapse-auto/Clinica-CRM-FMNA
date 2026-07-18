@@ -42,6 +42,8 @@ import type { MensagemRapida, TagOperacional } from '@/types/operacional';
 import { ChatList } from './ChatList';
 import { ChatWindow } from './ChatWindow';
 import { ContactDetails } from './ContactDetails';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { isSearchableTerm, normalizeSearchText } from '@/lib/search';
 
 type Props = {
   initialConversations: AtendimentoResumo[];
@@ -63,26 +65,51 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
   const [filter, setFilter] = useState<AtendimentoFilter>('TODOS');
   const [type, setType] = useState<'TODOS' | 'IA' | 'HUMANO'>('TODOS');
   const [search, setSearch] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const knownNotifications = useRef<Set<number> | null>(null);
   const activeIdRef = useRef<number | null>(activeId);
+  const listAbortController = useRef<AbortController | null>(null);
+  const listRequestVersion = useRef(0);
+  const firstListEffect = useRef(true);
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const searchKey = isSearchableTerm(debouncedSearch)
+    ? normalizeSearchText(debouncedSearch)
+    : '';
+  const requestSearchRef = useRef('');
+  requestSearchRef.current = searchKey ? debouncedSearch.trim() : '';
 
   const refreshList = useCallback(async () => {
+    listAbortController.current?.abort();
+    const controller = new AbortController();
+    const requestVersion = ++listRequestVersion.current;
+    listAbortController.current = controller;
+    setSearching(true);
     try {
-      const page = await listAtendimentos({ filtro: filter, tipo: type, busca: search });
+      const page = await listAtendimentos(
+        { filtro: filter, tipo: type, busca: requestSearchRef.current },
+        controller.signal,
+      );
+      if (controller.signal.aborted || requestVersion !== listRequestVersion.current) return;
       setConversations(page.content);
-      setError(null);
+      setListError(null);
       setActiveId((current) => (
         current && page.content.some((item) => item.id === current)
           ? current
           : page.content[0]?.id ?? null
       ));
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (controller.signal.aborted || requestVersion !== listRequestVersion.current) return;
+      setListError(errorMessage(cause));
+    } finally {
+      if (!controller.signal.aborted && requestVersion === listRequestVersion.current) {
+        setSearching(false);
+      }
     }
-  }, [filter, search, type]);
+  }, [filter, searchKey, type]);
 
   const refreshActive = useCallback(async (id: number) => {
     setRemindersLoading(true);
@@ -143,8 +170,12 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
   }, []);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => void refreshList(), 250);
-    return () => window.clearTimeout(timeout);
+    if (firstListEffect.current) {
+      firstListEffect.current = false;
+      return;
+    }
+    void refreshList();
+    return () => listAbortController.current?.abort();
   }, [refreshList]);
 
   useEffect(() => {
@@ -265,6 +296,9 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
         filter={filter}
         type={type}
         search={search}
+        searching={searching}
+        error={listError}
+        onRetry={() => void refreshList()}
         onSelect={setActiveId}
         onFilterChange={(nextFilter, nextType) => {
           setFilter(nextFilter);

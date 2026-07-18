@@ -11,39 +11,53 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { DemoTable } from '@/components/demo/DemoTable';
 import { StatusBadge } from '@/components/demo/StatusBadge';
 import {
   adicionarTagPaciente,
+  pesquisarPacientes,
   removerTagPaciente,
 } from '@/services/pacientes';
 import type { TagOperacional } from '@/types/operacional';
-import type { PacienteResumo } from '@/types/paciente';
-import { normalizeDigits, normalizeSearchText } from '@/lib/search';
+import type { PacientePage, PacienteResumo } from '@/types/paciente';
+import { isSearchableTerm, matchesSearchTokens, normalizeSearchText } from '@/lib/search';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 type Props = {
-  initialPacientes: PacienteResumo[];
+  initialPage: PacientePage;
   availableTags: TagOperacional[];
   initialError: string | null;
   canManage: boolean;
 };
 
 export function PacientesClient({
-  initialPacientes,
+  initialPage,
   availableTags,
   initialError,
   canManage,
 }: Props) {
-  const [pacientes, setPacientes] = useState(initialPacientes);
+  const [pacientes, setPacientes] = useState(initialPage.content);
+  const [page, setPage] = useState(initialPage.number);
+  const [totalElements, setTotalElements] = useState(initialPage.totalElements);
+  const [totalPages, setTotalPages] = useState(initialPage.totalPages);
+  const [counts, setCounts] = useState(initialPage.counts);
   const [selectedPatient, setSelectedPatient] = useState<PacienteResumo | null>(null);
   const [tagSearch, setTagSearch] = useState('');
   const [patientSearch, setPatientSearch] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [retryVersion, setRetryVersion] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError);
-  const statusCount = contarStatus(pacientes);
-  const filteredPacientes = useMemo(() => pacientes.filter((paciente) => patientMatchesSearch(paciente, patientSearch)), [pacientes, patientSearch]);
+  const debouncedSearch = useDebouncedValue(patientSearch, 300);
+  const normalizedSearch = normalizeSearchText(debouncedSearch);
+  const searchKey = isSearchableTerm(debouncedSearch) ? normalizedSearch : '';
+  const query = searchKey ? debouncedSearch.trim() : '';
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const initialRequest = useRef(true);
+  const requestVersion = useRef(0);
   const activeTags = useMemo(
     () => availableTags
       .filter((tagItem) => tagItem.ativo)
@@ -54,7 +68,41 @@ export function PacientesClient({
   const selectedTagIds = new Set(selectedTags.map((tagItem) => tagItem.id));
   const tagsToAdd = activeTags
     .filter((tagItem) => !selectedTagIds.has(tagItem.id))
-    .filter((tagItem) => tagItem.nome.toLowerCase().includes(tagSearch.trim().toLowerCase()));
+    .filter((tagItem) => matchesSearchTokens([tagItem.nome], tagSearch));
+
+  useEffect(() => {
+    if (initialRequest.current) {
+      initialRequest.current = false;
+      return;
+    }
+    const controller = new AbortController();
+    const currentRequest = ++requestVersion.current;
+    setSearching(true);
+    pesquisarPacientes({ q: queryRef.current, page, size: 25 }, controller.signal)
+      .then((response) => {
+        if (controller.signal.aborted || currentRequest !== requestVersion.current) return;
+        setPacientes(response.content);
+        setTotalElements(response.totalElements);
+        setTotalPages(response.totalPages);
+        setCounts(response.counts);
+        setError(null);
+      })
+      .catch((cause) => {
+        if (controller.signal.aborted || currentRequest !== requestVersion.current) return;
+        setError(errorMessage(cause));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && currentRequest === requestVersion.current) {
+          setSearching(false);
+        }
+      });
+    return () => controller.abort();
+  }, [searchKey, page, retryVersion]);
+
+  function changeSearch(value: string) {
+    setPatientSearch(value);
+    setPage(0);
+  }
 
   async function addTag(tagId: number) {
     if (!selectedPatient) return;
@@ -101,15 +149,22 @@ export function PacientesClient({
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-[17px] font-extrabold leading-6 text-clinic-text">Pacientes</h1>
-            <p className="text-[10px] text-clinic-muted">{pacientes.length} pacientes</p>
+            <p className="text-[10px] text-clinic-muted">{counts.total} pacientes</p>
           </div>
         </div>
       </header>
 
       {error ? (
-        <p role="alert" className="mb-3 rounded-lg border border-clinic-danger/30 bg-clinic-danger/10 px-3 py-2 text-[10px] font-semibold text-clinic-danger">
-          {error}
-        </p>
+        <div role="alert" className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-clinic-danger/30 bg-clinic-danger/10 px-3 py-2 text-[10px] font-semibold text-clinic-danger">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setRetryVersion((current) => current + 1)}
+            className="shrink-0 font-extrabold underline"
+          >
+            Tentar novamente
+          </button>
+        </div>
       ) : null}
 
       <div className="mb-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_180px]">
@@ -118,45 +173,47 @@ export function PacientesClient({
             <Activity className="h-4 w-4 text-clinic-primary" />
             Status Atual
           </div>
-          <StatusBadge tone="green">{`${statusCount.emAtendimento} Em Atendimento`}</StatusBadge>
-          <StatusBadge tone="blue">{`${statusCount.agendado} Agendados`}</StatusBadge>
-          <StatusBadge tone="orange">{`${statusCount.outros} Outros`}</StatusBadge>
-          <StatusBadge tone="slate">{`${statusCount.finalizado} Finalizados`}</StatusBadge>
+          <StatusBadge tone="green">{`${counts.emAtendimento} Em Atendimento`}</StatusBadge>
+          <StatusBadge tone="blue">{`${counts.agendado} Agendados`}</StatusBadge>
+          <StatusBadge tone="orange">{`${counts.outros} Outros`}</StatusBadge>
+          <StatusBadge tone="slate">{`${counts.finalizado} Finalizados`}</StatusBadge>
         </section>
 
         <SummaryCard
           icon={Users}
-          value={pacientes.length.toString()}
+          value={counts.total.toString()}
           label="Total de Pacientes"
         />
       </div>
 
-      {pacientes.length > 0 ? (
+      {counts.total > 0 ? (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-clinic-border bg-clinic-input px-2 text-clinic-muted focus-within:ring-2 focus-within:ring-clinic-primary/35 sm:max-w-md">
             <Search className="h-3.5 w-3.5 shrink-0" />
             <input
               type="search"
               value={patientSearch}
-              onChange={(event) => setPatientSearch(event.target.value)}
+              onChange={(event) => changeSearch(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Escape') setPatientSearch('');
+                if (event.key === 'Escape') changeSearch('');
               }}
               aria-label="Buscar pacientes"
               placeholder="Buscar por nome, telefone ou ID..."
               className="min-w-0 flex-1 bg-transparent text-[11px] font-semibold text-clinic-text outline-none placeholder:text-clinic-muted"
             />
             {patientSearch ? (
-              <button type="button" aria-label="Limpar pesquisa de pacientes" onClick={() => setPatientSearch('')} className="rounded p-0.5 hover:bg-clinic-hover hover:text-clinic-text">
+              <button type="button" aria-label="Limpar pesquisa de pacientes" onClick={() => changeSearch('')} className="rounded p-0.5 hover:bg-clinic-hover hover:text-clinic-text">
                 <X className="h-3.5 w-3.5" />
               </button>
             ) : null}
           </label>
-          <p className="text-[10px] font-semibold text-clinic-muted">{filteredPacientes.length} de {pacientes.length} pacientes</p>
+          <p className="text-[10px] font-semibold text-clinic-muted">
+            {searching ? 'Pesquisando...' : `${pacientes.length} de ${totalElements} resultados`}
+          </p>
         </div>
       ) : null}
 
-      {pacientes.length === 0 && !error ? (
+      {counts.total === 0 && !error ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-clinic-border bg-clinic-surface py-16 text-center">
           <Users className="mb-3 h-10 w-10 text-clinic-muted" />
           <p className="text-[12px] font-bold text-clinic-text">Nenhum paciente encontrado</p>
@@ -164,15 +221,15 @@ export function PacientesClient({
             Os pacientes serao importados automaticamente apos a sincronizacao com o sistema clinico.
           </p>
         </div>
-      ) : filteredPacientes.length === 0 ? (
+      ) : pacientes.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-clinic-border bg-clinic-surface py-16 text-center">
           <Users className="mb-3 h-10 w-10 text-clinic-muted" />
           <p className="text-[12px] font-bold text-clinic-text">Nenhum paciente encontrado para &ldquo;{patientSearch.trim()}&rdquo;.</p>
-          <button type="button" onClick={() => setPatientSearch('')} className="mt-3 text-[10px] font-bold text-clinic-primary hover:underline">Limpar pesquisa</button>
+          <button type="button" onClick={() => changeSearch('')} className="mt-3 text-[10px] font-bold text-clinic-primary hover:underline">Limpar pesquisa</button>
         </div>
       ) : (
         <DemoTable
-          data={filteredPacientes}
+          data={pacientes}
           getKey={(item) => item.id}
           columns={[
             {
@@ -227,6 +284,28 @@ export function PacientesClient({
           ]}
         />
       )}
+
+      {totalPages > 1 ? (
+        <nav aria-label="Paginacao de pacientes" className="mt-3 flex items-center justify-end gap-2 text-[10px] font-bold text-clinic-muted">
+          <button
+            type="button"
+            disabled={page === 0 || searching}
+            onClick={() => setPage((current) => Math.max(0, current - 1))}
+            className="h-8 rounded-lg border border-clinic-border px-3 text-clinic-text hover:bg-clinic-hover disabled:opacity-40"
+          >
+            Anterior
+          </button>
+          <span>{page + 1} de {totalPages}</span>
+          <button
+            type="button"
+            disabled={page + 1 >= totalPages || searching}
+            onClick={() => setPage((current) => current + 1)}
+            className="h-8 rounded-lg border border-clinic-border px-3 text-clinic-text hover:bg-clinic-hover disabled:opacity-40"
+          >
+            Proxima
+          </button>
+        </nav>
+      ) : null}
 
       {selectedPatient && canManage ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
@@ -415,28 +494,6 @@ function statusTone(status: string): 'green' | 'blue' | 'orange' | 'slate' {
   return 'orange';
 }
 
-function contarStatus(pacientes: PacienteResumo[]) {
-  return pacientes.reduce(
-    (acc, p) => {
-      if (p.status === 'EM_ATENDIMENTO') acc.emAtendimento++;
-      else if (p.status === 'AGENDADO') acc.agendado++;
-      else if (p.status === 'FINALIZADO') acc.finalizado++;
-      else acc.outros++;
-      return acc;
-    },
-    { emAtendimento: 0, agendado: 0, finalizado: 0, outros: 0 },
-  );
-}
-
 function errorMessage(cause: unknown) {
   return cause instanceof Error ? cause.message : 'Nao foi possivel concluir a operacao';
-}
-
-function patientMatchesSearch(paciente: PacienteResumo, search: string) {
-  const normalizedSearch = normalizeSearchText(search);
-  if (!normalizedSearch) return true;
-  const normalizedDigits = normalizeDigits(search);
-  return [paciente.nome, paciente.externalId, paciente.id]
-    .some((value) => normalizeSearchText(value).includes(normalizedSearch))
-    || (Boolean(normalizedDigits) && normalizeDigits(paciente.telefone).includes(normalizedDigits));
 }

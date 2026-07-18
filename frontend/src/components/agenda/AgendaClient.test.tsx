@@ -396,7 +396,7 @@ describe('AgendaClient (somente leitura)', () => {
     );
 
     const search = screen.getByRole('searchbox', { name: 'Buscar paciente na agenda' });
-    fireEvent.change(search, { target: { value: '  ana   lara ' } });
+    fireEvent.change(search, { target: { value: '  ferreira   ana ' } });
     expect(screen.getByText('Ana Lara Lopes Ferreira')).toBeInTheDocument();
     expect(screen.queryByText('Jo\u00e3o Souza')).not.toBeInTheDocument();
     expect(screen.getByText('1 agendamentos encontrados')).toBeInTheDocument();

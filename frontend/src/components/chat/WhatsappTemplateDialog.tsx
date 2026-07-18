@@ -18,6 +18,7 @@ import type {
   WhatsappTemplateButton,
   WhatsappTemplateVariable,
 } from '@/types/atendimento';
+import { matchesSearchTokens, normalizeSearchText } from '@/lib/search';
 
 type Props = {
   open: boolean;
@@ -86,14 +87,12 @@ export function WhatsappTemplateDialog({ open, atendimentoId, onOpenChange, onSe
   }, [loadTemplates, open]);
 
   const filteredTemplates = useMemo(() => {
-    const term = normalizeTemplateSearch(search);
-    if (!term) return templates;
-    return templates.filter((template) => normalizeTemplateSearch([
+    return templates.filter((template) => matchesSearchTokens([
       template.nome,
       template.idioma,
       template.categoria,
       template.corpo ?? '',
-    ].join(' ')).includes(term));
+    ], search));
   }, [search, templates]);
 
   const missingKeys = useMemo(() => new Set(
@@ -357,13 +356,7 @@ export function templateParameterKey(variable: WhatsappTemplateVariable) {
 }
 
 export function normalizeTemplateSearch(value: string) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLocaleLowerCase('pt-BR');
+  return normalizeSearchText(value);
 }
 
 function canSendTemplate(template: WhatsappTemplate) {

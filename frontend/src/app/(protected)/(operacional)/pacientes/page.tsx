@@ -2,22 +2,29 @@ import { redirect } from 'next/navigation';
 import { PacientesClient } from '@/components/pacientes/PacientesClient';
 import { requireSession } from '@/lib/auth/session';
 import {
-  getPacientes,
+  getPacientesPesquisa,
   getTags,
   isBackendAuthorizationError,
 } from '@/services/backend';
 import type { TagOperacional } from '@/types/operacional';
-import type { PacienteResumo } from '@/types/paciente';
+import type { PacientePage } from '@/types/paciente';
 
 export default async function PacientesPage() {
   const user = await requireSession(['GESTOR', 'RECEPCIONISTA']);
-  let pacientes: PacienteResumo[] = [];
+  let pacientes: PacientePage = {
+    content: [],
+    number: 0,
+    size: 25,
+    totalElements: 0,
+    totalPages: 0,
+    counts: { total: 0, emAtendimento: 0, agendado: 0, finalizado: 0, outros: 0 },
+  };
   let tags: TagOperacional[] = [];
   let erroCarregamento: string | null = null;
 
   try {
     [pacientes, tags] = await Promise.all([
-      getPacientes(),
+      getPacientesPesquisa(),
       getTags(),
     ]);
   } catch (error) {
@@ -33,7 +40,7 @@ export default async function PacientesPage() {
 
   return (
     <PacientesClient
-      initialPacientes={pacientes}
+      initialPage={pacientes}
       availableTags={tagsAtivas}
       initialError={erroCarregamento}
       canManage={user.perfil === 'GESTOR' || user.perfil === 'RECEPCIONISTA'}

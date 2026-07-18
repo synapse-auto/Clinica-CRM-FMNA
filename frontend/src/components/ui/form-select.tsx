@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { Combobox } from '@base-ui/react/combobox';
 import { Select } from '@base-ui/react/select';
+import { matchesSearchTokens } from '@/lib/search';
 import { cn } from '@/lib/utils';
 
 export type FormOption = {
@@ -99,6 +101,11 @@ export function SearchableSelect({
   className,
   'aria-label': ariaLabel,
 }: CommonProps) {
+  const [inputValue, setInputValue] = useState('');
+  const filteredOptions = inputValue
+    ? options.filter((option) => matchesSearchTokens([option.label], inputValue))
+    : options;
+
   return (
     <Combobox.Root
       id={id}
@@ -106,9 +113,11 @@ export function SearchableSelect({
       value={value === undefined ? undefined : value || null}
       defaultValue={value === undefined ? defaultValue || null : undefined}
       onValueChange={(nextValue) => onValueChange?.(String(nextValue ?? ''))}
+      onInputValueChange={setInputValue}
       disabled={disabled}
       required={required}
-      items={options.map(({ value: optionValue, label }) => ({ value: optionValue, label }))}
+      items={filteredOptions.map(({ value: optionValue, label }) => ({ value: optionValue, label }))}
+      filter={null}
       autoHighlight
     >
       <div className={cn(triggerClassName, 'px-0', className)}>
@@ -119,7 +128,7 @@ export function SearchableSelect({
         <Combobox.Positioner sideOffset={6} className="z-[70]">
           <Combobox.Popup className={popupClassName}>
             <Combobox.List>
-              {options.map((option) => (
+              {filteredOptions.map((option) => (
                 <Combobox.Item key={option.value} value={option.value} disabled={option.disabled} className={itemClassName}>
                   <span>{option.label}</span>
                   <Combobox.ItemIndicator><Check className="h-4 w-4 text-clinic-primary" /></Combobox.ItemIndicator>

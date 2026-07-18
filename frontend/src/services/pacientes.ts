@@ -1,4 +1,22 @@
 import type { TagOperacional } from '@/types/operacional';
+import type { PacientePage } from '@/types/paciente';
+
+export function pesquisarPacientes(params: {
+  q?: string;
+  page?: number;
+  size?: number;
+  status?: string;
+  tag?: number;
+}, signal?: AbortSignal): Promise<PacientePage> {
+  const search = new URLSearchParams({
+    page: String(params.page ?? 0),
+    size: String(params.size ?? 25),
+  });
+  if (params.q?.trim()) search.set('q', params.q.trim());
+  if (params.status) search.set('status', params.status);
+  if (params.tag) search.set('tag', String(params.tag));
+  return requestJson(`/api/pacientes/pesquisa?${search.toString()}`, { signal });
+}
 
 export function adicionarTagPaciente(id: number, tagId: number): Promise<TagOperacional[]> {
   return requestJson(`/api/pacientes/${id}/tags/${tagId}`, { method: 'POST' });

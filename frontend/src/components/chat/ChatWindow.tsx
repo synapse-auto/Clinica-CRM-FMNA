@@ -22,6 +22,7 @@ import type {
 import type { MensagemRapida } from '@/types/operacional';
 import { ContactAvatar } from './ContactAvatar';
 import { WhatsappTemplateDialog } from './WhatsappTemplateDialog';
+import { matchesSearchTokens } from '@/lib/search';
 
 type Props = {
   detail: AtendimentoDetalhe | null;
@@ -449,17 +450,13 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
 }
 
 function filterQuickMessages(messages: MensagemRapida[], search: string) {
-  const term = search.trim().toLocaleLowerCase('pt-BR');
   return messages
     .filter((message) => message.ativo)
-    .filter((message) => {
-      if (!term) return true;
-      return [
-        message.titulo,
-        message.atalho,
-        message.conteudo,
-      ].some((value) => value.toLocaleLowerCase('pt-BR').includes(term));
-    });
+    .filter((message) => matchesSearchTokens([
+      message.titulo,
+      message.atalho,
+      message.conteudo,
+    ], search));
 }
 
 function findQuickMessageShortcut(messages: MensagemRapida[], content: string) {

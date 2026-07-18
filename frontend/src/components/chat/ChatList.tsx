@@ -13,6 +13,9 @@ type Props = {
   filter: AtendimentoFilter;
   type: 'TODOS' | 'IA' | 'HUMANO';
   search: string;
+  searching?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   onSelect: (id: number) => void;
   onFilterChange: (
     filter: AtendimentoFilter,
@@ -60,6 +63,17 @@ export function ChatList(props: Props) {
             className="h-10 w-full rounded-xl border border-clinic-border bg-clinic-input pl-10 pr-3 text-[12px] text-clinic-text outline-none transition placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10"
           />
         </label>
+        {props.searching ? (
+          <p className="text-[10px] font-semibold text-clinic-muted">Pesquisando...</p>
+        ) : null}
+        {props.error ? (
+          <div role="alert" className="flex items-center justify-between gap-2 rounded-lg bg-clinic-danger/10 px-2.5 py-2 text-[10px] font-semibold text-clinic-danger">
+            <span className="line-clamp-2">{props.error}</span>
+            <button type="button" onClick={props.onRetry} className="shrink-0 font-extrabold underline">
+              Tentar novamente
+            </button>
+          </div>
+        ) : null}
         <div className="flex gap-1.5 overflow-x-auto text-[10px] font-bold hide-scrollbar" aria-label="Filtros de atendimentos">
           {filters.map((item) => {
             const active = props.filter === item.filter && props.type === item.type;

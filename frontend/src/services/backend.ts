@@ -26,7 +26,7 @@ import type {
   MensagemRapida,
   TagOperacional,
 } from '@/types/operacional';
-import type { PacienteResumo } from '@/types/paciente';
+import type { PacientePage, PacienteResumo } from '@/types/paciente';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/constants';
 
 const API_BASE_URL =
@@ -124,6 +124,10 @@ export async function getPacientes(): Promise<PacienteResumo[]> {
 
 export async function getEquipe(): Promise<EquipeResponse> {
   return getJson<EquipeResponse>('/api/equipe');
+}
+
+export async function getPacientesPesquisa(): Promise<PacientePage> {
+  return getJson<PacientePage>('/api/pacientes/pesquisa?page=0&size=25');
 }
 
 export async function getTags(): Promise<TagOperacional[]> {

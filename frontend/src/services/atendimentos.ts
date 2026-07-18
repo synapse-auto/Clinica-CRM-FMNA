@@ -17,14 +17,14 @@ export async function listAtendimentos(params: {
   filtro: AtendimentoFilter;
   tipo: 'TODOS' | 'IA' | 'HUMANO';
   busca?: string;
-}): Promise<AtendimentoPage<AtendimentoResumo>> {
+}, signal?: AbortSignal): Promise<AtendimentoPage<AtendimentoResumo>> {
   const search = new URLSearchParams({
     filtro: params.filtro,
     tipo: params.tipo,
     size: '50',
   });
   if (params.busca?.trim()) search.set('busca', params.busca.trim());
-  return requestJson(`/api/atendimentos?${search}`);
+  return requestJson(`/api/atendimentos?${search}`, { signal });
 }
 
 export function getAtendimento(id: number): Promise<AtendimentoDetalhe> {

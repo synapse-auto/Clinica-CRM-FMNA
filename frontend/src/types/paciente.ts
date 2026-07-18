@@ -12,3 +12,20 @@ export type PacienteResumo = {
   ultimaInteracaoEm: string | null;
   tags: TagOperacional[];
 };
+
+export type PacienteStatusCounts = {
+  total: number;
+  emAtendimento: number;
+  agendado: number;
+  finalizado: number;
+  outros: number;
+};
+
+export type PacientePage = {
+  content: PacienteResumo[];
+  number: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  counts: PacienteStatusCounts;
+};

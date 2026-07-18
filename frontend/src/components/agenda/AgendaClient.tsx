@@ -19,7 +19,7 @@ import { GroupedBarChart } from '@/components/demo/GroupedBarChart';
 import { MetricCard } from '@/components/demo/MetricCard';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { DatePicker } from '@/components/ui/date-picker';
-import { normalizeSearchText } from '@/lib/search';
+import { matchesSearchTokens, normalizeSearchText } from '@/lib/search';
 import {
   aggregateServices,
   normalizeServiceName,
@@ -80,8 +80,8 @@ export function AgendaClient({
   const normalizedPatientSearch = normalizeSearchText(patientSearch);
   const visibleAppointments = useMemo(() => appointments.filter((item) => (
     (selectedDoctor === 'all' || appointmentDoctorKey(item) === selectedDoctor)
-    && (!normalizedPatientSearch || normalizeSearchText(item.pacienteNome).includes(normalizedPatientSearch))
-  )), [appointments, normalizedPatientSearch, selectedDoctor]);
+    && (!normalizedPatientSearch || matchesSearchTokens([item.pacienteNome], patientSearch))
+  )), [appointments, normalizedPatientSearch, patientSearch, selectedDoctor]);
   const selectedDayAppointments = useMemo(
     () => visibleAppointments.filter(
       (appointment) => formatDate(appointment.dataHoraInicio) === selectedDay,
