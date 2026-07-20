@@ -15,6 +15,7 @@ import { FormSelect, SearchableSelect } from '@/components/ui/form-select';
 
 type Props = {
   detail: AtendimentoDetalhe | null;
+  loading?: boolean;
   atendentes: AtendenteOption[];
   tags: TagOperacional[];
   availableTags: TagOperacional[];
@@ -37,6 +38,7 @@ type Props = {
 
 export function ContactDetails({
   detail,
+  loading = false,
   atendentes,
   tags,
   availableTags,
@@ -65,7 +67,7 @@ export function ContactDetails({
     return (
       <aside id="atendimento-detalhes" className="relative flex h-full w-[336px] items-center justify-center border-l border-clinic-border bg-clinic-surface p-5 text-center text-[11px] text-clinic-muted">
         <DetailsCloseButton onClose={onClose} />
-        Selecione uma conversa para ver os detalhes.
+        {loading ? 'Carregando detalhes…' : 'Selecione uma conversa para ver os detalhes.'}
       </aside>
     );
   }

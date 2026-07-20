@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { DemoCard } from '@/components/demo/DemoCard';
 import { DonutChart } from '@/components/demo/DonutChart';
-import { GroupedBarChart } from '@/components/demo/GroupedBarChart';
+import { HorizontalBarChart } from '@/components/demo/HorizontalBarChart';
 import { MetricCard } from '@/components/demo/MetricCard';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -284,7 +284,12 @@ export function AgendaClient({
       </DemoCard>
 
       <DemoCard className="mt-3" title="Agenda por Médico" description="Distribuição de atendimentos no período">
-        <GroupedBarChart height={230} labels={barData.labels} series={barData.series} />
+        <HorizontalBarChart
+          labels={barData.labels}
+          series={barData.series}
+          ariaLabel="Distribuição de atendimentos por profissional"
+          emptyMessage="Sem agendamentos no período."
+        />
       </DemoCard>
     </div>
   );

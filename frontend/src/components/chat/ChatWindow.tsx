@@ -26,6 +26,7 @@ import { matchesSearchTokens } from '@/lib/search';
 
 type Props = {
   detail: AtendimentoDetalhe | null;
+  loading?: boolean;
   messages: MensagemAtendimento[];
   quickMessages: MensagemRapida[];
   busy: boolean;
@@ -41,7 +42,7 @@ const NEAR_BOTTOM_THRESHOLD = 96;
 // mensagens, aviso de janela, seletor rápido e composer para manter alinhamento vertical.
 const CHAT_CONTENT_WIDTH = 'mx-auto w-full max-w-[1600px]';
 
-export function ChatWindow({ detail, messages, quickMessages, busy, error, onSend, onAttach, onSendTemplate }: Props) {
+export function ChatWindow({ detail, loading = false, messages, quickMessages, busy, error, onSend, onAttach, onSendTemplate }: Props) {
   const [content, setContent] = useState('');
   const [quickOpen, setQuickOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -294,6 +295,8 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
               {detail.tratadoPorIa ? 'IA ativa' : 'Humano'}
             </span>
           </div>
+        ) : loading ? (
+          <p className="text-[12px] text-clinic-muted" aria-live="polite">Carregando conversa…</p>
         ) : (
           <p className="text-[12px] text-clinic-muted">Selecione um atendimento</p>
         )}
@@ -314,7 +317,11 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
           onScroll={handleMessageScroll}
         >
           <div className={`${CHAT_CONTENT_WIDTH} flex flex-col gap-5`}>
-        {detail && messages.length === 0 ? (
+        {loading && !detail ? (
+          <p className="text-center text-[11px] text-clinic-muted" data-testid="chat-messages-loading" aria-live="polite">
+            Carregando mensagens…
+          </p>
+        ) : detail && messages.length === 0 ? (
           <p className="text-center text-[11px] text-clinic-muted">
             Ainda não há mensagens nesta conversa.
           </p>

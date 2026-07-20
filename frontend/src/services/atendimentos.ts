@@ -27,13 +27,14 @@ export async function listAtendimentos(params: {
   return requestJson(`/api/atendimentos?${search}`, { signal });
 }
 
-export function getAtendimento(id: number): Promise<AtendimentoDetalhe> {
-  return requestJson(`/api/atendimentos/${id}`);
+export function getAtendimento(id: number, signal?: AbortSignal): Promise<AtendimentoDetalhe> {
+  return requestJson(`/api/atendimentos/${id}`, { signal });
 }
 
-export async function getMensagens(id: number): Promise<MensagemAtendimento[]> {
+export async function getMensagens(id: number, signal?: AbortSignal): Promise<MensagemAtendimento[]> {
   const page = await requestJson<AtendimentoPage<MensagemAtendimento>>(
     `/api/atendimentos/${id}/mensagens?size=100`,
+    { signal },
   );
   return [...page.content].reverse();
 }
@@ -56,8 +57,8 @@ export async function getTagsOperacionaisAtivas(): Promise<TagOperacional[]> {
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
-export function getAtendimentoTags(id: number): Promise<TagOperacional[]> {
-  return requestJson(`/api/atendimentos/${id}/tags`);
+export function getAtendimentoTags(id: number, signal?: AbortSignal): Promise<TagOperacional[]> {
+  return requestJson(`/api/atendimentos/${id}/tags`, { signal });
 }
 
 export function adicionarTagAtendimento(id: number, tagId: number): Promise<TagOperacional[]> {
@@ -68,8 +69,8 @@ export function removerTagAtendimento(id: number, tagId: number): Promise<void> 
   return requestVoid(`/api/atendimentos/${id}/tags/${tagId}`, { method: 'DELETE' });
 }
 
-export function getAtendimentoLembretes(id: number): Promise<AtendimentoLembrete[]> {
-  return requestJson(`/api/atendimentos/${id}/lembretes`);
+export function getAtendimentoLembretes(id: number, signal?: AbortSignal): Promise<AtendimentoLembrete[]> {
+  return requestJson(`/api/atendimentos/${id}/lembretes`, { signal });
 }
 
 export function criarAtendimentoLembrete(

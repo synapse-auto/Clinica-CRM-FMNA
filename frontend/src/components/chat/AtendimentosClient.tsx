@@ -48,6 +48,12 @@ import { isSearchableTerm, normalizeSearchText } from '@/lib/search';
 
 const DETAILS_PANEL_STORAGE_KEY = 'clinica-crm-atendimentos-details-open';
 
+function isAbortError(cause: unknown): boolean {
+  return cause instanceof DOMException
+    ? cause.name === 'AbortError'
+    : (cause as { name?: string } | null)?.name === 'AbortError';
+}
+
 type Props = {
   initialConversations: AtendimentoResumo[];
   atendentes: AtendenteOption[];
@@ -74,10 +80,14 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
   const [busy, setBusy] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const knownNotifications = useRef<Set<number> | null>(null);
   const activeIdRef = useRef<number | null>(activeId);
   const listAbortController = useRef<AbortController | null>(null);
   const listRequestVersion = useRef(0);
+  const activeAbortController = useRef<AbortController | null>(null);
+  const activeRequestVersion = useRef(0);
+  const activeInFlight = useRef(false);
   const firstListEffect = useRef(true);
   const reopenDetailsButton = useRef<HTMLButtonElement>(null);
   const focusReopenDetails = useRef(false);
@@ -139,30 +149,80 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
     }
   }, [filter, searchKey, type]);
 
-  const refreshActive = useCallback(async (id: number) => {
-    setRemindersLoading(true);
+  const refreshListRef = useRef(refreshList);
+  refreshListRef.current = refreshList;
+
+  // Carrega uma conversa protegendo contra respostas obsoletas (AbortController + versão).
+  // mode 'select': troca de conversa (limpa e mostra carregando); 'revalidate': atualização em segundo plano.
+  const loadActiveConversation = useCallback(async (id: number, mode: 'select' | 'revalidate') => {
+    activeAbortController.current?.abort();
+    const controller = new AbortController();
+    activeAbortController.current = controller;
+    const version = ++activeRequestVersion.current;
+    activeInFlight.current = true;
+    const isCurrent = () => (
+      version === activeRequestVersion.current
+      && activeIdRef.current === id
+      && !controller.signal.aborted
+    );
+
+    if (mode === 'select') setDetailLoading(true);
+
+    // Secundários (tags e lembretes) carregam de forma independente — não bloqueiam as mensagens.
+    void (async () => {
+      try {
+        const nextTags = await getAtendimentoTags(id, controller.signal);
+        if (isCurrent()) setActiveTags(nextTags);
+      } catch (cause) {
+        if (!isAbortError(cause) && isCurrent()) setActiveTags([]);
+      }
+    })();
+    void (async () => {
+      if (isCurrent()) setRemindersLoading(true);
+      try {
+        const nextReminders = await getAtendimentoLembretes(id, controller.signal);
+        if (isCurrent()) {
+          setReminders(nextReminders);
+          setRemindersError(null);
+        }
+      } catch (cause) {
+        if (!isAbortError(cause) && isCurrent()) setRemindersError(errorMessage(cause));
+      } finally {
+        if (isCurrent()) setRemindersLoading(false);
+      }
+    })();
+
+    // Crítico para abrir a conversa: detalhe + mensagens em paralelo, exibidos assim que prontos.
     try {
-      const [nextDetail, nextMessages, nextTags] = await Promise.all([
-        getAtendimento(id),
-        getMensagens(id),
-        getAtendimentoTags(id),
+      const [nextDetail, nextMessages] = await Promise.all([
+        getAtendimento(id, controller.signal),
+        getMensagens(id, controller.signal),
       ]);
-      if (activeIdRef.current !== id) return;
+      if (!isCurrent()) return;
       setDetail(nextDetail);
       setMessages(nextMessages);
-      setActiveTags(nextTags);
       setError(null);
-      try {
-        setReminders(await getAtendimentoLembretes(id));
-        setRemindersError(null);
-      } catch (cause) {
-        setRemindersError(errorMessage(cause));
-      }
     } catch (cause) {
+      if (isAbortError(cause) || !isCurrent()) return;
       setError(errorMessage(cause));
     } finally {
-      setRemindersLoading(false);
+      if (version === activeRequestVersion.current) {
+        activeInFlight.current = false;
+        if (mode === 'select' && isCurrent()) setDetailLoading(false);
+      }
     }
+  }, []);
+
+  // Marcar como lido fora do caminho crítico: otimista na lista e reconciliado em segundo plano.
+  const markAsReadInBackground = useCallback((id: number) => {
+    setConversations((current) => current.map((item) => (
+      item.id === id ? { ...item, naoLidas: 0 } : item
+    )));
+    void marcarAtendimentoComoLido(id)
+      .then(() => refreshListRef.current())
+      .catch(() => {
+        // Falha ao marcar como lido não impede a conversa de abrir; reconcilia no próximo refresh.
+      });
   }, []);
 
   useEffect(() => {
@@ -208,25 +268,44 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
 
   useEffect(() => {
     if (!activeId) {
+      activeAbortController.current?.abort();
       setDetail(null);
       setMessages([]);
       setActiveTags([]);
       setReminders([]);
       setRemindersError(null);
+      setDetailLoading(false);
       return;
     }
-    void marcarAtendimentoComoLido(activeId)
-      .then(() => Promise.all([refreshActive(activeId), refreshList()]))
-      .catch((cause) => setError(errorMessage(cause)));
-  }, [activeId, refreshActive, refreshList]);
+    // Resposta imediata ao clique: descarta o conteúdo do paciente anterior e sinaliza carregamento.
+    setDetail(null);
+    setMessages([]);
+    setActiveTags([]);
+    setReminders([]);
+    setRemindersError(null);
+    setError(null);
+    // Marcar como lido sai do caminho crítico (otimista + segundo plano).
+    markAsReadInBackground(activeId);
+    // Dados críticos começam imediatamente, sem esperar marcar como lido nem refresh da lista.
+    void loadActiveConversation(activeId, 'select');
+    return () => activeAbortController.current?.abort();
+  }, [activeId, loadActiveConversation, markAsReadInBackground]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      void refreshList();
-      if (activeId) void refreshActive(activeId);
-    }, 5000);
-    return () => window.clearInterval(interval);
-  }, [activeId, refreshActive, refreshList]);
+    function revalidate() {
+      if (document.hidden) return; // Aba oculta não gera trabalho de polling.
+      void refreshListRef.current();
+      const id = activeIdRef.current;
+      // Clique do usuário tem prioridade: não revalida por cima de um carregamento em andamento.
+      if (id && !activeInFlight.current) void loadActiveConversation(id, 'revalidate');
+    }
+    const interval = window.setInterval(revalidate, 5000);
+    document.addEventListener('visibilitychange', revalidate);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', revalidate);
+    };
+  }, [loadActiveConversation]);
 
   useEffect(() => {
     async function pollNotifications() {
@@ -265,7 +344,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       if (sentMessage && targetId && activeIdRef.current === targetId) {
         setMessages((current) => mergeMensagem(current, sentMessage));
       }
-      if (targetId && activeIdRef.current === targetId) await refreshActive(targetId);
+      if (targetId && activeIdRef.current === targetId) await loadActiveConversation(targetId, 'revalidate');
       await refreshList();
       if (activeIdRef.current === targetId) {
         setError(sentMessage?.whatsappStatus === 'FALHA'
@@ -274,7 +353,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       }
     } catch (cause) {
       if (targetId && activeIdRef.current === targetId) {
-        if (isWhatsappTemplateRequiredError(cause)) await refreshActive(targetId);
+        if (isWhatsappTemplateRequiredError(cause)) await loadActiveConversation(targetId, 'revalidate');
         setError(errorMessage(cause));
       }
       if (options.propagate) throw cause;
@@ -337,6 +416,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       <div className="flex min-w-0 flex-1">
         <ChatWindow
           detail={detail}
+          loading={detailLoading}
           messages={messages}
           quickMessages={quickMessages}
           busy={busy}
@@ -376,6 +456,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       >
         <ContactDetails
         detail={detail}
+        loading={detailLoading}
         atendentes={atendentes}
         tags={activeTags}
         availableTags={availableTags}

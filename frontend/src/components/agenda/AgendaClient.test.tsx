@@ -523,9 +523,9 @@ describe('AgendaClient (somente leitura)', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Medico A, Ultrassonografia: 2')).toBeInTheDocument();
-    expect(screen.getByLabelText('Medico B, Ultrassonografia: 0')).toBeInTheDocument();
-    expect(screen.getByLabelText('Medico A, Consulta ginecologica: 0')).toBeInTheDocument();
-    expect(screen.getByLabelText('Medico B, Consulta ginecologica: 1')).toBeInTheDocument();
+    expect(screen.getByTitle('Medico A · Ultrassonografia: 2')).toBeInTheDocument();
+    expect(screen.getByTitle('Medico B · Ultrassonografia: 0')).toBeInTheDocument();
+    expect(screen.getByTitle('Medico A · Consulta ginecologica: 0')).toBeInTheDocument();
+    expect(screen.getByTitle('Medico B · Consulta ginecologica: 1')).toBeInTheDocument();
   });
 });

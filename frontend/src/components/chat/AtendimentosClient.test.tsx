@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,6 +9,9 @@ const services = vi.hoisted(() => ({
   getAtendimentoTags: vi.fn().mockResolvedValue([]),
   getAtendimentoLembretes: vi.fn().mockResolvedValue([]),
   marcarAtendimentoComoLido: vi.fn().mockResolvedValue(undefined),
+  enviarMensagem: vi.fn().mockResolvedValue(null),
+  enviarAnexo: vi.fn().mockResolvedValue(null),
+  enviarWhatsappTemplate: vi.fn().mockResolvedValue(null),
   getMensagensRapidasAtivas: vi.fn().mockResolvedValue([]),
   getTagsOperacionaisAtivas: vi.fn().mockResolvedValue([]),
   getNotificacoes: vi.fn().mockResolvedValue([]),
@@ -31,6 +34,8 @@ vi.mock('./ChatList', () => ({
     <div>
       <span data-testid="selected-atendimento">{props.activeId ?? 'nenhum'}</span>
       <button type="button" onClick={() => props.onSelect(7)}>Selecionar atendimento local</button>
+      <button type="button" onClick={() => props.onSelect(8)}>Selecionar B</button>
+      <button type="button" onClick={() => props.onSelect(9)}>Selecionar C</button>
       <input
         aria-label="Buscar atendimentos"
         value={props.search}
@@ -41,8 +46,10 @@ vi.mock('./ChatList', () => ({
   ),
 }));
 vi.mock('./ChatWindow', () => ({
-  ChatWindow: () => (
+  ChatWindow: (props: { detail: { id?: number } | null; loading?: boolean }) => (
     <div data-testid="mock-chat-scroll">
+      <span data-testid="chat-detail-id">{props.detail?.id ?? 'none'}</span>
+      <span data-testid="chat-loading">{props.loading ? 'loading' : 'idle'}</span>
       <textarea aria-label="Rascunho do chat" />
     </div>
   ),
@@ -175,5 +182,127 @@ describe('AtendimentosClient search', () => {
     expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('7');
     expect(scroll.scrollTop).toBe(120);
     expect(services.listAtendimentos).toHaveBeenCalledTimes(callsBeforeToggle);
+  });
+});
+
+const gestor = {
+  id: 1,
+  nome: 'Usuario Teste',
+  email: 'user@example.test',
+  perfil: 'GESTOR' as const,
+  clinicaId: 1,
+  mustChangePassword: false,
+  podeGerenciarUsuarios: false,
+};
+
+describe('AtendimentosClient troca de conversa (latência)', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    // A lista contém as conversas selecionáveis para que o refresh em segundo plano
+    // (após marcar como lido) não desmarque a seleção corrente.
+    services.listAtendimentos.mockResolvedValue({
+      content: [{ id: 7 }, { id: 8 }, { id: 9 }],
+      totalElements: 3,
+    });
+    services.getAtendimento.mockImplementation((id: number) => Promise.resolve({ id }));
+    services.getMensagens.mockResolvedValue([]);
+    services.getAtendimentoTags.mockResolvedValue([]);
+    services.getAtendimentoLembretes.mockResolvedValue([]);
+    services.marcarAtendimentoComoLido.mockResolvedValue(undefined);
+    services.enviarMensagem.mockClear();
+    services.enviarWhatsappTemplate.mockClear();
+  });
+
+  afterEach(() => {
+    services.getAtendimento.mockReset();
+    services.getMensagens.mockReset();
+    services.getAtendimentoTags.mockReset();
+    services.getAtendimentoLembretes.mockReset();
+    services.marcarAtendimentoComoLido.mockReset();
+    services.listAtendimentos.mockReset();
+    vi.clearAllTimers();
+  });
+
+  it('should_change_selection_immediately_and_load_content_without_waiting_for_mark_as_read', async () => {
+    let resolveMark: () => void = () => {};
+    services.marcarAtendimentoComoLido.mockImplementation(
+      () => new Promise<void>((resolve) => { resolveMark = resolve; }),
+    );
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Selecionar atendimento local' }));
+    // Seleção muda na hora, antes de qualquer resolução de API.
+    expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('7');
+    // Conteúdo crítico carrega mesmo com marcar-como-lido ainda pendente.
+    await waitFor(() => expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('7'));
+    expect(services.getAtendimento).toHaveBeenCalledWith(7, expect.any(AbortSignal));
+    expect(services.getMensagens).toHaveBeenCalledWith(7, expect.any(AbortSignal));
+    act(() => resolveMark());
+  });
+
+  it('should_keep_the_conversation_open_when_mark_as_read_fails', async () => {
+    services.marcarAtendimentoComoLido.mockRejectedValue(new Error('falha ao marcar'));
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Selecionar atendimento local' }));
+    await waitFor(() => expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('7'));
+  });
+
+  it('should_render_critical_content_without_waiting_for_tags_or_reminders', async () => {
+    services.getAtendimentoTags.mockImplementation(() => new Promise(() => {})); // nunca resolve
+    services.getAtendimentoLembretes.mockImplementation(() => new Promise(() => {})); // nunca resolve
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Selecionar atendimento local' }));
+    // Detalhe + mensagens aparecem e o carregamento crítico termina apesar de tags/lembretes pendentes.
+    await waitFor(() => expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('7'));
+    await waitFor(() => expect(screen.getByTestId('chat-loading')).toHaveTextContent('idle'));
+  });
+
+  it('should_show_only_the_last_conversation_when_switching_quickly_A_B_C', async () => {
+    const pending = new Map<number, { resolve: () => void; signal?: AbortSignal }>();
+    services.getAtendimento.mockImplementation((id: number, signal?: AbortSignal) => (
+      new Promise((resolve) => { pending.set(id, { resolve: () => resolve({ id }), signal }); })
+    ));
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Selecionar atendimento local' })); // A = 7
+    await user.click(screen.getByRole('button', { name: 'Selecionar B' })); // B = 8
+    await user.click(screen.getByRole('button', { name: 'Selecionar C' })); // C = 9
+    expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('9');
+
+    // Respostas chegam fora de ordem: B, A, C.
+    await act(async () => { pending.get(8)?.resolve(); });
+    await act(async () => { pending.get(7)?.resolve(); });
+    await act(async () => { pending.get(9)?.resolve(); });
+
+    // A tela final mostra somente C (9); respostas antigas foram descartadas.
+    await waitFor(() => expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('9'));
+    // As requisições anteriores foram canceladas via AbortController.
+    expect(pending.get(7)?.signal?.aborted).toBe(true);
+    expect(pending.get(8)?.signal?.aborted).toBe(true);
+    expect(pending.get(9)?.signal?.aborted).toBe(false);
+  });
+
+  it('should_issue_only_internal_calls_and_no_whatsapp_sending_when_selecting', async () => {
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Selecionar atendimento local' }));
+    await waitFor(() => expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('7'));
+
+    // Somente APIs internas do CRM participam da troca.
+    expect(services.getAtendimento).toHaveBeenCalledTimes(1);
+    expect(services.getMensagens).toHaveBeenCalledTimes(1);
+    expect(services.getAtendimentoTags).toHaveBeenCalledTimes(1);
+    expect(services.getAtendimentoLembretes).toHaveBeenCalledTimes(1);
+    expect(services.marcarAtendimentoComoLido).toHaveBeenCalledTimes(1);
+    // Nenhum envio ao WhatsApp/Meta ao apenas selecionar uma conversa.
+    expect(services.enviarMensagem).not.toHaveBeenCalled();
+    expect(services.enviarWhatsappTemplate).not.toHaveBeenCalled();
   });
 });
