@@ -60,3 +60,11 @@ app:
     default-start-days-back: 90
     default-end-days-forward: 90
     webhook-token: token-webhook-apenas-etapa-futura
+
+  external-sync:
+    scheduler:
+      enabled: false
+      cron: ""
+      timezone: America/Sao_Paulo
+      start-days-back: 90
+      end-days-forward: 90

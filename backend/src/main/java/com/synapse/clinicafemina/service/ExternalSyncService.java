@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -27,51 +28,90 @@ public class ExternalSyncService {
     private final IntegrationSyncLogRepository syncLogRepository;
     private final ExternalSyncTransactionService transactionService;
     private final IntegrationSyncLogService syncLogService;
+    private final ExternalSyncLockService lockService;
 
     public ExternalSyncResult sincronizar(Clinica clinica) {
         return sincronizar(clinica, null, null);
     }
 
     public ExternalSyncResult sincronizar(Clinica clinica, LocalDate dataInicio, LocalDate dataFim) {
-        validarPeriodoManual(dataInicio, dataFim);
-        ExternalProviderType providerType = clinica.getExternalProvider();
-        ExternalClinicProvider provider = providerFactory.getProvider(providerType);
-        OffsetDateTime updatedAfter = resolverUpdatedAfter(clinica, providerType, dataInicio);
-        Long runLogId = syncLogService.iniciar(
-                clinica.getId(),
-                providerType,
-                dataInicio == null ? updatedAfter : inicioDoDia(dataInicio),
-                dataInicio,
-                dataFim
-        );
+        return sincronizar(clinica, dataInicio, dataFim, ExternalSyncOrigin.MANUAL);
+    }
 
-        ExternalSyncProgress progress = new ExternalSyncProgress();
-        String status = "SUCESSO";
-        String mensagemErro = null;
-        try {
+    public ExternalSyncResult sincronizar(
+            Clinica clinica,
+            LocalDate dataInicio,
+            LocalDate dataFim,
+            ExternalSyncOrigin origem
+    ) {
+        validarPeriodoManual(dataInicio, dataFim);
+        if (clinica == null || clinica.getId() == null || clinica.getExternalProvider() == null) {
+            throw new BadRequestException("Clinica ou provider externo nao configurado");
+        }
+        ExternalProviderType providerType = clinica.getExternalProvider();
+        OffsetDateTime updatedAfter = resolverUpdatedAfter(clinica, providerType, dataInicio);
+        OffsetDateTime updatedAfterRegistrado = dataInicio == null ? updatedAfter : inicioDoDia(dataInicio);
+        Optional<ExternalSyncLockService.LockHandle> lock = lockService.tryAcquire(clinica.getId(), providerType);
+        if (lock.isEmpty()) {
+            Long runLogId = iniciarLog(
+                    clinica, providerType, updatedAfterRegistrado, dataInicio, dataFim, origem);
+            ExternalSyncProgress ignoredProgress = new ExternalSyncProgress();
+            String ignoredMessage = "Execucao ignorada porque ja existe uma sincronizacao ativa";
+            syncLogService.finalizar(runLogId, "IGNORADA_CONCORRENCIA", ignoredProgress, ignoredMessage);
             log.info(
-                    "Sincronizacao externa iniciada: clinica={}, provider={}, dataInicio={}, dataFim={}, updatedAfter={}",
-                    clinica.getId(), providerType, dataInicio, dataFim, updatedAfter);
-            transactionService.sincronizar(
-                    clinica, provider, updatedAfter, dataInicio, dataFim, progress);
-        } catch (Exception e) {
-            status = "FALHA_TOTAL";
-            String erroResumo = safeErrorSummary(e);
-            mensagemErro = "Falha na sincronizacao externa " + erroResumo;
-            log.error(
-                    "Falha na sincronizacao externa: clinica={}, provider={}, erroResumo={}",
-                    clinica.getId(), providerType, erroResumo);
+                    "Sincronizacao externa ignorada por concorrencia: clinica={}, provider={}, origem={}",
+                    clinica.getId(), providerType, origem);
+            return ignoredProgress.toResult("IGNORADA_CONCORRENCIA");
         }
 
-        syncLogService.finalizar(runLogId, status, progress, mensagemErro);
-        log.info(
-                "Sincronizacao externa finalizada: clinica={}, provider={}, status={}, dataInicio={}, dataFim={}, pacientesProcessados={}, pacientesCriados={}, pacientesAtualizados={}, agendamentosProcessados={}, agendamentosCriados={}, agendamentosAtualizados={}, agendamentosIgnorados={}",
-                clinica.getId(), providerType, status, dataInicio, dataFim,
-                progress.getPacientesProcessados(), progress.getPacientesCriados(),
-                progress.getPacientesAtualizados(), progress.getAgendamentosProcessados(),
-                progress.getAgendamentosCriados(), progress.getAgendamentosAtualizados(),
-                progress.getAgendamentosIgnorados());
-        return progress.toResult(status);
+        try (ExternalSyncLockService.LockHandle ignored = lock.orElseThrow()) {
+            Long runLogId = iniciarLog(
+                    clinica, providerType, updatedAfterRegistrado, dataInicio, dataFim, origem);
+            ExternalSyncProgress progress = new ExternalSyncProgress();
+            String status = "SUCESSO";
+            String mensagemErro = null;
+            try {
+                ExternalClinicProvider provider = providerFactory.getProvider(providerType);
+                log.info(
+                        "Sincronizacao externa iniciada: clinica={}, provider={}, dataInicio={}, dataFim={}, updatedAfter={}",
+                        clinica.getId(), providerType, dataInicio, dataFim, updatedAfter);
+                transactionService.sincronizar(
+                        clinica, provider, updatedAfter, dataInicio, dataFim, progress);
+            } catch (Exception e) {
+                status = "FALHA_TOTAL";
+                String erroResumo = safeErrorSummary(e);
+                mensagemErro = "Falha na sincronizacao externa " + erroResumo;
+                log.error(
+                        "Falha na sincronizacao externa: clinica={}, provider={}, erroResumo={}",
+                        clinica.getId(), providerType, erroResumo);
+            }
+
+            syncLogService.finalizar(runLogId, status, progress, mensagemErro);
+            log.info(
+                    "Sincronizacao externa finalizada: clinica={}, provider={}, status={}, dataInicio={}, dataFim={}, pacientesProcessados={}, pacientesCriados={}, pacientesAtualizados={}, agendamentosProcessados={}, agendamentosCriados={}, agendamentosAtualizados={}, agendamentosIgnorados={}",
+                    clinica.getId(), providerType, status, dataInicio, dataFim,
+                    progress.getPacientesProcessados(), progress.getPacientesCriados(),
+                    progress.getPacientesAtualizados(), progress.getAgendamentosProcessados(),
+                    progress.getAgendamentosCriados(), progress.getAgendamentosAtualizados(),
+                    progress.getAgendamentosIgnorados());
+            return progress.toResult(status);
+        }
+    }
+
+    private Long iniciarLog(
+            Clinica clinica,
+            ExternalProviderType providerType,
+            OffsetDateTime updatedAfter,
+            LocalDate dataInicio,
+            LocalDate dataFim,
+            ExternalSyncOrigin origem
+    ) {
+        if (origem == ExternalSyncOrigin.MANUAL) {
+            return syncLogService.iniciar(
+                    clinica.getId(), providerType, updatedAfter, dataInicio, dataFim);
+        }
+        return syncLogService.iniciar(
+                clinica.getId(), providerType, updatedAfter, dataInicio, dataFim, origem);
     }
 
     private OffsetDateTime resolverUpdatedAfter(

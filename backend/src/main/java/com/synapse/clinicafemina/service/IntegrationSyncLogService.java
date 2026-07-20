@@ -27,12 +27,25 @@ public class IntegrationSyncLogService {
             LocalDate dataInicio,
             LocalDate dataFim
     ) {
+        return iniciar(clinicaId, providerType, updatedAfter, dataInicio, dataFim, ExternalSyncOrigin.MANUAL);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Long iniciar(
+            Long clinicaId,
+            ExternalProviderType providerType,
+            OffsetDateTime updatedAfter,
+            LocalDate dataInicio,
+            LocalDate dataFim,
+            ExternalSyncOrigin origem
+    ) {
         IntegrationSyncLog runLog = new IntegrationSyncLog();
         runLog.setClinica(clinicaRepository.getReferenceById(clinicaId));
         runLog.setExternalProvider(providerType);
         runLog.setUpdatedAfterUtilizado(updatedAfter);
         runLog.setDataInicio(dataInicio);
         runLog.setDataFim(dataFim);
+        runLog.setOrigem(origem.name());
         return syncLogRepository.saveAndFlush(runLog).getId();
     }
 
@@ -55,6 +68,12 @@ public class IntegrationSyncLogService {
         runLog.setAgendamentosCriados(progress.getAgendamentosCriados());
         runLog.setAgendamentosAtualizados(progress.getAgendamentosAtualizados());
         runLog.setAgendamentosIgnorados(progress.getAgendamentosIgnorados());
+        runLog.setTotalProcessado(
+                progress.getAgendamentosProcessados() + progress.getAgendamentosIgnorados());
+        if (runLog.getIniciadoEm() != null) {
+            runLog.setDuracaoMs(Math.max(0,
+                    java.time.Duration.between(runLog.getIniciadoEm(), runLog.getConcluidoEm()).toMillis()));
+        }
         syncLogRepository.saveAndFlush(runLog);
     }
 }

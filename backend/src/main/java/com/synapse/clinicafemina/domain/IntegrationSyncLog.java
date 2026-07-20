@@ -35,6 +35,9 @@ public class IntegrationSyncLog {
     @Column(nullable = false, length = 20)
     private String status = "EXECUTANDO";
 
+    @Column(nullable = false, length = 20)
+    private String origem = "MANUAL";
+
     @Column(name = "pacientes_processados", nullable = false)
     private Integer pacientesProcessados = 0;
 
@@ -55,6 +58,12 @@ public class IntegrationSyncLog {
 
     @Column(name = "agendamentos_ignorados", nullable = false)
     private Integer agendamentosIgnorados = 0;
+
+    @Column(name = "total_processado", nullable = false)
+    private Integer totalProcessado = 0;
+
+    @Column(name = "duracao_ms")
+    private Long duracaoMs;
 
     @Column(name = "updated_after_utilizado")
     private OffsetDateTime updatedAfterUtilizado;

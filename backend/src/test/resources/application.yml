@@ -43,3 +43,10 @@ app:
     api-url: https://darwin.test
     api-token: test-token
     enabled: false
+  external-sync:
+    scheduler:
+      enabled: false
+      cron: ""
+      timezone: America/Sao_Paulo
+      start-days-back: 90
+      end-days-forward: 90

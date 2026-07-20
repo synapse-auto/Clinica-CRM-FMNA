@@ -83,6 +83,9 @@ class ExternalSyncServiceTest {
     @Mock
     private ClinicDataChangePublisher clinicDataChangePublisher;
 
+    @Mock
+    private ExternalSyncLockService externalSyncLockService;
+
     private ExternalSyncService service;
     private Clinica clinica;
 
@@ -101,7 +104,8 @@ class ExternalSyncServiceTest {
                 providerFactory,
                 syncLogRepository,
                 transactionService,
-                integrationSyncLogService
+                integrationSyncLogService,
+                externalSyncLockService
         );
 
         clinica = new Clinica();
@@ -111,6 +115,10 @@ class ExternalSyncServiceTest {
 
         lenient().when(providerFactory.getProvider(ExternalProviderType.DARWIN)).thenReturn(provider);
         lenient().when(providerFactory.getProvider(ExternalProviderType.MEDWARE)).thenReturn(provider);
+        lenient().when(externalSyncLockService.tryAcquire(any(), any()))
+                .thenReturn(java.util.Optional.of(org.mockito.Mockito.mock(ExternalSyncLockService.LockHandle.class)));
+        lenient().when(integrationSyncLogService.iniciar(
+                any(), any(), any(), any(), any(), any())).thenReturn(99L);
         lenient().when(syncLogRepository.findUltimoSucesso(7L, ExternalProviderType.DARWIN)).thenReturn(Optional.empty());
         lenient().when(syncLogRepository.findUltimoSucesso(7L, ExternalProviderType.MEDWARE)).thenReturn(Optional.empty());
         lenient().when(integrationSyncLogService.iniciar(any(), any(), any(), any(), any()))
@@ -1061,6 +1069,44 @@ class ExternalSyncServiceTest {
         assertEquals(0, result.pacientesCriados());
         verify(pacienteRepository, never()).save(any(Paciente.class));
         verify(agendamentoRepository, never()).save(any(Agendamento.class));
+    }
+
+    @Test
+    void should_register_scheduled_origin_when_scheduler_delegates_to_manual_orchestrator() {
+        when(provider.getType()).thenReturn(ExternalProviderType.DARWIN);
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(null, LocalDate.of(2026, 7, 20),
+                LocalDate.of(2026, 7, 20), null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        ExternalSyncResult result = service.sincronizar(
+                clinica,
+                LocalDate.of(2026, 7, 20),
+                LocalDate.of(2026, 7, 20),
+                ExternalSyncOrigin.AGENDADA);
+
+        assertEquals("SUCESSO", result.status());
+        verify(integrationSyncLogService).iniciar(
+                eq(7L), eq(ExternalProviderType.DARWIN), any(OffsetDateTime.class),
+                eq(LocalDate.of(2026, 7, 20)), eq(LocalDate.of(2026, 7, 20)),
+                eq(ExternalSyncOrigin.AGENDADA));
+    }
+
+    @Test
+    void should_ignore_concurrent_execution_without_calling_external_provider_or_invalidating_cache() {
+        org.mockito.Mockito.when(externalSyncLockService.tryAcquire(7L, ExternalProviderType.DARWIN))
+                .thenReturn(java.util.Optional.empty());
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        assertEquals("IGNORADA_CONCORRENCIA", result.status());
+        verify(provider, never()).getPatients(any(), any(), any(Integer.class));
+        verify(provider, never()).getAppointments(any(), any(), any(Integer.class));
+        verify(provider, never()).getAppointments(any(), any(), any(), any(), any(Integer.class));
+        verify(clinicDataChangePublisher, never()).publish(any());
+        verify(integrationSyncLogService).finalizar(
+                eq(99L), eq("IGNORADA_CONCORRENCIA"), any(ExternalSyncProgress.class),
+                eq("Execucao ignorada porque ja existe uma sincronizacao ativa"));
     }
 
     private Paciente pacienteExistente(String nome, String telefone) {

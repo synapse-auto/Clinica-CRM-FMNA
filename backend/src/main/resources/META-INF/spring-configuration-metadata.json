@@ -75,6 +75,26 @@
     {
       "name": "app.darwin.enabled",
       "type": "java.lang.Boolean"
+    },
+    {
+      "name": "app.external-sync.scheduler.enabled",
+      "type": "java.lang.Boolean"
+    },
+    {
+      "name": "app.external-sync.scheduler.cron",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.external-sync.scheduler.timezone",
+      "type": "java.lang.String"
+    },
+    {
+      "name": "app.external-sync.scheduler.start-days-back",
+      "type": "java.lang.Integer"
+    },
+    {
+      "name": "app.external-sync.scheduler.end-days-forward",
+      "type": "java.lang.Integer"
     }
   ]
 }

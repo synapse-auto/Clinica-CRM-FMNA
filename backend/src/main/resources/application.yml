@@ -96,3 +96,11 @@ app:
 
   integrations:
     page-size: ${INTEGRATION_PAGE_SIZE:100}
+
+  external-sync:
+    scheduler:
+      enabled: ${EXTERNAL_SYNC_SCHEDULER_ENABLED:false}
+      cron: "${EXTERNAL_SYNC_CRON:${DARWIN_SYNC_CRON:}}"
+      timezone: ${EXTERNAL_SYNC_TIMEZONE:America/Sao_Paulo}
+      start-days-back: ${EXTERNAL_SYNC_START_DAYS_BACK:90}
+      end-days-forward: ${EXTERNAL_SYNC_END_DAYS_FORWARD:90}
