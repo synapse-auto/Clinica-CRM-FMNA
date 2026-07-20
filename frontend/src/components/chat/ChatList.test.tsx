@@ -88,6 +88,23 @@ describe('ChatList', () => {
     expect(screen.getByText('Atendido por Ana Lima')).toBeInTheDocument();
   });
 
+  it('should_show_search_progress_inside_the_field_without_adding_a_flow_row', () => {
+    render(
+      <ChatList
+        {...baseProps}
+        searching
+        conversations={[baseConversation]}
+      />,
+    );
+
+    const search = screen.getByPlaceholderText('Buscar paciente ou telefone...');
+    const label = search.closest('label');
+    expect(label).toHaveAttribute('aria-busy', 'true');
+    expect(label?.querySelector('.absolute.right-3\\.5')).toBeInTheDocument();
+    expect(screen.getByText('Pesquisando atendimentos')).toHaveClass('sr-only');
+    expect(screen.queryByText('Pesquisando...')).not.toBeInTheDocument();
+  });
+
   it.each([null, '', '��', 'http://provider.example/avatar'])(
     'should_show_unicode_safe_initials_when_avatar_is_invalid: %s',
     (fotoUrl) => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PanelRightOpen } from 'lucide-react';
 import type { AuthUser } from '@/lib/auth/types';
 import {
   adicionarTagAtendimento,
@@ -45,6 +46,8 @@ import { ContactDetails } from './ContactDetails';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { isSearchableTerm, normalizeSearchText } from '@/lib/search';
 
+const DETAILS_PANEL_STORAGE_KEY = 'clinica-crm-atendimentos-details-open';
+
 type Props = {
   initialConversations: AtendimentoResumo[];
   atendentes: AtendenteOption[];
@@ -70,17 +73,42 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const knownNotifications = useRef<Set<number> | null>(null);
   const activeIdRef = useRef<number | null>(activeId);
   const listAbortController = useRef<AbortController | null>(null);
   const listRequestVersion = useRef(0);
   const firstListEffect = useRef(true);
+  const reopenDetailsButton = useRef<HTMLButtonElement>(null);
+  const focusReopenDetails = useRef(false);
   const debouncedSearch = useDebouncedValue(search, 300);
   const searchKey = isSearchableTerm(debouncedSearch)
     ? normalizeSearchText(debouncedSearch)
     : '';
   const requestSearchRef = useRef('');
   requestSearchRef.current = searchKey ? debouncedSearch.trim() : '';
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(DETAILS_PANEL_STORAGE_KEY);
+    if (stored === 'true' || stored === 'false') {
+      setDetailsOpen(stored === 'true');
+      return;
+    }
+    setDetailsOpen(window.matchMedia?.('(min-width: 1600px)').matches ?? false);
+  }, []);
+
+  useEffect(() => {
+    if (!detailsOpen && focusReopenDetails.current) {
+      focusReopenDetails.current = false;
+      reopenDetailsButton.current?.focus();
+    }
+  }, [detailsOpen]);
+
+  function changeDetailsOpen(open: boolean) {
+    focusReopenDetails.current = !open;
+    setDetailsOpen(open);
+    window.localStorage.setItem(DETAILS_PANEL_STORAGE_KEY, String(open));
+  }
 
   const refreshList = useCallback(async () => {
     listAbortController.current?.abort();
@@ -306,23 +334,47 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
         }}
         onSearchChange={setSearch}
       />
-      <ChatWindow
-        detail={detail}
-        messages={messages}
-        quickMessages={quickMessages}
-        busy={busy}
-        error={error}
-        onSend={(content) => activeId
-          ? runAction(() => enviarMensagem(activeId, content), { propagate: true, targetId: activeId })
-          : Promise.resolve()}
-        onAttach={(file) => activeId
-          ? runAction(() => enviarAnexo(activeId, file), { propagate: true, targetId: activeId })
-          : Promise.resolve()}
-        onSendTemplate={(request: EnviarTemplateWhatsappRequest) => activeId
-          ? runAction(() => enviarWhatsappTemplate(activeId, request), { propagate: true, targetId: activeId })
-          : Promise.resolve()}
-      />
-      <ContactDetails
+      <div className="flex min-w-0 flex-1">
+        <ChatWindow
+          detail={detail}
+          messages={messages}
+          quickMessages={quickMessages}
+          busy={busy}
+          error={error}
+          onSend={(content) => activeId
+            ? runAction(() => enviarMensagem(activeId, content), { propagate: true, targetId: activeId })
+            : Promise.resolve()}
+          onAttach={(file) => activeId
+            ? runAction(() => enviarAnexo(activeId, file), { propagate: true, targetId: activeId })
+            : Promise.resolve()}
+          onSendTemplate={(request: EnviarTemplateWhatsappRequest) => activeId
+            ? runAction(() => enviarWhatsappTemplate(activeId, request), { propagate: true, targetId: activeId })
+            : Promise.resolve()}
+        />
+        {!detailsOpen ? (
+          <div className="flex w-10 shrink-0 items-start justify-center border-l border-clinic-border bg-clinic-surface pt-3">
+            <button
+              ref={reopenDetailsButton}
+              type="button"
+              aria-label="Abrir detalhes do atendimento"
+              aria-controls="atendimento-detalhes"
+              aria-expanded="false"
+              title="Abrir detalhes do atendimento"
+              onClick={() => changeDetailsOpen(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-text focus-visible:outline-2 focus-visible:outline-clinic-primary"
+            >
+              <PanelRightOpen className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <div
+        data-testid="contact-details-region"
+        aria-hidden={!detailsOpen}
+        inert={!detailsOpen}
+        className={`shrink-0 overflow-hidden transition-[width,opacity] duration-150 ${detailsOpen ? 'w-[336px] opacity-100' : 'w-0 opacity-0 pointer-events-none'}`}
+      >
+        <ContactDetails
         detail={detail}
         atendentes={atendentes}
         tags={activeTags}
@@ -332,6 +384,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
         remindersError={remindersError}
         canManage={user.perfil !== 'MEDICO'}
         busy={busy}
+        onClose={() => changeDetailsOpen(false)}
         onAssume={() => activeId
           ? runAction(() => assumirAtendimento(activeId))
           : Promise.resolve()}
@@ -359,7 +412,8 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
         onCancelReminder={(lembreteId) => activeId
           ? runReminderAction(() => cancelarAtendimentoLembrete(activeId, lembreteId))
           : Promise.resolve()}
-      />
+        />
+      </div>
     </div>
   );
 }

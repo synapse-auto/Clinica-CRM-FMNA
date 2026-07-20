@@ -1,7 +1,7 @@
 'use client';
 
 import { type FormEvent, type ReactNode, useState } from 'react';
-import { Bot, CalendarCheck, CalendarClock, Check, Mail, Phone, Plus, User, X } from 'lucide-react';
+import { Bot, CalendarCheck, CalendarClock, Check, Mail, PanelRightClose, Phone, Plus, User, X } from 'lucide-react';
 import type {
   AtendenteOption,
   AtendimentoDetalhe,
@@ -23,6 +23,7 @@ type Props = {
   remindersError: string | null;
   canManage: boolean;
   busy: boolean;
+  onClose: () => void;
   onAssume: () => Promise<void>;
   onActivateIa: () => Promise<void>;
   onTransfer: (usuarioId: number) => Promise<void>;
@@ -44,6 +45,7 @@ export function ContactDetails({
   remindersError,
   canManage,
   busy,
+  onClose,
   onAssume,
   onActivateIa,
   onTransfer,
@@ -61,7 +63,8 @@ export function ContactDetails({
 
   if (!detail) {
     return (
-      <aside className="flex h-full w-[300px] items-center justify-center border-l border-clinic-border bg-clinic-surface p-5 text-center text-[11px] text-clinic-muted">
+      <aside id="atendimento-detalhes" className="relative flex h-full w-[336px] items-center justify-center border-l border-clinic-border bg-clinic-surface p-5 text-center text-[11px] text-clinic-muted">
+        <DetailsCloseButton onClose={onClose} />
         Selecione uma conversa para ver os detalhes.
       </aside>
     );
@@ -87,8 +90,9 @@ export function ContactDetails({
   }
 
   return (
-    <aside aria-label="Detalhes do atendimento" className="flex h-full w-[336px] shrink-0 flex-col overflow-y-auto border-l border-clinic-border bg-clinic-surface custom-scrollbar">
-      <div className="border-b border-clinic-border px-6 py-6 text-center">
+    <aside id="atendimento-detalhes" aria-label="Detalhes do atendimento" className="flex h-full w-[336px] shrink-0 flex-col overflow-y-auto border-l border-clinic-border bg-clinic-surface custom-scrollbar">
+      <div className="relative border-b border-clinic-border px-6 py-6 text-center">
+        <DetailsCloseButton onClose={onClose} />
         <ContactAvatar name={paciente.nome} url={paciente.fotoUrl} variant="details" />
         <h2 className="text-[16px] font-extrabold text-clinic-text">{paciente.nome}</h2>
         <p className="mt-1 text-[11px] font-semibold text-clinic-muted">{detail.status}</p>
@@ -328,6 +332,22 @@ export function ContactDetails({
         </Section>
       </div>
     </aside>
+  );
+}
+
+function DetailsCloseButton({ onClose }: { onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label="Minimizar detalhes do atendimento"
+      aria-controls="atendimento-detalhes"
+      aria-expanded="true"
+      title="Minimizar detalhes do atendimento"
+      onClick={onClose}
+      className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-lg text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-text focus-visible:outline-2 focus-visible:outline-clinic-primary"
+    >
+      <PanelRightClose className="h-4 w-4" />
+    </button>
   );
 }
 

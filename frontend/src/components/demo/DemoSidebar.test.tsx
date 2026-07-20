@@ -1,13 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi } from 'vitest';
+import { beforeEach, vi } from 'vitest';
 import { DemoSidebar } from './DemoSidebar';
 
 const replaceMock = vi.fn();
 const refreshMock = vi.fn();
+const navigation = vi.hoisted(() => ({ pathname: '/dashboard' }));
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/dashboard',
+  usePathname: () => navigation.pathname,
   useRouter: () => ({
     replace: replaceMock,
     refresh: refreshMock,
@@ -30,6 +31,11 @@ const clinic = {
 };
 
 describe('DemoSidebar', () => {
+  beforeEach(() => {
+    navigation.pathname = '/dashboard';
+    window.localStorage.clear();
+  });
+
   it('should_not_render_whatsapp_demo_shortcuts', () => {
     render(
       <DemoSidebar
@@ -107,5 +113,31 @@ describe('DemoSidebar', () => {
 
     expect(screen.getByLabelText('Clinica Femina sem logotipo')).toBeInTheDocument();
     expect(screen.queryByAltText('UltraMedical')).not.toBeInTheDocument();
+  });
+
+  it('should_use_a_fixed_compact_rail_and_allow_pinning_on_atendimentos', async () => {
+    navigation.pathname = '/atendimentos';
+    const user = userEvent.setup();
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false }}
+      />,
+    );
+
+    const rail = screen.getByTestId('sidebar-rail');
+    const sidebar = screen.getByTestId('main-sidebar');
+    await waitFor(() => expect(rail).toHaveClass('md:w-16'));
+    expect(rail).toHaveClass('w-[256px]');
+    expect(sidebar).toHaveClass('md:hover:w-[256px]', 'md:focus-within:w-[256px]');
+    expect(screen.getByText('Atendimentos')).toHaveClass('opacity-0', 'group-hover/sidebar:opacity-100');
+
+    const pin = screen.getByRole('button', { name: 'Fixar barra lateral expandida' });
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
+    await user.click(pin);
+
+    expect(rail).toHaveClass('w-[256px]');
+    expect(screen.getByRole('button', { name: 'Recolher barra lateral' })).toHaveAttribute('aria-pressed', 'true');
+    expect(window.localStorage.getItem('clinica-crm-atendimentos-sidebar-expanded')).toBe('true');
   });
 });

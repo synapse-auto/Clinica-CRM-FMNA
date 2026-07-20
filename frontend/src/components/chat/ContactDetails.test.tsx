@@ -40,6 +40,7 @@ const baseProps = {
   availableTags: [],
   canManage: true,
   busy: false,
+  onClose: vi.fn(),
   onAssume: async () => undefined,
   onActivateIa: async () => undefined,
   onTransfer: async () => undefined,
@@ -88,6 +89,18 @@ const reminder: AtendimentoLembrete = {
 };
 
 describe('ContactDetails', () => {
+  it('should_expose_an_accessible_control_to_minimize_the_panel', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<ContactDetails detail={detail} {...baseProps} onClose={onClose} />);
+
+    const button = screen.getByRole('button', { name: 'Minimizar detalhes do atendimento' });
+    expect(button).toHaveAttribute('aria-controls', 'atendimento-detalhes');
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    await user.click(button);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('should_show_unicode_safe_initials_in_patient_details', () => {
     render(
       <ContactDetails

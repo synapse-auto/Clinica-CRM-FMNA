@@ -1,6 +1,6 @@
 'use client';
 
-import { Search } from 'lucide-react';
+import { LoaderCircle, Search } from 'lucide-react';
 import type {
   AtendimentoFilter,
   AtendimentoResumo,
@@ -53,19 +53,25 @@ export function ChatList(props: Props) {
             Ao vivo
           </span>
         </div>
-        <label className="relative block">
+        <label className="relative block" aria-busy={props.searching}>
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clinic-muted" />
           <input
             type="search"
             value={props.search}
             onChange={(event) => props.onSearchChange(event.target.value)}
             placeholder="Buscar paciente ou telefone..."
-            className="h-10 w-full rounded-xl border border-clinic-border bg-clinic-input pl-10 pr-3 text-[12px] text-clinic-text outline-none transition placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10"
+            className="h-10 w-full rounded-xl border border-clinic-border bg-clinic-input pl-10 pr-10 text-[12px] text-clinic-text outline-none transition placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10"
           />
+          {props.searching ? (
+            <LoaderCircle
+              aria-hidden="true"
+              className="absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-clinic-primary"
+            />
+          ) : null}
+          <span className="sr-only" aria-live="polite">
+            {props.searching ? 'Pesquisando atendimentos' : ''}
+          </span>
         </label>
-        {props.searching ? (
-          <p className="text-[10px] font-semibold text-clinic-muted">Pesquisando...</p>
-        ) : null}
         {props.error ? (
           <div role="alert" className="flex items-center justify-between gap-2 rounded-lg bg-clinic-danger/10 px-2.5 py-2 text-[10px] font-semibold text-clinic-danger">
             <span className="line-clamp-2">{props.error}</span>

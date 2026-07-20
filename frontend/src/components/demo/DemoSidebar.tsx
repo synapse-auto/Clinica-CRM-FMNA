@@ -12,6 +12,8 @@ import {
   LogOut,
   MessageSquare,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   Sun,
   Tag,
@@ -27,6 +29,8 @@ import { menuItemsForProfile } from '@/lib/auth/permissions';
 import type { AuthUser } from '@/lib/auth/types';
 import type { ClinicaAtualResponse } from '@/types/dashboard';
 import { getNotificacoesResumo } from '@/services/atendimentos';
+
+const ATTENDIMENTOS_SIDEBAR_STORAGE_KEY = 'clinica-crm-atendimentos-sidebar-expanded';
 const menuIcons = {
   '/atendimentos': MessageSquare,
   '/dashboard': LayoutDashboard,
@@ -51,6 +55,8 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const [atendimentosBadge, setAtendimentosBadge] = useState(0);
+  const [sidebarExpanded, setSidebarExpanded] = useState<boolean | null>(null);
+  const compactable = pathname === '/atendimentos' || pathname.startsWith('/atendimentos/');
   const initials = user.nome
     .split(/\s+/)
     .filter(Boolean)
@@ -79,15 +85,56 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!compactable) return;
+    const stored = window.localStorage.getItem(ATTENDIMENTOS_SIDEBAR_STORAGE_KEY);
+    if (stored === 'true' || stored === 'false') {
+      setSidebarExpanded(stored === 'true');
+      return;
+    }
+    setSidebarExpanded(window.matchMedia?.('(min-width: 1440px)').matches ?? false);
+  }, [compactable]);
+
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.replace('/login');
     router.refresh();
   }
 
+  function toggleSidebar() {
+    const nextExpanded = !(sidebarExpanded ?? window.matchMedia?.('(min-width: 1440px)').matches ?? false);
+    setSidebarExpanded(nextExpanded);
+    window.localStorage.setItem(ATTENDIMENTOS_SIDEBAR_STORAGE_KEY, String(nextExpanded));
+  }
+
+  const railWidthClass = !compactable
+    ? 'w-[256px]'
+    : sidebarExpanded === true
+      ? 'w-[256px]'
+      : sidebarExpanded === false
+        ? 'w-[256px] md:w-16'
+        : 'w-[256px] md:max-[1439px]:w-16';
+  const sidebarWidthClass = !compactable
+    ? 'w-[256px]'
+    : sidebarExpanded === true
+      ? 'w-[256px]'
+      : sidebarExpanded === false
+        ? 'w-[256px] md:w-16 md:hover:w-[256px] md:focus-within:w-[256px]'
+        : 'w-[256px] md:max-[1439px]:w-16 md:max-[1439px]:hover:w-[256px] md:max-[1439px]:focus-within:w-[256px]';
+  const temporaryLabelClass = compactable && sidebarExpanded !== true
+    ? 'opacity-0 transition-opacity group-hover/sidebar:opacity-100 group-focus-within/sidebar:opacity-100 max-md:opacity-100'
+    : '';
+
   return (
-    <aside className="flex h-screen w-[256px] shrink-0 flex-col bg-sidebar text-sidebar-foreground">
-      <div className="flex h-[84px] items-center gap-3 border-b border-sidebar-border px-6">
+    <div
+      className={`relative h-screen shrink-0 transition-[width] duration-150 ${railWidthClass}`}
+      data-testid="sidebar-rail"
+    >
+    <aside
+      className={`${compactable ? 'group/sidebar absolute inset-y-0 left-0 z-40 overflow-hidden transition-[width] duration-150 hover:shadow-2xl focus-within:shadow-2xl max-md:static' : ''} flex h-screen shrink-0 flex-col bg-sidebar text-sidebar-foreground ${sidebarWidthClass}`}
+      data-testid="main-sidebar"
+    >
+      <div className={`flex h-[84px] items-center gap-3 border-b border-sidebar-border ${compactable ? 'px-2' : 'px-6'}`}>
         <div className="flex h-11 w-11 items-center justify-center">
           {publicBranding.logoUrl ? (
             <Image src={publicBranding.logoUrl} alt={clinic.nome} width={44} height={44} priority className="h-11 w-11 object-contain" />
@@ -97,16 +144,30 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
             </span>
           )}
         </div>
-        <div className="min-w-0">
+        <div className={`min-w-0 ${temporaryLabelClass}`}>
           <p className="truncate text-[15px] font-bold leading-tight text-white">{clinic.nome}</p>
           <p className="text-xs text-sidebar-foreground/65">CRM</p>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-5 custom-scrollbar">
-        <p className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/55">
-          Menu
-        </p>
+      <div className={`flex-1 overflow-y-auto py-5 custom-scrollbar ${compactable ? 'px-2' : 'px-4'}`}>
+        {compactable ? (
+          <button
+            type="button"
+            aria-label={sidebarExpanded === true ? 'Recolher barra lateral' : 'Fixar barra lateral expandida'}
+            aria-pressed={sidebarExpanded === true}
+            title={sidebarExpanded === true ? 'Recolher barra lateral' : 'Fixar barra lateral expandida'}
+            onClick={toggleSidebar}
+            className="mb-3 flex h-10 w-full min-w-[240px] items-center gap-3 rounded-xl px-3 text-[13px] font-semibold text-sidebar-foreground transition hover:bg-sidebar-accent/55 hover:text-white focus-visible:outline-2 focus-visible:outline-sidebar-primary"
+          >
+            {sidebarExpanded === true ? <PanelLeftClose className="h-5 w-5 shrink-0" /> : <PanelLeftOpen className="h-5 w-5 shrink-0" />}
+            <span className={temporaryLabelClass}>{sidebarExpanded === true ? 'Recolher navegação' : 'Fixar navegação'}</span>
+          </button>
+        ) : (
+          <p className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/55">
+            Menu
+          </p>
+        )}
         <nav className="space-y-1">
           {menuItems.map((item) => {
             const Icon = menuIcons[item.href as keyof typeof menuIcons];
@@ -116,7 +177,8 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group flex h-[46px] items-center justify-between rounded-xl px-3 text-[14px] font-semibold transition ${
+                title={compactable ? item.name : undefined}
+                className={`group relative flex h-[46px] items-center justify-between rounded-xl px-3 text-[14px] font-semibold transition ${compactable ? 'min-w-[240px]' : ''} ${
                   active
                     ? 'bg-sidebar-accent text-white shadow-sm'
                     : 'text-sidebar-foreground hover:bg-sidebar-accent/55 hover:text-white'
@@ -124,7 +186,7 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
               >
                 <span className="flex min-w-0 items-center gap-3">
                   <Icon className={`h-5 w-5 shrink-0 ${active ? 'text-sidebar-primary' : 'text-sidebar-foreground/60'}`} />
-                  <span className="truncate">{item.name}</span>
+                  <span className={`truncate ${temporaryLabelClass}`}>{item.name}</span>
                 </span>
                 {badge ? (
                   <span className="min-w-5 rounded-full bg-clinic-danger px-1.5 py-0.5 text-center text-[11px] font-bold text-white">
@@ -139,26 +201,27 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
         </nav>
       </div>
 
-      <div className="border-t border-sidebar-border p-4">
+      <div className={`border-t border-sidebar-border ${compactable ? 'p-2' : 'p-4'}`}>
         <button
           type="button"
           onClick={toggleTheme}
           aria-label={`Ativar tema ${theme === 'dark' ? 'claro' : 'escuro'}`}
-          className="mb-3 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-semibold text-sidebar-foreground transition hover:bg-sidebar-accent/55 hover:text-white"
+          title={compactable ? `Tema ${theme === 'dark' ? 'claro' : 'escuro'}` : undefined}
+          className={`mb-3 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-semibold text-sidebar-foreground transition hover:bg-sidebar-accent/55 hover:text-white ${compactable ? 'min-w-[240px]' : ''}`}
         >
           {theme === 'dark' ? (
             <Sun className="h-4 w-4 text-sidebar-foreground/65" />
           ) : (
             <Moon className="h-4 w-4 text-sidebar-foreground/65" />
           )}
-          Tema {theme === 'dark' ? 'Claro' : 'Escuro'}
+          <span className={temporaryLabelClass}>Tema {theme === 'dark' ? 'Claro' : 'Escuro'}</span>
         </button>
-        <div className="flex items-center justify-between gap-2 rounded-xl p-2 transition hover:bg-sidebar-accent/55">
+        <div className={`flex items-center justify-between gap-2 rounded-xl p-2 transition hover:bg-sidebar-accent/55 ${compactable ? 'min-w-[240px]' : ''}`}>
           <Link href="/minha-conta" className="flex min-w-0 flex-1 items-center gap-3 rounded-md focus:outline-none focus:ring-2 focus:ring-sidebar-primary/45">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-sm font-bold text-sidebar-primary-foreground ring-2 ring-sidebar-primary/20">
               {initials}
             </div>
-            <div className="min-w-0">
+            <div className={`min-w-0 ${temporaryLabelClass}`}>
               <p className="truncate text-[14px] font-bold text-white">{user.nome}</p>
               <p className="truncate text-xs text-sidebar-foreground/65">{formatProfile(user.perfil)}</p>
             </div>
@@ -174,6 +237,7 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
         </div>
       </div>
     </aside>
+    </div>
   );
 }
 
