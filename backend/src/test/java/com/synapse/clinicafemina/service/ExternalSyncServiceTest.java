@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.domain.Agendamento;
 import com.synapse.clinicafemina.domain.Clinica;
+import com.synapse.clinicafemina.domain.IntegrationSyncLog;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.integration.external.ExternalAppointmentDTO;
 import com.synapse.clinicafemina.integration.external.ExternalClinicProvider;
@@ -324,6 +325,7 @@ class ExternalSyncServiceTest {
 
         ArgumentCaptor<Agendamento> agendamentoCaptor = ArgumentCaptor.forClass(Agendamento.class);
         verify(provider).getAppointments(null, dataInicio, dataFim, null, 100);
+        verify(syncLogRepository, never()).findUltimoSucesso(any(), any());
         verify(agendamentoRepository).save(agendamentoCaptor.capture());
         verify(integrationSyncLogService).iniciar(
                 7L,
@@ -451,6 +453,95 @@ class ExternalSyncServiceTest {
         assertEquals(1, result.pacientesCriados());
         assertEquals(1, result.agendamentosProcessados());
         assertEquals(1, result.agendamentosCriados());
+    }
+
+    @Test
+    void should_use_last_success_for_scheduled_patients_while_preserving_appointment_window() {
+        OffsetDateTime ultimoSucesso = OffsetDateTime.parse("2026-07-19T12:00:00-03:00");
+        IntegrationSyncLog ultimoLog = new IntegrationSyncLog();
+        ultimoLog.setIniciadoEm(ultimoSucesso);
+        LocalDate dataInicio = LocalDate.of(2026, 7, 20);
+        LocalDate dataFim = LocalDate.of(2026, 10, 18);
+        when(syncLogRepository.findUltimoSucesso(7L, ExternalProviderType.DARWIN))
+                .thenReturn(Optional.of(ultimoLog));
+        when(provider.getType()).thenReturn(ExternalProviderType.DARWIN);
+        when(provider.getPatients(ultimoSucesso, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(ultimoSucesso, dataInicio, dataFim, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+
+        ExternalSyncResult result = service.sincronizar(
+                clinica, dataInicio, dataFim, ExternalSyncOrigin.AGENDADA);
+
+        assertEquals("SUCESSO", result.status());
+        verify(syncLogRepository).findUltimoSucesso(7L, ExternalProviderType.DARWIN);
+        verify(provider).getPatients(ultimoSucesso, null, 100);
+        verify(provider).getAppointments(ultimoSucesso, dataInicio, dataFim, null, 100);
+        verify(integrationSyncLogService).iniciar(
+                7L, ExternalProviderType.DARWIN, ultimoSucesso, dataInicio, dataFim,
+                ExternalSyncOrigin.AGENDADA);
+    }
+
+    @Test
+    void should_keep_manual_sync_incremental_when_no_period_is_provided() {
+        OffsetDateTime ultimoSucesso = OffsetDateTime.parse("2026-07-19T12:00:00-03:00");
+        IntegrationSyncLog ultimoLog = new IntegrationSyncLog();
+        ultimoLog.setIniciadoEm(ultimoSucesso);
+        when(syncLogRepository.findUltimoSucesso(7L, ExternalProviderType.DARWIN))
+                .thenReturn(Optional.of(ultimoLog));
+        when(provider.getType()).thenReturn(ExternalProviderType.DARWIN);
+        when(provider.getPatients(ultimoSucesso, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(ultimoSucesso, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        assertEquals("SUCESSO", result.status());
+        verify(syncLogRepository).findUltimoSucesso(7L, ExternalProviderType.DARWIN);
+        verify(provider).getPatients(ultimoSucesso, null, 100);
+        verify(provider).getAppointments(ultimoSucesso, null, 100);
+        verify(integrationSyncLogService).iniciar(
+                7L, ExternalProviderType.DARWIN, ultimoSucesso, null, null);
+    }
+
+    @Test
+    void should_use_full_initial_cursor_when_there_is_no_successful_history() {
+        when(syncLogRepository.findUltimoSucesso(7L, ExternalProviderType.DARWIN))
+                .thenReturn(Optional.empty());
+        when(provider.getType()).thenReturn(ExternalProviderType.DARWIN);
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        assertEquals("SUCESSO", result.status());
+        verify(provider).getPatients(null, null, 100);
+        verify(provider).getAppointments(null, null, 100);
+        verify(integrationSyncLogService).iniciar(
+                7L, ExternalProviderType.DARWIN, null, null, null);
+    }
+
+    @Test
+    void should_not_use_history_from_another_clinic_or_provider_for_scheduled_sync() {
+        clinica.setId(8L);
+        clinica.setExternalProvider(ExternalProviderType.MEDWARE);
+        LocalDate dataInicio = LocalDate.of(2026, 7, 20);
+        LocalDate dataFim = LocalDate.of(2026, 10, 18);
+        when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
+        when(provider.getPatients(null, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(null, dataInicio, dataFim, null, 100))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+
+        service.sincronizar(clinica, dataInicio, dataFim, ExternalSyncOrigin.AGENDADA);
+
+        verify(syncLogRepository).findUltimoSucesso(8L, ExternalProviderType.MEDWARE);
+        verify(syncLogRepository, never()).findUltimoSucesso(7L, ExternalProviderType.DARWIN);
+        verify(provider).getPatients(null, null, 100);
+        verify(provider).getAppointments(null, dataInicio, dataFim, null, 100);
     }
 
     @Test
@@ -1087,7 +1178,7 @@ class ExternalSyncServiceTest {
 
         assertEquals("SUCESSO", result.status());
         verify(integrationSyncLogService).iniciar(
-                eq(7L), eq(ExternalProviderType.DARWIN), any(OffsetDateTime.class),
+                eq(7L), eq(ExternalProviderType.DARWIN), isNull(),
                 eq(LocalDate.of(2026, 7, 20)), eq(LocalDate.of(2026, 7, 20)),
                 eq(ExternalSyncOrigin.AGENDADA));
     }

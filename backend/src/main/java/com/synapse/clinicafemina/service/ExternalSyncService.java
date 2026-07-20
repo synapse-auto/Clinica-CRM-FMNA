@@ -49,8 +49,10 @@ public class ExternalSyncService {
             throw new BadRequestException("Clinica ou provider externo nao configurado");
         }
         ExternalProviderType providerType = clinica.getExternalProvider();
-        OffsetDateTime updatedAfter = resolverUpdatedAfter(clinica, providerType, dataInicio);
-        OffsetDateTime updatedAfterRegistrado = dataInicio == null ? updatedAfter : inicioDoDia(dataInicio);
+        OffsetDateTime updatedAfter = resolverUpdatedAfter(clinica, providerType, dataInicio, origem);
+        OffsetDateTime updatedAfterRegistrado = origem == ExternalSyncOrigin.AGENDADA || dataInicio == null
+                ? updatedAfter
+                : inicioDoDia(dataInicio);
         Optional<ExternalSyncLockService.LockHandle> lock = lockService.tryAcquire(clinica.getId(), providerType);
         if (lock.isEmpty()) {
             Long runLogId = iniciarLog(
@@ -117,9 +119,10 @@ public class ExternalSyncService {
     private OffsetDateTime resolverUpdatedAfter(
             Clinica clinica,
             ExternalProviderType providerType,
-            LocalDate dataInicio
+            LocalDate dataInicio,
+            ExternalSyncOrigin origem
     ) {
-        if (dataInicio != null) {
+        if (origem == ExternalSyncOrigin.MANUAL && dataInicio != null) {
             return null;
         }
         return syncLogRepository.findUltimoSucesso(clinica.getId(), providerType)
