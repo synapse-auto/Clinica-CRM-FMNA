@@ -36,6 +36,10 @@ type Props = {
 };
 
 const NEAR_BOTTOM_THRESHOLD = 96;
+// Largura fluida do conteúdo do chat: ocupa toda a área útil e só limita em telas
+// ultrawide (>1600px de coluna) para evitar linhas de leitura exageradas. Usada em
+// mensagens, aviso de janela, seletor rápido e composer para manter alinhamento vertical.
+const CHAT_CONTENT_WIDTH = 'mx-auto w-full max-w-[1600px]';
 
 export function ChatWindow({ detail, messages, quickMessages, busy, error, onSend, onAttach, onSendTemplate }: Props) {
   const [content, setContent] = useState('');
@@ -305,11 +309,11 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
       <div className="relative min-h-0 flex-1">
         <div
           ref={messageScrollContainer}
-          className="h-full overflow-y-auto px-6 py-7 custom-scrollbar"
+          className="h-full overflow-y-auto px-4 py-7 custom-scrollbar sm:px-6 lg:px-8"
           data-testid="message-scroll-container"
           onScroll={handleMessageScroll}
         >
-          <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5">
+          <div className={`${CHAT_CONTENT_WIDTH} flex flex-col gap-5`}>
         {detail && messages.length === 0 ? (
           <p className="text-center text-[11px] text-clinic-muted">
             Ainda não há mensagens nesta conversa.
@@ -336,7 +340,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
         ) : null}
       </div>
 
-      <div className="shrink-0 border-t border-clinic-border bg-clinic-surface px-4 py-4 sm:px-6">
+      <div className="shrink-0 border-t border-clinic-border bg-clinic-surface px-4 py-4 sm:px-6 lg:px-8">
         <input
           ref={fileInput}
           type="file"
@@ -349,7 +353,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
           }}
         />
         {windowOpen && quickOpen && detail ? (
-          <div className="mx-auto mb-3 max-w-[880px] rounded-xl border border-clinic-border bg-clinic-surface p-3 shadow-lg shadow-clinic-primary/5">
+          <div className={`${CHAT_CONTENT_WIDTH} mb-3 rounded-xl border border-clinic-border bg-clinic-surface p-3 shadow-lg shadow-clinic-primary/5`}>
             <label className="relative block">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-clinic-muted" />
               <input
@@ -400,7 +404,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
           </div>
         ) : null}
         {detail && !windowOpen ? (
-          <div className="mx-auto flex w-full max-w-[880px] flex-col items-center rounded-lg border border-clinic-warning/35 bg-clinic-warning/10 px-4 py-5 text-center">
+          <div className={`${CHAT_CONTENT_WIDTH} flex flex-col items-center rounded-lg border border-clinic-warning/35 bg-clinic-warning/10 px-4 py-5 text-center`}>
             <Clock3 className="h-5 w-5 text-clinic-warning" />
             <p className="mt-2 max-w-2xl text-xs font-bold text-clinic-text">
               {detail.aguardandoRespostaTemplate
@@ -421,7 +425,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
             </button>
           </div>
         ) : (
-          <div className="mx-auto w-full max-w-[880px]">
+          <div className={CHAT_CONTENT_WIDTH}>
             {detail ? <WhatsappWindowIndicator expiresAt={detail.janelaWhatsappExpiraEm} /> : null}
             <div className="mt-2 flex items-center gap-2.5">
               <button
@@ -475,7 +479,7 @@ export function ChatWindow({ detail, messages, quickMessages, busy, error, onSen
                 onKeyDown={handleComposerKeyDown}
                 placeholder="Digite uma mensagem..."
                 rows={1}
-                className="min-h-11 max-h-[132px] flex-1 resize-none rounded-xl border border-clinic-border bg-clinic-input px-4 py-3 text-[12px] text-clinic-text outline-none placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10 disabled:opacity-50 custom-scrollbar"
+                className="min-h-11 max-h-[132px] min-w-0 flex-1 resize-none rounded-xl border border-clinic-border bg-clinic-input px-4 py-3 text-[12px] text-clinic-text outline-none placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10 disabled:opacity-50 custom-scrollbar"
               />
               <button
                 type="button"
@@ -555,7 +559,7 @@ function MessageBubble({
   return (
     <div className={`flex flex-col ${outbound ? 'items-end' : 'items-start'}`}>
       <div
-        className={`max-w-[78%] rounded-2xl px-4 py-3 text-[13px] leading-5 shadow-sm ${
+        className={`max-w-[min(88%,760px)] break-words rounded-2xl px-4 py-3 text-[13px] leading-5 shadow-sm ${
           failed
             ? 'rounded-tr-sm border border-clinic-danger/40 bg-clinic-danger/10 text-clinic-text'
             : outbound
@@ -627,7 +631,7 @@ function MediaContent({
           alt={media.nomeArquivo ?? 'Imagem recebida'}
           onLoad={onLayoutChanged}
           onError={() => setError(true)}
-          className="max-h-56 w-auto rounded-lg object-contain"
+          className="max-h-56 w-auto max-w-full rounded-lg object-contain"
         />
       </a>
     );

@@ -1252,4 +1252,133 @@ describe('ChatWindow', () => {
     expect(resizeRemovals).toHaveLength(1);
     expect(resizeRemovals[0]?.[1]).toBe(resizeAdds[0]?.[1]);
   });
+
+  it('should_free_chat_content_from_the_880px_bottleneck', () => {
+    const { container } = render(
+      <ChatWindow
+        detail={detail}
+        messages={[makeMessage(1, 'ENTRADA'), makeMessage(2, 'SAIDA')]}
+        quickMessages={quickMessages}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    // O gargalo fixo de 880px foi removido de todas as áreas do chat.
+    expect(container.querySelectorAll('.max-w-\\[880px\\]')).toHaveLength(0);
+    // A lista de mensagens usa a largura fluida (cap só em ultrawide).
+    const list = screen.getByTestId('message-scroll-container').firstElementChild;
+    expect(list).toHaveClass('mx-auto', 'w-full', 'max-w-[1600px]');
+  });
+
+  it('should_make_the_composer_follow_the_fluid_width', () => {
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    const composer = screen.getByPlaceholderText('Digite uma mensagem...');
+    expect(composer.closest('.max-w-\\[1600px\\]')).not.toBeNull();
+    expect(composer.closest('.max-w-\\[880px\\]')).toBeNull();
+    // min-w-0 permite o textarea encolher sem gerar barra horizontal.
+    expect(composer).toHaveClass('min-w-0', 'flex-1');
+  });
+
+  it('should_make_the_quick_message_selector_follow_the_fluid_width', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[]}
+        quickMessages={quickMessages}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Mensagens rápidas' }));
+    const search = screen.getByLabelText('Buscar mensagens rápidas');
+    expect(search.closest('.max-w-\\[1600px\\]')).not.toBeNull();
+    expect(search.closest('.max-w-\\[880px\\]')).toBeNull();
+  });
+
+  it('should_make_the_closed_window_notice_follow_the_fluid_width', () => {
+    render(
+      <ChatWindow
+        detail={{ ...detail, janelaWhatsappAberta: false }}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    const notice = screen.getByText(/A sessão de 24 horas para atendimento foi encerrada/);
+    expect(notice.closest('.max-w-\\[1600px\\]')).not.toBeNull();
+    expect(notice.closest('.max-w-\\[880px\\]')).toBeNull();
+  });
+
+  it('should_align_incoming_left_outgoing_right_with_an_adaptive_bubble_cap', () => {
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[makeMessage(1, 'ENTRADA'), makeMessage(2, 'SAIDA')]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    // Recebidas à esquerda, enviadas à direita.
+    expect(screen.getByText('Mensagem 1').closest('.flex-col')).toHaveClass('items-start');
+    expect(screen.getByText('Mensagem 2').closest('.flex-col')).toHaveClass('items-end');
+    // Limite adaptativo (percentual + cap de leitura) e quebra segura de palavras/URLs.
+    const bubble = screen.getByText('Mensagem 1').closest('.break-words');
+    expect(bubble).toHaveClass('max-w-[min(88%,760px)]', 'break-words');
+  });
+
+  it('should_prevent_media_from_overflowing_the_bubble', () => {
+    const imageMessage: MensagemAtendimento = {
+      ...makeMessage(9, 'ENTRADA'),
+      tipoMedia: 'IMAGEM',
+      conteudo: '[IMAGEM]',
+      conteudoPrevia: '[IMAGEM]',
+      midia: {
+        tipoMedia: 'IMAGEM',
+        mimeType: 'image/png',
+        nomeArquivo: 'largura.png',
+        tamanhoBytes: 1234,
+        url: '/api/atendimentos/30/mensagens/9/midia',
+      },
+    };
+
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[imageMessage]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'largura.png' })).toHaveClass('max-w-full');
+  });
 });

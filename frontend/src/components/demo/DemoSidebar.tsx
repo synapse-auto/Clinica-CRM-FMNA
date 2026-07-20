@@ -12,8 +12,6 @@ import {
   LogOut,
   MessageSquare,
   Moon,
-  PanelLeftClose,
-  PanelLeftOpen,
   Settings,
   Sun,
   Tag,
@@ -30,7 +28,6 @@ import type { AuthUser } from '@/lib/auth/types';
 import type { ClinicaAtualResponse } from '@/types/dashboard';
 import { getNotificacoesResumo } from '@/services/atendimentos';
 
-const ATTENDIMENTOS_SIDEBAR_STORAGE_KEY = 'clinica-crm-atendimentos-sidebar-expanded';
 const menuIcons = {
   '/atendimentos': MessageSquare,
   '/dashboard': LayoutDashboard,
@@ -55,7 +52,6 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const [atendimentosBadge, setAtendimentosBadge] = useState(0);
-  const [sidebarExpanded, setSidebarExpanded] = useState<boolean | null>(null);
   const compactable = pathname === '/atendimentos' || pathname.startsWith('/atendimentos/');
   const initials = user.nome
     .split(/\s+/)
@@ -85,43 +81,20 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!compactable) return;
-    const stored = window.localStorage.getItem(ATTENDIMENTOS_SIDEBAR_STORAGE_KEY);
-    if (stored === 'true' || stored === 'false') {
-      setSidebarExpanded(stored === 'true');
-      return;
-    }
-    setSidebarExpanded(window.matchMedia?.('(min-width: 1440px)').matches ?? false);
-  }, [compactable]);
-
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.replace('/login');
     router.refresh();
   }
 
-  function toggleSidebar() {
-    const nextExpanded = !(sidebarExpanded ?? window.matchMedia?.('(min-width: 1440px)').matches ?? false);
-    setSidebarExpanded(nextExpanded);
-    window.localStorage.setItem(ATTENDIMENTOS_SIDEBAR_STORAGE_KEY, String(nextExpanded));
-  }
-
-  const railWidthClass = !compactable
-    ? 'w-[256px]'
-    : sidebarExpanded === true
-      ? 'w-[256px]'
-      : sidebarExpanded === false
-        ? 'w-[256px] md:w-16'
-        : 'w-[256px] md:max-[1439px]:w-16';
-  const sidebarWidthClass = !compactable
-    ? 'w-[256px]'
-    : sidebarExpanded === true
-      ? 'w-[256px]'
-      : sidebarExpanded === false
-        ? 'w-[256px] md:w-16 md:hover:w-[256px] md:focus-within:w-[256px]'
-        : 'w-[256px] md:max-[1439px]:w-16 md:max-[1439px]:hover:w-[256px] md:max-[1439px]:focus-within:w-[256px]';
-  const temporaryLabelClass = compactable && sidebarExpanded !== true
+  // Em /atendimentos o trilho fica sempre compacto (64px) no desktop e expande
+  // temporariamente como overlay apenas no hover/focus, sem mover o chat, sem botão
+  // de fixar e sem preferência persistida. No mobile (max-md) volta ao padrão estático.
+  const railWidthClass = compactable ? 'w-[256px] md:w-16' : 'w-[256px]';
+  const sidebarWidthClass = compactable
+    ? 'w-[256px] md:w-16 md:hover:w-[256px] md:focus-within:w-[256px]'
+    : 'w-[256px]';
+  const temporaryLabelClass = compactable
     ? 'opacity-0 transition-opacity group-hover/sidebar:opacity-100 group-focus-within/sidebar:opacity-100 max-md:opacity-100'
     : '';
 
@@ -151,23 +124,9 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
       </div>
 
       <div className={`flex-1 overflow-y-auto py-5 custom-scrollbar ${compactable ? 'px-2' : 'px-4'}`}>
-        {compactable ? (
-          <button
-            type="button"
-            aria-label={sidebarExpanded === true ? 'Recolher barra lateral' : 'Fixar barra lateral expandida'}
-            aria-pressed={sidebarExpanded === true}
-            title={sidebarExpanded === true ? 'Recolher barra lateral' : 'Fixar barra lateral expandida'}
-            onClick={toggleSidebar}
-            className="mb-3 flex h-10 w-full min-w-[240px] items-center gap-3 rounded-xl px-3 text-[13px] font-semibold text-sidebar-foreground transition hover:bg-sidebar-accent/55 hover:text-white focus-visible:outline-2 focus-visible:outline-sidebar-primary"
-          >
-            {sidebarExpanded === true ? <PanelLeftClose className="h-5 w-5 shrink-0" /> : <PanelLeftOpen className="h-5 w-5 shrink-0" />}
-            <span className={temporaryLabelClass}>{sidebarExpanded === true ? 'Recolher navegação' : 'Fixar navegação'}</span>
-          </button>
-        ) : (
-          <p className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/55">
-            Menu
-          </p>
-        )}
+        <p className={`mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/55 ${temporaryLabelClass}`}>
+          Menu
+        </p>
         <nav className="space-y-1">
           {menuItems.map((item) => {
             const Icon = menuIcons[item.href as keyof typeof menuIcons];

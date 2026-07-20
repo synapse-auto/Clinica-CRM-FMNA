@@ -115,29 +115,84 @@ describe('DemoSidebar', () => {
     expect(screen.queryByAltText('UltraMedical')).not.toBeInTheDocument();
   });
 
-  it('should_use_a_fixed_compact_rail_and_allow_pinning_on_atendimentos', async () => {
+  it('should_keep_a_fixed_64px_rail_that_expands_on_hover_focus_without_a_pin_control', () => {
     navigation.pathname = '/atendimentos';
-    const user = userEvent.setup();
     render(
       <DemoSidebar
         clinic={clinic}
-        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false }}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: false }}
       />,
     );
 
     const rail = screen.getByTestId('sidebar-rail');
     const sidebar = screen.getByTestId('main-sidebar');
-    await waitFor(() => expect(rail).toHaveClass('md:w-16'));
-    expect(rail).toHaveClass('w-[256px]');
-    expect(sidebar).toHaveClass('md:hover:w-[256px]', 'md:focus-within:w-[256px]');
-    expect(screen.getByText('Atendimentos')).toHaveClass('opacity-0', 'group-hover/sidebar:opacity-100');
+    // Trilho sempre compacto (64px) no desktop, largura total (256px) no mobile.
+    expect(rail).toHaveClass('w-[256px]', 'md:w-16');
+    // Expansão temporária como overlay por hover/focus, sem mexer no trilho.
+    expect(sidebar).toHaveClass('md:w-16', 'md:hover:w-[256px]', 'md:focus-within:w-[256px]');
+    // Ícones sempre presentes; labels só aparecem no hover/focus (opacity-0 -> 100).
+    expect(screen.getByRole('link', { name: /Atendimentos/ })).toBeInTheDocument();
+    expect(screen.getByText('Atendimentos')).toHaveClass(
+      'opacity-0',
+      'group-hover/sidebar:opacity-100',
+      'group-focus-within/sidebar:opacity-100',
+    );
+    // Sem botão de fixar/recolher.
+    expect(screen.queryByRole('button', { name: /Fixar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Recolher/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /barra lateral/i })).not.toBeInTheDocument();
+  });
 
-    const pin = screen.getByRole('button', { name: 'Fixar barra lateral expandida' });
-    expect(pin).toHaveAttribute('aria-pressed', 'false');
-    await user.click(pin);
+  it('should_not_persist_any_sidebar_preference_in_localStorage', async () => {
+    navigation.pathname = '/atendimentos';
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const user = userEvent.setup();
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: false }}
+      />,
+    );
 
+    await user.hover(screen.getByTestId('main-sidebar'));
+
+    expect(window.localStorage.getItem('clinica-crm-atendimentos-sidebar-expanded')).toBeNull();
+    expect(setItem).not.toHaveBeenCalledWith(
+      'clinica-crm-atendimentos-sidebar-expanded',
+      expect.anything(),
+    );
+    setItem.mockRestore();
+  });
+
+  it('should_render_a_full_256px_sidebar_with_visible_labels_on_other_routes', () => {
+    navigation.pathname = '/dashboard';
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: false }}
+      />,
+    );
+
+    const rail = screen.getByTestId('sidebar-rail');
+    const sidebar = screen.getByTestId('main-sidebar');
     expect(rail).toHaveClass('w-[256px]');
-    expect(screen.getByRole('button', { name: 'Recolher barra lateral' })).toHaveAttribute('aria-pressed', 'true');
-    expect(window.localStorage.getItem('clinica-crm-atendimentos-sidebar-expanded')).toBe('true');
+    expect(rail).not.toHaveClass('md:w-16');
+    expect(sidebar).not.toHaveClass('md:hover:w-[256px]');
+    // Rotas normais mantêm labels sempre visíveis (sem esconder por hover).
+    expect(screen.getByText('Atendimentos')).not.toHaveClass('opacity-0');
+  });
+
+  it('should_not_depend_on_hover_for_the_mobile_layout_on_atendimentos', () => {
+    navigation.pathname = '/atendimentos';
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: false }}
+      />,
+    );
+
+    // No mobile o overlay vira layout estático e os labels ficam sempre visíveis.
+    expect(screen.getByTestId('main-sidebar')).toHaveClass('max-md:static');
+    expect(screen.getByText('Atendimentos')).toHaveClass('max-md:opacity-100');
   });
 });
