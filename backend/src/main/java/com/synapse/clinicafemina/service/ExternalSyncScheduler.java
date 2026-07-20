@@ -4,6 +4,7 @@ import com.synapse.clinicafemina.config.ExternalSyncSchedulerProperties;
 import com.synapse.clinicafemina.domain.Clinica;
 import java.time.Clock;
 import java.time.LocalDate;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,6 +24,7 @@ public class ExternalSyncScheduler {
     private final ExternalSyncService externalSyncService;
     private final Clock clock;
 
+    @Autowired
     public ExternalSyncScheduler(
             ExternalSyncSchedulerProperties properties,
             ClinicaConfigService clinicaConfigService,
