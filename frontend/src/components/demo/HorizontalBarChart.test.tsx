@@ -76,10 +76,13 @@ describe('HorizontalBarChart', () => {
     );
     const fills = screen.getAllByTestId('hbar-fill');
     expect(fills[0]).toHaveStyle({ width: '100%' });
-    // valor 1 sobre max 100 recebe largura mínima visível (>=4%), não some.
-    expect(fills[1]).toHaveStyle({ width: '4%' });
-    // valor zero não desenha barra.
+    // valor 1 sobre max 100 usa a PROPORÇÃO REAL (1%), não um piso inflado de 4%.
+    expect(fills[1]).toHaveStyle({ width: '1%' });
+    // o mínimo visível é aplicado em pixels (não distorce a escala percentual).
+    expect(fills[1]).toHaveStyle({ minWidth: '3px' });
+    // valor zero não desenha barra nem recebe min-width.
     expect(fills[2]).toHaveStyle({ width: '0%' });
+    expect(fills[2].style.minWidth).toBe('');
   });
 
   it('should_keep_each_value_associated_with_the_correct_professional', () => {

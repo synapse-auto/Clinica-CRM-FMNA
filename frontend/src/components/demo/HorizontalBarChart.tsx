@@ -89,7 +89,9 @@ export function HorizontalBarChart({
                 {series.map((item) => {
                   const value = item.values[groupIndex] ?? 0;
                   const ratio = value / maxValue;
-                  const widthPct = value > 0 ? Math.max(MIN_VISIBLE_WIDTH_PCT, ratio * 100) : 0;
+                  // Largura = proporção REAL (não infla a escala). O mínimo visível é aplicado
+                  // como min-width em pixels (só para valores positivos), não como piso percentual.
+                  const widthPct = value > 0 ? ratio * 100 : 0;
                   return (
                     <div
                       key={item.label}
@@ -100,7 +102,11 @@ export function HorizontalBarChart({
                         <div
                           data-testid="hbar-fill"
                           className="h-full rounded-full transition-[width] duration-300"
-                          style={{ width: `${widthPct}%`, backgroundColor: item.color } as CSSProperties}
+                          style={{
+                            width: `${widthPct}%`,
+                            minWidth: value > 0 ? `${MIN_VISIBLE_BAR_PX}px` : undefined,
+                            backgroundColor: item.color,
+                          } as CSSProperties}
                         />
                       </div>
                       <span
