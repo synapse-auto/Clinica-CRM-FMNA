@@ -12,6 +12,8 @@ import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderResolver;
+import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
@@ -49,6 +51,7 @@ public class MensagemService {
     private final WhatsappOutboundClient whatsappOutboundClient;
     private final RabbitTemplate rabbitTemplate;
     private final WhatsappWindowService whatsappWindowService;
+    private final WhatsappProviderResolver whatsappProviderResolver;
 
     @Transactional(readOnly = true)
     public Page<MensagemDTO> listarHistorico(Long atendimentoId, Long clinicaId, Pageable pageable) {
@@ -78,11 +81,10 @@ public class MensagemService {
         atualizarUltimaMensagem(atendimento, mensagem);
 
         try {
-            whatsappOutboundClient.validarConfiguracao();
-            String wamid = whatsappOutboundClient.enviarTexto(
+            WhatsappSendResult resultado = whatsappProviderResolver.resolve().sendText(
                     atendimento.getPaciente().getTelefoneNormalizado(), request.conteudo()
             );
-            mensagem.setWhatsappMessageId(wamid);
+            mensagem.setWhatsappMessageId(resultado.externalMessageId());
             mensagem.setWhatsappStatus("ENVIADA");
         } catch (Exception exception) {
             registrarFalha(mensagem, exception, false);
@@ -130,11 +132,10 @@ public class MensagemService {
         }
 
         try {
-            whatsappOutboundClient.validarConfiguracao();
-            String wamid = whatsappOutboundClient.enviarTexto(
+            WhatsappSendResult resultado = whatsappProviderResolver.resolve().sendText(
                     atendimento.getPaciente().getTelefoneNormalizado(), conteudo
             );
-            mensagem.setWhatsappMessageId(wamid);
+            mensagem.setWhatsappMessageId(resultado.externalMessageId());
             mensagem.setWhatsappStatus("ENVIADA");
         } catch (Exception exception) {
             registrarFalha(mensagem, exception, false);

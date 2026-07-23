@@ -10,6 +10,7 @@ import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappMediaDownloader;
 import com.synapse.clinicafemina.messaging.MensagemEntradaEvent;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
@@ -58,6 +59,7 @@ public class WhatsappInboundMapper {
     private final WhatsappInboundPayloadParser payloadParser;
     private final Environment environment;
     private final WhatsappOutboundClient whatsappOutboundClient;
+    private final List<WhatsappMediaDownloader> mediaDownloaders;
 
     @Value("${WHATSAPP_PHONE_NUMBER_ID:}")
     private String envWhatsappPhoneId;
@@ -70,6 +72,10 @@ public class WhatsappInboundMapper {
 
     @Value("${app.whatsapp.phone-number-id:}")
     private String resolvedPhoneId;
+
+    /** Phone number ID do provider UAZAP (FMNA). Complementa — sem substituir — as variáveis da UltraMedical. */
+    @Value("${app.whatsapp.uazap.phone-number-id:}")
+    private String uazapPhoneId;
  
     @Transactional
     public void processarMensagemTexto(Map<String, Object> value) {
@@ -140,7 +146,7 @@ public class WhatsappInboundMapper {
                 tamanhoTexto(mensagem.getConteudoPrevia()));
  
         if (dados.mediaId() != null) {
-            midiaRepository.save(criarMidia(mensagem, dados));
+            midiaRepository.save(criarMidia(mensagem, dados, resolvida.phoneNumberId()));
         }
  
         atualizarConversa(atendimento, paciente, mensagem);
@@ -189,14 +195,24 @@ public class WhatsappInboundMapper {
         if (clinica.isEmpty()) {
             return List.of();
         }
+        String phoneNumberId = extrairPhoneNumberId(value);
         return mensagens.stream()
                 .map(mensagem -> new EntradaResolvida(
                         clinica.get(),
                         contatoParaMensagem(contatos, mensagem),
                         mensagem,
-                        payloadMetaParaMensagem(value, contatos, mensagem, payloadMetaOriginal)
+                        payloadMetaParaMensagem(value, contatos, mensagem, payloadMetaOriginal),
+                        phoneNumberId
                 ))
                 .toList();
+    }
+
+    private String extrairPhoneNumberId(Map<String, Object> value) {
+        Object metadata = value.get("metadata");
+        if (metadata instanceof Map<?, ?> mapa && mapa.get("phone_number_id") instanceof String id) {
+            return id;
+        }
+        return null;
     }
 
     private byte[] payloadMetaParaMensagem(
@@ -309,7 +325,7 @@ public class WhatsappInboundMapper {
         return mensagem;
     }
  
-    private MidiaMensagem criarMidia(Mensagem mensagem, DadosMensagem dados) {
+    private MidiaMensagem criarMidia(Mensagem mensagem, DadosMensagem dados, String phoneNumberId) {
         MidiaMensagem midia = new MidiaMensagem();
         midia.setMensagem(mensagem);
         midia.setTipoMedia(dados.tipoMedia());
@@ -317,16 +333,16 @@ public class WhatsappInboundMapper {
         midia.setNomeArquivo(dados.nomeArquivo());
         midia.setTamanhoBytes(0L);
         midia.setWhatsappMediaId(dados.mediaId());
-        persistirBinarioRecebido(midia, dados.mediaId());
+        persistirBinarioRecebido(midia, dados.mediaId(), phoneNumberId);
         return midia;
     }
 
-    private void persistirBinarioRecebido(MidiaMensagem midia, String mediaId) {
+    private void persistirBinarioRecebido(MidiaMensagem midia, String mediaId, String phoneNumberId) {
         if (mediaId == null || mediaId.isBlank()) {
             return;
         }
         try {
-            MidiaBaixada baixada = whatsappOutboundClient.baixarMidia(mediaId);
+            MidiaBaixada baixada = resolveMediaDownloader(phoneNumberId).download(mediaId);
             if (baixada == null || baixada.bytes() == null || baixada.bytes().length == 0) {
                 log.warn("Mídia inbound não foi persistida localmente: bytes ausentes. mediaId={}", maskId(mediaId));
                 return;
@@ -341,6 +357,15 @@ public class WhatsappInboundMapper {
             log.warn("Mídia inbound não foi persistida localmente. mediaId={}, tipoErro={}",
                     maskId(mediaId), exception.getClass().getSimpleName());
         }
+    }
+
+    /** Resolve o downloader pelo phone_number_id do payload — sem if/else espalhado pelo chamador. */
+    private WhatsappMediaDownloader resolveMediaDownloader(String phoneNumberId) {
+        return mediaDownloaders.stream()
+                .filter(downloader -> downloader.supports(phoneNumberId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "Nenhum WhatsappMediaDownloader disponível para o phone_number_id informado"));
     }
  
     private void atualizarConversa(Atendimento atendimento, Paciente paciente, Mensagem mensagem) {
@@ -478,7 +503,8 @@ public class WhatsappInboundMapper {
             boolean matchesEnv = phoneNumberId.equals(resolvedPhoneId)
                     || phoneNumberId.equals(envWhatsappPhoneId)
                     || phoneNumberId.equals(envMetaWhatsappPhoneId)
-                    || phoneNumberId.equals(envAppClinicPhoneId);
+                    || phoneNumberId.equals(envAppClinicPhoneId)
+                    || phoneNumberId.equals(uazapPhoneId);
 
             String clinicSlug = environment.getProperty("app.clinic.slug", "ultramedical");
 
@@ -496,10 +522,10 @@ public class WhatsappInboundMapper {
                 }
             } else {
                 log.warn("Payload WhatsApp para phone_number_id {} não configurado. " +
-                         "Não coincide com as envs (resolved={}, env={}, meta={}, appClinic={}). " +
+                         "Não coincide com as envs (resolved={}, env={}, meta={}, appClinic={}, uazap={}). " +
                          "Clínica fallback considerada: '{}'. Motivo: ID recebido não coincide com nenhum ID configurado no ambiente.",
                          maskId(phoneNumberId), maskId(resolvedPhoneId), maskId(envWhatsappPhoneId),
-                         maskId(envMetaWhatsappPhoneId), maskId(envAppClinicPhoneId), clinicSlug);
+                         maskId(envMetaWhatsappPhoneId), maskId(envAppClinicPhoneId), maskId(uazapPhoneId), clinicSlug);
             }
         }
         return clinica;
@@ -668,7 +694,8 @@ public class WhatsappInboundMapper {
             Clinica clinica,
             Map<String, Object> contato,
             Map<String, Object> mensagem,
-            byte[] payloadMetaN8n
+            byte[] payloadMetaN8n,
+            String phoneNumberId
     ) {
     }
  

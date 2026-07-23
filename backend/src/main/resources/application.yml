@@ -66,12 +66,24 @@ app:
 
   whatsapp:
     enabled: ${WHATSAPP_ENABLED:${APP_WHATSAPP_ENABLED:false}}
+    # Provider de WhatsApp ativo (independente de EXTERNAL_PROVIDER/Darwin). META preserva o comportamento atual.
+    provider: ${WHATSAPP_PROVIDER:META}
     verify-token: ${WHATSAPP_VERIFY_TOKEN:${META_WHATSAPP_VERIFY_TOKEN:}}
     app-secret: ${WHATSAPP_APP_SECRET:${META_WHATSAPP_APP_SECRET:}}
     access-token: ${WHATSAPP_ACCESS_TOKEN:${META_WHATSAPP_ACCESS_TOKEN:}}
     phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:${META_WHATSAPP_PHONE_NUMBER_ID:${APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID:}}}
     business-account-id: ${WHATSAPP_BUSINESS_ACCOUNT_ID:}
     graph-api-url: ${WHATSAPP_GRAPH_API_URL:https://graph.facebook.com/v20.0}
+    # Bloco isolado do provider UAZAP. Nunca reaproveita variáveis META_WHATSAPP_*. Vazio enquanto WhatsApp desligado.
+    uazap:
+      base-url: ${UAZAP_BASE_URL:}
+      username: ${UAZAP_USERNAME:}
+      version: ${UAZAP_VERSION:}
+      phone-number-id: ${UAZAP_PHONE_NUMBER_ID:}
+      token: ${UAZAP_TOKEN:}
+      webhook-secret: ${UAZAP_WEBHOOK_SECRET:}
+      connect-timeout-ms: ${UAZAP_CONNECT_TIMEOUT_MS:5000}
+      read-timeout-ms: ${UAZAP_READ_TIMEOUT_MS:15000}
 
   darwin:
     api-url: ${DARWIN_API_URL:}

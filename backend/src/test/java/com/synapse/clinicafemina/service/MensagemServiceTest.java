@@ -10,6 +10,9 @@ import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderResolver;
+import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
+import com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappProvider;
 import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
@@ -70,6 +73,12 @@ class MensagemServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Resolver real com MetaWhatsappProvider real, encapsulando o mesmo mock whatsappOutboundClient:
+        // prova que, com provider=META (default), o envio continua chegando ao client Meta existente.
+        WhatsappProviderResolver whatsappProviderResolver = new WhatsappProviderResolver(
+                java.util.List.of(new MetaWhatsappProvider(whatsappOutboundClient)),
+                new WhatsappProperties()
+        );
         service = new MensagemService(
                 mensagemRepository,
                 midiaMensagemRepository,
@@ -77,7 +86,8 @@ class MensagemServiceTest {
                 usuarioRepository,
                 whatsappOutboundClient,
                 rabbitTemplate,
-                whatsappWindowService
+                whatsappWindowService,
+                whatsappProviderResolver
         );
 
         Clinica clinica = new Clinica();

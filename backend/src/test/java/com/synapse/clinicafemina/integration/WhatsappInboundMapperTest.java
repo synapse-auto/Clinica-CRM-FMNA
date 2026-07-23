@@ -102,7 +102,9 @@ class WhatsappInboundMapperTest {
                 new ObjectMapper(),
                 new WhatsappInboundPayloadParser(),
                 environment,
-                whatsappOutboundClient
+                whatsappOutboundClient,
+                List.of(new com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappMediaDownloader(
+                        whatsappOutboundClient, new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties()))
         );
 
         clinica = new Clinica();

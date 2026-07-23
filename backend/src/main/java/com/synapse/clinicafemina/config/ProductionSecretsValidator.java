@@ -2,6 +2,8 @@ package com.synapse.clinicafemina.config;
 
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
+import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -17,10 +19,14 @@ public class ProductionSecretsValidator implements ApplicationRunner {
 
     private final Environment environment;
     private final ClinicaRepository clinicaRepository;
+    private final WhatsappProperties whatsappProperties;
 
-    public ProductionSecretsValidator(Environment environment, ClinicaRepository clinicaRepository) {
+    public ProductionSecretsValidator(Environment environment,
+                                      ClinicaRepository clinicaRepository,
+                                      WhatsappProperties whatsappProperties) {
         this.environment = environment;
         this.clinicaRepository = clinicaRepository;
+        this.whatsappProperties = whatsappProperties;
     }
 
     @Override
@@ -39,13 +45,26 @@ public class ProductionSecretsValidator implements ApplicationRunner {
                 "app.crypto.master-key"
         ));
 
-        if (environment.getProperty("app.whatsapp.enabled", Boolean.class, false)) {
-            required.addAll(List.of(
-                    "app.whatsapp.verify-token",
-                    "app.whatsapp.app-secret",
-                    "app.whatsapp.access-token",
-                    "app.whatsapp.phone-number-id"
-            ));
+        if (whatsappProperties.isEnabled()) {
+            // resolveProvider() lança IllegalStateException com mensagem clara se WHATSAPP_PROVIDER for inválido.
+            WhatsappProviderType whatsappProvider = whatsappProperties.resolveProvider();
+            if (whatsappProvider == WhatsappProviderType.META) {
+                required.addAll(List.of(
+                        "app.whatsapp.verify-token",
+                        "app.whatsapp.app-secret",
+                        "app.whatsapp.access-token",
+                        "app.whatsapp.phone-number-id"
+                ));
+            } else if (whatsappProvider == WhatsappProviderType.UAZAP) {
+                // webhook-secret é opcional (o painel UAZAP ainda não confirmou suporte a segredo na URL).
+                required.addAll(List.of(
+                        "app.whatsapp.uazap.base-url",
+                        "app.whatsapp.uazap.username",
+                        "app.whatsapp.uazap.version",
+                        "app.whatsapp.uazap.phone-number-id",
+                        "app.whatsapp.uazap.token"
+                ));
+            }
         }
 
         String clinicSlug = environment.getProperty("app.clinic.slug");
