@@ -1073,6 +1073,123 @@ class WhatsappInboundMapperTest {
         verify(pacienteRepository, never()).save(any());
     }
 
+    @Test
+    void should_normalize_null_profile_name_to_placeholder_not_literal_null_string() {
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.save(any(Paciente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(atendimentoRepository.findAtivo(2L, null)).thenReturn(Optional.empty());
+        when(atendimentoRepository.existeEncerradoDesde(any(), any(), any())).thenReturn(false);
+        when(atendimentoRepository.save(any(Atendimento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // profile presente, mas profile.name é null — reproduz o bug de String.valueOf(null) == "null".
+        Map<String, Object> profileComNomeNulo = new java.util.HashMap<>();
+        profileComNomeNulo.put("name", null);
+        mapper.processarMensagemTexto(Map.of(
+                "metadata", Map.of("phone_number_id", "phone-ultra"),
+                "contacts", List.of(Map.of(
+                        "wa_id", "5511999990000",
+                        "profile", profileComNomeNulo
+                )),
+                "messages", List.of(Map.of(
+                        "id", "wamid-1",
+                        "timestamp", "1781455200",
+                        "text", Map.of("body", "Olá")
+                ))
+        ));
+
+        ArgumentCaptor<Paciente> pacienteCaptor = ArgumentCaptor.forClass(Paciente.class);
+        verify(pacienteRepository, atLeastOnce()).save(pacienteCaptor.capture());
+        Paciente salvo = pacienteCaptor.getAllValues().getFirst();
+        assertEquals("Contato WhatsApp", salvo.getNome());
+        assertEquals("CONTATO WHATSAPP", salvo.getNomeBusca());
+    }
+
+    @Test
+    void should_update_placeholder_patient_name_when_valid_name_arrives_in_new_message() {
+        Paciente existente = new Paciente();
+        existente.setId(21L);
+        existente.setClinica(clinica);
+        existente.setNome("Contato WhatsApp");
+        existente.setNomeBusca("CONTATO WHATSAPP");
+        existente.setTelefoneNormalizado("5511999990000");
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(existente));
+        when(atendimentoRepository.findAtivo(2L, 21L)).thenReturn(Optional.empty());
+        when(atendimentoRepository.existeEncerradoDesde(any(), any(), any())).thenReturn(false);
+        when(atendimentoRepository.save(any(Atendimento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(validValuePayload("phone-ultra")); // profile.name = "Paciente Teste"
+
+        assertEquals("Paciente Teste", existente.getNome());
+        assertEquals("PACIENTE TESTE", existente.getNomeBusca());
+    }
+
+    @Test
+    void should_not_overwrite_legitimate_existing_patient_name() {
+        Paciente existente = new Paciente();
+        existente.setId(22L);
+        existente.setClinica(clinica);
+        existente.setNome("Ana Souza");
+        existente.setNomeBusca("ANA SOUZA");
+        existente.setTelefoneNormalizado("5511999990000");
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(existente));
+        when(atendimentoRepository.findAtivo(2L, 22L)).thenReturn(Optional.empty());
+        when(atendimentoRepository.existeEncerradoDesde(any(), any(), any())).thenReturn(false);
+        when(atendimentoRepository.save(any(Atendimento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // profile.name do payload ("Paciente Teste") é diferente do nome legítimo já cadastrado.
+        mapper.processarMensagemTexto(validValuePayload("phone-ultra"));
+
+        assertEquals("Ana Souza", existente.getNome());
+        assertEquals("ANA SOUZA", existente.getNomeBusca());
+    }
+
+    @Test
+    void should_process_uazap_documented_webhook_shape_and_extract_profile_name_and_photo() {
+        when(clinicaRepository.findByWhatsappPhoneNumberId("uazap-fmna")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "UZ-100")).thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "554391241788"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.save(any(Paciente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(atendimentoRepository.findAtivo(2L, null)).thenReturn(Optional.empty());
+        when(atendimentoRepository.existeEncerradoDesde(any(), any(), any())).thenReturn(false);
+        when(atendimentoRepository.save(any(Atendimento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Formato CONFIRMADO no OpenAPI oficial da UAZAP (/webhook/message/text): contacts[].profile.name + wa_id.
+        mapper.processarMensagemTexto(Map.of(
+                "metadata", Map.of("phone_number_id", "uazap-fmna"),
+                "contacts", List.of(Map.of(
+                        "wa_id", "554391241788",
+                        "profile", Map.of("name", "Ayumi Soluções Em Tecnologia")
+                )),
+                "messages", List.of(Map.of(
+                        "id", "UZ-100",
+                        "timestamp", "1781455200",
+                        "text", Map.of("body", "Olá FMNA")
+                ))
+        ));
+
+        ArgumentCaptor<Paciente> pacienteCaptor = ArgumentCaptor.forClass(Paciente.class);
+        verify(pacienteRepository, atLeastOnce()).save(pacienteCaptor.capture());
+        Paciente salvo = pacienteCaptor.getAllValues().getFirst();
+        assertEquals("Ayumi Soluções Em Tecnologia", salvo.getNome());
+        assertEquals("AYUMI SOLUÇÕES EM TECNOLOGIA", salvo.getNomeBusca());
+    }
+
     private Map<String, Object> validValuePayload(String phoneNumberId) {
         return Map.of(
                 "metadata", Map.of("phone_number_id", phoneNumberId),

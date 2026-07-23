@@ -35,15 +35,36 @@ export function ContactAvatar({ name, url, variant = 'list' }: Props) {
   );
 }
 
+// Placeholders conhecidos: sem nome real cadastrado (ver WhatsappInboundMapper no backend).
+const NOME_PLACEHOLDER = new Set(['contato whatsapp', 'null']);
+// Só dígitos e pontuação comum de telefone (sem nenhuma letra) — não é um nome real.
+const TELEFONE_REGEX = /^[+\d\s().-]+$/;
+
+/**
+ * Gera as iniciais exibidas no avatar. Nunca retorna string vazia: quando não há nome real
+ * (placeholder, telefone puro, vazio/nulo), cai em "WA".
+ */
 function initials(name: string) {
-  return name
-    .normalize('NFKD')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => Array.from(part)[0]?.toUpperCase())
-    .join('');
+  const cleaned = name.normalize('NFKD').trim();
+  if (!cleaned || NOME_PLACEHOLDER.has(cleaned.toLowerCase()) || TELEFONE_REGEX.test(cleaned)) {
+    return 'WA';
+  }
+
+  const palavras = cleaned.split(/\s+/).filter(Boolean);
+  if (palavras.length >= 2) {
+    const duasIniciais = palavras
+      .slice(0, 2)
+      .map((palavra) => Array.from(palavra)[0]?.toUpperCase() ?? '')
+      .join('');
+    return duasIniciais || 'WA';
+  }
+
+  // Nome de uma única palavra: usa até as duas primeiras letras (não apenas a primeira).
+  const letras = Array.from(palavras[0] ?? '').filter((caractere) => /\p{L}/u.test(caractere));
+  if (letras.length === 0) {
+    return 'WA';
+  }
+  return letras.slice(0, 2).join('').toUpperCase();
 }
 
 function validHttpsUrl(value?: string | null) {

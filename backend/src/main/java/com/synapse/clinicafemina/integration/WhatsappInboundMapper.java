@@ -45,6 +45,7 @@ import com.synapse.clinicafemina.integration.WhatsappInboundPayloadParser.DadosM
 public class WhatsappInboundMapper {
  
     private static final long SESSAO_TIMEOUT_HORAS = 24;
+    private static final String NOME_PLACEHOLDER = "Contato WhatsApp";
  
     private final PacienteRepository pacienteRepository;
     private final AtendimentoRepository atendimentoRepository;
@@ -118,6 +119,7 @@ public class WhatsappInboundMapper {
  
         String telefone = payloadParser.normalizarTelefone(String.valueOf(contato.get("wa_id")));
         log.info("Processando mensagem inbound. Remetente: {}, clinicaId={}", maskPhone(telefone), clinica.getId());
+        logDiagnosticoContatoSanitizado(contato);
  
         PacienteResolvido pacienteResolvido = resolverOuCriarPaciente(clinica, telefone, contato);
         Paciente paciente = pacienteResolvido.paciente();
@@ -541,7 +543,7 @@ public class WhatsappInboundMapper {
         );
         if (existente.isPresent()) {
             Paciente paciente = existente.get();
-            atualizarFotoDoContato(paciente, contato);
+            atualizarPerfilDoContato(paciente, contato, telefone);
             return new PacienteResolvido(paciente, false);
         }
         return new PacienteResolvido(
@@ -552,7 +554,7 @@ public class WhatsappInboundMapper {
 
     private Paciente criarPaciente(Clinica clinica, String telefone, Map<String, Object> contato) {
         Map<String, Object> perfil = perfilDoContato(contato);
-        String nome = perfil == null ? "Contato WhatsApp" : String.valueOf(perfil.get("name"));
+        String nome = nomeValido(perfil == null ? null : perfil.get("name")).orElse(NOME_PLACEHOLDER);
 
         Paciente paciente = new Paciente();
         paciente.setClinica(clinica);
@@ -567,15 +569,90 @@ public class WhatsappInboundMapper {
         return paciente;
     }
 
-    private void atualizarFotoDoContato(Paciente paciente, Map<String, Object> contato) {
-        if (paciente.getFotoUrl() != null && !paciente.getFotoUrl().isBlank()) {
-            return;
+    /**
+     * Atualiza foto e/ou nome de um paciente já cadastrado a partir de um novo contato recebido.
+     * A foto só é preenchida se ainda não existir. O nome só é atualizado quando o valor atual é
+     * um placeholder comprovado (vazio, "Contato WhatsApp", "null" ou o próprio telefone) — nunca
+     * sobrescreve um nome legítimo já cadastrado no CRM.
+     */
+    private void atualizarPerfilDoContato(Paciente paciente, Map<String, Object> contato, String telefone) {
+        Map<String, Object> perfil = perfilDoContato(contato);
+        boolean alterado = false;
+
+        if (paciente.getFotoUrl() == null || paciente.getFotoUrl().isBlank()) {
+            String fotoUrl = fotoUrlDoPerfil(perfil);
+            if (fotoUrl != null) {
+                paciente.setFotoUrl(fotoUrl);
+                alterado = true;
+            }
         }
-        String fotoUrl = fotoUrlDoPerfil(perfilDoContato(contato));
-        if (fotoUrl != null) {
-            paciente.setFotoUrl(fotoUrl);
+
+        Optional<String> nomeRecebido = nomeValido(perfil == null ? null : perfil.get("name"));
+        if (nomeRecebido.isPresent() && ehNomePlaceholder(paciente.getNome(), telefone)) {
+            paciente.setNome(nomeRecebido.get());
+            paciente.setNomeBusca(nomeRecebido.get().toUpperCase());
+            alterado = true;
+        }
+
+        if (alterado) {
             pacienteRepository.save(paciente);
         }
+    }
+
+    /**
+     * Normaliza um valor bruto de nome vindo do payload: {@code null}, string vazia/em branco e a
+     * string literal {@code "null"} (produzida por {@code String.valueOf(null)} quando
+     * {@code profile} existe mas {@code profile.name} está ausente) são tratados como ausentes.
+     */
+    private Optional<String> nomeValido(Object valorBruto) {
+        if (valorBruto == null) {
+            return Optional.empty();
+        }
+        String valor = String.valueOf(valorBruto).trim();
+        if (valor.isEmpty() || "null".equalsIgnoreCase(valor)) {
+            return Optional.empty();
+        }
+        return Optional.of(valor);
+    }
+
+    /** Placeholders comprovados: nome vazio, o texto padrão, "null" literal ou o próprio telefone. */
+    private boolean ehNomePlaceholder(String nomeAtual, String telefone) {
+        if (nomeAtual == null || nomeAtual.isBlank()) {
+            return true;
+        }
+        String normalizado = nomeAtual.trim();
+        if (NOME_PLACEHOLDER.equalsIgnoreCase(normalizado) || "null".equalsIgnoreCase(normalizado)) {
+            return true;
+        }
+        return normalizado.equals(telefone) || normalizado.equals("+" + telefone);
+    }
+
+    /**
+     * Diagnóstico TEMPORÁRIO e sanitizado do contato inbound (Meta e UAZAP): registra apenas as
+     * CHAVES existentes e presença booleana de campos de foto — nunca nome, telefone, URL ou
+     * qualquer valor pessoal. Serve para confirmar, na próxima mensagem real, quais chaves a UAZAP
+     * efetivamente envia em {@code contacts[]}/{@code contacts[].profile}.
+     */
+    private void logDiagnosticoContatoSanitizado(Map<String, Object> contato) {
+        if (!log.isDebugEnabled()) {
+            return;
+        }
+        if (contato == null) {
+            log.debug("Diagnóstico contato inbound: contato ausente.");
+            return;
+        }
+        Map<String, Object> perfil = perfilDoContato(contato);
+        log.debug(
+                "Diagnóstico sanitizado de contato inbound: contactKeys={}, profileKeys={}, "
+                        + "hasName={}, hasPicture={}, hasAvatar={}, hasPhoto={}, hasProfilePicture={}",
+                contato.keySet(),
+                perfil == null ? java.util.Set.of() : perfil.keySet(),
+                perfil != null && perfil.get("name") != null,
+                perfil != null && perfil.get("picture") != null,
+                perfil != null && perfil.get("avatar") != null,
+                perfil != null && perfil.get("photo") != null,
+                perfil != null && perfil.get("profilePicture") != null
+        );
     }
 
     private Map<String, Object> perfilDoContato(Map<String, Object> contato) {
