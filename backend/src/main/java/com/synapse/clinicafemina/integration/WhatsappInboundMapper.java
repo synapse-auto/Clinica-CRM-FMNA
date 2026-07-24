@@ -22,14 +22,18 @@ import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.service.AtendimentoNotificationService;
 import com.synapse.clinicafemina.service.HorarioIaService;
+import com.synapse.clinicafemina.service.N8nEventPayload;
 import com.synapse.clinicafemina.service.N8nEventService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
  
 import java.time.Instant;
@@ -68,6 +72,19 @@ public class WhatsappInboundMapper {
     private final ApplicationEventPublisher eventPublisher;
     private final WhatsappProperties whatsappProperties;
 
+    /**
+     * Auto-referência para que {@link #processarEntradaIsolada} passe pelo proxy transacional do
+     * Spring (uma transação por mensagem). Injetada por setter com {@link Lazy} para evitar
+     * dependência circular; nos testes unitários (sem contexto Spring) permanece {@code this},
+     * caso em que {@link Transactional} é inofensivamente ignorado.
+     */
+    private WhatsappInboundMapper self = this;
+
+    @Autowired
+    void setSelf(@Lazy WhatsappInboundMapper self) {
+        this.self = self;
+    }
+
     @Value("${WHATSAPP_PHONE_NUMBER_ID:}")
     private String envWhatsappPhoneId;
 
@@ -84,14 +101,38 @@ public class WhatsappInboundMapper {
     @Value("${app.whatsapp.uazap.phone-number-id:}")
     private String uazapPhoneId;
  
-    @Transactional
     public void processarMensagemTexto(Map<String, Object> value) {
         processarMensagemTexto(value, null);
     }
 
-    @Transactional
+    /**
+     * Orquestra o lote — NÃO é transacional. Cada mensagem é processada em sua própria transação
+     * ({@link #processarEntradaIsolada}), de modo que uma mensagem malformada (ex.: timestamp
+     * inválido) que provoque rollback nunca descarte as mensagens vizinhas válidas do mesmo
+     * webhook. Um webhook com três mensagens gera três transações independentes.
+     */
     public void processarMensagemTexto(Map<String, Object> value, byte[] payloadMetaOriginal) {
-        resolverEntradas(value, payloadMetaOriginal).forEach(this::processarEntrada);
+        for (EntradaResolvida resolvida : resolverEntradas(value, payloadMetaOriginal)) {
+            try {
+                self.processarEntradaIsolada(resolvida);
+            } catch (Exception exception) {
+                log.error(
+                        "Mensagem inbound descartada por falha isolada (lote preservado): clinicaId={}, whatsappMessageId={}, tipoErro={}",
+                        resolvida.clinica() == null ? null : resolvida.clinica().getId(),
+                        maskId(normalizarMessageId(resolvida.mensagem())),
+                        exception.getClass().getSimpleName());
+            }
+        }
+    }
+
+    /**
+     * Processa UMA mensagem em transação própria ({@link Propagation#REQUIRES_NEW}). Executado via
+     * {@link #self} para que o proxy transacional do Spring seja aplicado. Nos testes unitários
+     * (sem proxy) comporta-se como chamada direta.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void processarEntradaIsolada(EntradaResolvida resolvida) {
+        processarEntrada(resolvida);
     }
 
     private void processarEntrada(EntradaResolvida resolvida) {
@@ -141,7 +182,7 @@ public class WhatsappInboundMapper {
                 atendimento, payloadMensagem, whatsappMessageId, dados
         ));
         log.info(
-                "Mensagem inbound nova persistida: mensagemId={}, atendimentoId={}, pacienteId={}, tipoMedia={}, whatsappMessageId={}, atendimentoOrigem={}, atendimentoModo={}, iaAtiva={}, textoRecebidoChars={}, textoPersistidoChars={}, previaChars={}",
+                "Mensagem inbound nova persistida: mensagemId={}, atendimentoId={}, pacienteId={}, tipoMedia={}, whatsappMessageId={}, atendimentoOrigem={}, atendimentoModo={}, iaAtiva={}, textoRecebidoChars={}, textoPersistidoChars={}, previaChars={}, conteudoCodePoints={}, previaCodePoints={}",
                 mensagem.getId(),
                 atendimento.getId(),
                 paciente.getId(),
@@ -152,15 +193,21 @@ public class WhatsappInboundMapper {
                 iaAtiva(atendimento),
                 tamanhoTexto(dados.conteudo()),
                 tamanhoTexto(mensagem.getConteudo()),
-                tamanhoTexto(mensagem.getConteudoPrevia()));
+                tamanhoTexto(mensagem.getConteudoPrevia()),
+                contarCodePoints(mensagem.getConteudo()),
+                contarCodePoints(mensagem.getConteudoPrevia()));
  
         if (dados.mediaId() != null) {
             midiaRepository.save(criarMidia(mensagem, dados, resolvida.phoneNumberId()));
         }
  
         atualizarConversa(atendimento, paciente, mensagem);
-        emitirEventos(clinica, pacienteResolvido, atendimento, paciente, mensagem, resolvida.payloadMetaN8n());
+        // Notificação (escrita no banco) ANTES do N8N: assim todas as escritas de banco desta
+        // mensagem se completam primeiro; se algo falhar, o rollback ocorre antes de qualquer
+        // chamada externa. O N8N é o último passo — puro efeito colateral, com erros já contidos
+        // dentro do N8nEventService (nunca provoca rollback da mensagem persistida).
         notificationService.notificarNovaMensagem(atendimento, mensagem);
+        emitirEventos(clinica, pacienteResolvido, atendimento, paciente, mensagem, resolvida.payloadMetaN8n());
         log.info("Mensagem inbound processada com sucesso: atendimento={}", atendimento.getId());
     }
  
@@ -437,6 +484,13 @@ public class WhatsappInboundMapper {
         ));
     }
 
+    /**
+     * Decide (antes do commit) se a mensagem é elegível para o N8N e monta o contexto — mas
+     * NUNCA chama o N8N diretamente. A chamada HTTP real só acontece em
+     * {@link N8nMensagemRecebidaEventListener}, depois que esta transação (por mensagem,
+     * {@code REQUIRES_NEW}) tiver sido efetivamente commitada — ver {@link #publicarEventoN8n}.
+     * Bloqueio por modo humano permanece decidido aqui: nenhum evento é publicado nesse caso.
+     */
     private void emitirN8nMensagemRecebida(
             Clinica clinica,
             Paciente paciente,
@@ -460,31 +514,50 @@ public class WhatsappInboundMapper {
         }
         HorarioIaService.HorarioIaStatus horario = horarioIaService.avaliar(clinica);
         if (payloadMetaOriginal != null && payloadMetaOriginal.length > 0) {
-            n8nEventService.enviarPayloadMetaOriginal(
-                    clinica,
-                    payloadMetaOriginal,
-                    new N8nEventService.MetaWebhookContext(
-                            "mensagem_recebida",
-                            atendimento.getId(),
-                            paciente.getId(),
-                            mensagem.getId(),
-                            mensagem.getTipoMedia(),
-                            mensagem.getWhatsappMessageId(),
-                            origemAtendimento(atendimento),
-                            modoAtendimento(atendimento),
-                            true,
-                            horario.dentroHorario(),
-                            horario.motivo()
-                    )
+            N8nEventService.MetaWebhookContext contexto = new N8nEventService.MetaWebhookContext(
+                    "mensagem_recebida",
+                    atendimento.getId(),
+                    paciente.getId(),
+                    mensagem.getId(),
+                    mensagem.getTipoMedia(),
+                    mensagem.getWhatsappMessageId(),
+                    origemAtendimento(atendimento),
+                    modoAtendimento(atendimento),
+                    true,
+                    horario.dentroHorario(),
+                    horario.motivo()
             );
+            publicarEventoN8n(clinica, payloadMetaOriginal, contexto, null);
             return;
         }
-        n8nEventService.emitir(n8nEventService.criarPayloadMensagemRecebida(
-                clinica,
-                paciente,
-                atendimento,
-                mensagem
-        ));
+        N8nEventPayload payloadFallback = n8nEventService.criarPayloadMensagemRecebida(
+                clinica, paciente, atendimento, mensagem);
+        publicarEventoN8n(clinica, null, null, payloadFallback);
+    }
+
+    /**
+     * Publica o evento que dispara a chamada N8N — NUNCA a chamada HTTP em si. A chamada real
+     * acontece somente em {@link N8nMensagemRecebidaEventListener}
+     * ({@code @TransactionalEventListener(phase = AFTER_COMMIT)}), ou seja, depois que esta
+     * transação por mensagem tiver sido efetivamente commitada no PostgreSQL. Um rollback desta
+     * transação (ex.: falha após o save) faz o evento nunca chegar ao listener — garantia nativa
+     * do Spring, não um try/catch nosso. Só valores já resolvidos (nunca proxies JPA lazy) são
+     * embutidos no evento.
+     */
+    private void publicarEventoN8n(
+            Clinica clinica,
+            byte[] payloadMetaOriginal,
+            N8nEventService.MetaWebhookContext contexto,
+            N8nEventPayload payloadFallback
+    ) {
+        eventPublisher.publishEvent(new N8nMensagemRecebidaEvent(
+                clinica.getId(),
+                clinica.getSlug(),
+                clinica.getUsaN8n(),
+                clinica.getN8nWebhookUrl(),
+                payloadMetaOriginal,
+                contexto,
+                payloadFallback));
     }
  
     /**
@@ -743,11 +816,22 @@ public class WhatsappInboundMapper {
         return atendimentoRepository.save(atendimento);
     }
  
+    /**
+     * Converte o timestamp epoch-seconds do payload para UTC. Defensivo: se o valor estiver
+     * ausente ou não for numérico (ex.: variação de formato entre provedores), NÃO lança —
+     * registra diagnóstico sanitizado e usa o instante atual, para nunca perder a mensagem por
+     * causa de um timestamp malformado.
+     */
     private OffsetDateTime parseTimestamp(String timestamp) {
-        return OffsetDateTime.ofInstant(
-                Instant.ofEpochSecond(Long.parseLong(timestamp)),
-                ZoneOffset.UTC
-            );
+        try {
+            return OffsetDateTime.ofInstant(
+                    Instant.ofEpochSecond(Long.parseLong(timestamp.trim())),
+                    ZoneOffset.UTC);
+        } catch (NumberFormatException | NullPointerException exception) {
+            log.warn("Timestamp inbound ausente/invalido; usando horario atual. tipoErro={}",
+                    exception.getClass().getSimpleName());
+            return OffsetDateTime.now(ZoneOffset.UTC);
+        }
     }
  
     private String maskPhone(String phone) {
@@ -787,8 +871,18 @@ public class WhatsappInboundMapper {
     private int tamanhoTexto(String texto) {
         return texto == null ? 0 : texto.length();
     }
+
+    /** Contagem por code points (observabilidade Unicode-safe da prévia/conteúdo). */
+    private int contarCodePoints(String texto) {
+        return texto == null ? 0 : texto.codePointCount(0, texto.length());
+    }
  
-    private record EntradaResolvida(
+    /**
+     * Package-private (não {@code private}) porque é o tipo de parâmetro de
+     * {@link #processarEntradaIsolada}, método público proxiado pelo Spring/CGLIB — a subclasse
+     * gerada, no mesmo pacote, precisa enxergar este tipo.
+     */
+    record EntradaResolvida(
             Clinica clinica,
             Map<String, Object> contato,
             Map<String, Object> mensagem,

@@ -84,6 +84,7 @@ class UazapInboundPipelineIntegrationTest {
     @Mock private Environment environment;
     @Mock private WhatsappOutboundClient whatsappOutboundClient;
     @Mock private RealtimeBroadcastService broadcastService;
+    @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private WhatsappInboundMapper mapper;
     private WhatsappInboundListener listener;
@@ -103,11 +104,21 @@ class UazapInboundPipelineIntegrationTest {
                                 whatsappOutboundClient, whatsappProperties),
                         new com.synapse.clinicafemina.integration.whatsapp.uazap.UazapWhatsappMediaDownloader(
                                 whatsappProperties)),
-                org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class),
+                eventPublisher,
                 whatsappProperties);
         listener = new WhatsappInboundListener(mapper, new ObjectMapper(), broadcastService);
         lenient().when(horarioIaService.avaliar(any(Clinica.class)))
                 .thenReturn(new HorarioIaService.HorarioIaStatus(true, HorarioIaService.DENTRO_HORARIO));
+    }
+
+    /**
+     * A chamada N8N agora só acontece em {@code N8nMensagemRecebidaEventListener} (AFTER_COMMIT)
+     * — sem contexto Spring aqui, verificamos o evento publicado em vez da chamada HTTP direta.
+     */
+    private N8nMensagemRecebidaEvent capturarUnicoEventoN8n() {
+        ArgumentCaptor<N8nMensagemRecebidaEvent> captor = ArgumentCaptor.forClass(N8nMensagemRecebidaEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        return captor.getValue();
     }
 
     private Clinica clinicaFmna() {
@@ -174,12 +185,9 @@ class UazapInboundPipelineIntegrationTest {
         verify(notificationService).notificarNovaMensagem(eq(atendimento), any());
 
         // N8N recebe o payload WhatsApp unitário (padrão UltraMedical), não um DTO interno.
-        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
-        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
-                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
-        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
+        N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
 
-        JsonNode n8nBody = new ObjectMapper().readTree(payloadCaptor.getValue());
+        JsonNode n8nBody = new ObjectMapper().readTree(evento.payloadMetaOriginal());
         assertEquals("whatsapp_business_account", n8nBody.path("object").asText());
         assertEquals("messages", n8nBody.at("/entry/0/changes/0/field").asText());
         JsonNode value = n8nBody.at("/entry/0/changes/0/value");
@@ -195,8 +203,8 @@ class UazapInboundPipelineIntegrationTest {
         assertFalse(n8nBody.has("pacienteId"));
         assertFalse(n8nBody.has("atendimentoId"));
         // Dados internos seguem no contexto (headers X-CRM-*), não no body:
-        assertEquals("UZ-100", contextCaptor.getValue().whatsappMessageId());
-        assertEquals(40L, contextCaptor.getValue().mensagemId());
+        assertEquals("UZ-100", evento.contexto().whatsappMessageId());
+        assertEquals(40L, evento.contexto().mensagemId());
     }
 
     @Test
@@ -231,7 +239,7 @@ class UazapInboundPipelineIntegrationTest {
         listener.processarMensagem(raw);
 
         verify(mensagemRepository, times(1)).save(any(Mensagem.class));
-        verify(n8nEventService, times(1)).enviarPayloadMetaOriginal(eq(clinica), any(), any());
+        verify(eventPublisher, times(1)).publishEvent(any(N8nMensagemRecebidaEvent.class));
     }
 
     @Test
@@ -245,7 +253,7 @@ class UazapInboundPipelineIntegrationTest {
         listener.processarMensagem(UAZAP_RAW.getBytes(StandardCharsets.UTF_8));
 
         verify(mensagemRepository).save(any(Mensagem.class));
-        verify(n8nEventService, never()).enviarPayloadMetaOriginal(any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(N8nMensagemRecebidaEvent.class));
         verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
     }
 
@@ -319,7 +327,7 @@ class UazapInboundPipelineIntegrationTest {
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
         verify(mensagemRepository).save(mensagemCaptor.capture());
         assertEquals("wamid-meta-1", mensagemCaptor.getValue().getWhatsappMessageId());
-        verify(n8nEventService).enviarPayloadMetaOriginal(eq(ultra), any(), any());
+        capturarUnicoEventoN8n();
     }
 
     @Test
@@ -374,7 +382,7 @@ class UazapInboundPipelineIntegrationTest {
         // Meta nunca é chamado para mídia UAZAP.
         verifyNoInteractions(whatsappOutboundClient);
         // Payload ainda é entregue ao N8N (IA ativa).
-        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), any(), any());
+        capturarUnicoEventoN8n();
         verify(notificationService).notificarNovaMensagem(eq(atendimento), any());
     }
 }

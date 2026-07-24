@@ -36,6 +36,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -118,6 +119,27 @@ class WhatsappInboundMapperTest {
         clinica.setWhatsappPhoneNumberId("phone-ultra");
         lenient().when(horarioIaService.avaliar(any(Clinica.class)))
                 .thenReturn(new HorarioIaService.HorarioIaStatus(true, HorarioIaService.DENTRO_HORARIO));
+    }
+
+    /**
+     * A chamada N8N agora só acontece em {@code N8nMensagemRecebidaEventListener}
+     * (AFTER_COMMIT) — testes unitários (sem contexto Spring, sem transação real) verificam que
+     * o evento foi publicado com os dados corretos, não mais a chamada HTTP em si.
+     */
+    private N8nMensagemRecebidaEvent capturarUnicoEventoN8n() {
+        ArgumentCaptor<N8nMensagemRecebidaEvent> captor = ArgumentCaptor.forClass(N8nMensagemRecebidaEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        return captor.getValue();
+    }
+
+    private List<N8nMensagemRecebidaEvent> capturarEventosN8n(int quantidade) {
+        ArgumentCaptor<N8nMensagemRecebidaEvent> captor = ArgumentCaptor.forClass(N8nMensagemRecebidaEvent.class);
+        verify(eventPublisher, times(quantidade)).publishEvent(captor.capture());
+        return captor.getAllValues();
+    }
+
+    private void verificarNenhumEventoN8nPublicado() {
+        verify(eventPublisher, never()).publishEvent(any(N8nMensagemRecebidaEvent.class));
     }
 
     @Test
@@ -218,25 +240,23 @@ class WhatsappInboundMapperTest {
         mapper.processarMensagemTexto(validValuePayload("phone-ultra"), rawBody);
 
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
-        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
-        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
-                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
-        InOrder ordem = inOrder(mensagemRepository, n8nEventService);
+        ArgumentCaptor<N8nMensagemRecebidaEvent> eventoCaptor = ArgumentCaptor.forClass(N8nMensagemRecebidaEvent.class);
+        InOrder ordem = inOrder(mensagemRepository, eventPublisher);
         ordem.verify(mensagemRepository).save(mensagemCaptor.capture());
-        ordem.verify(n8nEventService)
-                .enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
-        assertEquals("mensagem_recebida", contextCaptor.getValue().evento());
-        assertEquals(30L, contextCaptor.getValue().atendimentoId());
-        assertEquals(20L, contextCaptor.getValue().pacienteId());
-        assertEquals(40L, contextCaptor.getValue().mensagemId());
-        assertEquals("wamid-1", contextCaptor.getValue().whatsappMessageId());
-        assertEquals("IA", contextCaptor.getValue().atendimentoOrigem());
-        assertEquals("IA", contextCaptor.getValue().atendimentoModo());
-        assertTrue(contextCaptor.getValue().iaAtiva());
-        assertTrue(contextCaptor.getValue().dentroHorario());
-        assertEquals(HorarioIaService.DENTRO_HORARIO, contextCaptor.getValue().horarioMotivo());
-        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
-        verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
+        ordem.verify(eventPublisher).publishEvent(eventoCaptor.capture());
+        N8nMensagemRecebidaEvent evento = eventoCaptor.getValue();
+        assertEquals("mensagem_recebida", evento.contexto().evento());
+        assertEquals(30L, evento.contexto().atendimentoId());
+        assertEquals(20L, evento.contexto().pacienteId());
+        assertEquals(40L, evento.contexto().mensagemId());
+        assertEquals("wamid-1", evento.contexto().whatsappMessageId());
+        assertEquals("IA", evento.contexto().atendimentoOrigem());
+        assertEquals("IA", evento.contexto().atendimentoModo());
+        assertTrue(evento.contexto().iaAtiva());
+        assertTrue(evento.contexto().dentroHorario());
+        assertEquals(HorarioIaService.DENTRO_HORARIO, evento.contexto().horarioMotivo());
+        assertTrue(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
+        assertNull(evento.payloadFallback());
     }
 
     @Test
@@ -276,11 +296,9 @@ class WhatsappInboundMapperTest {
 
         mapper.processarMensagemTexto(validValuePayload("phone-ultra"), rawBody);
 
-        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
-                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
-        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), any(), contextCaptor.capture());
-        assertFalse(contextCaptor.getValue().dentroHorario());
-        assertEquals(HorarioIaService.FORA_HORARIO, contextCaptor.getValue().horarioMotivo());
+        N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
+        assertFalse(evento.contexto().dentroHorario());
+        assertEquals(HorarioIaService.FORA_HORARIO, evento.contexto().horarioMotivo());
     }
 
     @Test
@@ -319,7 +337,7 @@ class WhatsappInboundMapperTest {
         mapper.processarMensagemTexto(validValuePayload("phone-ultra"), rawBody);
 
         verify(mensagemRepository).save(any(Mensagem.class));
-        verify(n8nEventService, never()).enviarPayloadMetaOriginal(any(), any(), any());
+        verificarNenhumEventoN8nPublicado();
         verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
     }
 
@@ -366,22 +384,18 @@ class WhatsappInboundMapperTest {
         mapper.processarMensagemTexto(valuePayloadWithThreeMessages("phone-ultra"), rawBody);
 
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
-        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
-        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
-                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
         verify(mensagemRepository, times(3)).save(mensagemCaptor.capture());
-        verify(n8nEventService, times(3))
-                .enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
+        List<N8nMensagemRecebidaEvent> eventos = capturarEventosN8n(3);
 
         assertEquals(List.of("wamid-1", "wamid-2", "wamid-3"), mensagemCaptor.getAllValues().stream()
                 .map(Mensagem::getWhatsappMessageId)
                 .toList());
-        assertEquals(List.of(40L, 41L, 42L), contextCaptor.getAllValues().stream()
-                .map(N8nEventService.MetaWebhookContext::mensagemId)
+        assertEquals(List.of(40L, 41L, 42L), eventos.stream()
+                .map(evento -> evento.contexto().mensagemId())
                 .toList());
 
-        List<String> bodies = payloadCaptor.getAllValues().stream()
-                .map(bytes -> new String(bytes, StandardCharsets.UTF_8))
+        List<String> bodies = eventos.stream()
+                .map(evento -> new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8))
                 .toList();
         assertTrue(bodies.get(0).contains("\"wamid-1\""));
         assertFalse(bodies.get(0).contains("\"wamid-2\""));
@@ -392,8 +406,8 @@ class WhatsappInboundMapperTest {
         assertTrue(bodies.get(2).contains("\"wamid-3\""));
         assertFalse(bodies.get(2).contains("\"wamid-1\""));
         assertFalse(bodies.get(2).contains("\"wamid-2\""));
-        assertEquals(List.of("wamid-1", "wamid-2", "wamid-3"), contextCaptor.getAllValues().stream()
-                .map(N8nEventService.MetaWebhookContext::whatsappMessageId)
+        assertEquals(List.of("wamid-1", "wamid-2", "wamid-3"), eventos.stream()
+                .map(evento -> evento.contexto().whatsappMessageId())
                 .toList());
     }
 
@@ -432,15 +446,12 @@ class WhatsappInboundMapperTest {
 
         mapper.processarMensagemTexto(valuePayloadSingleMessage("phone-ultra", "wamid-2", "Segunda mensagem"), rawBody);
 
-        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
-        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
-                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
-        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
+        N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
 
-        String body = new String(payloadCaptor.getValue(), StandardCharsets.UTF_8);
+        String body = new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8);
         assertTrue(body.contains("\"wamid-2\""));
         assertFalse(body.contains("\"wamid-1\""));
-        assertEquals("wamid-2", contextCaptor.getValue().whatsappMessageId());
+        assertEquals("wamid-2", evento.contexto().whatsappMessageId());
     }
 
     @Test
@@ -483,20 +494,17 @@ class WhatsappInboundMapperTest {
         mapper.processarMensagemTexto(valuePayloadSingleMessage("phone-ultra", "wamid-long", textoLongo), rawBody);
 
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
-        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
-        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
-                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
         verify(mensagemRepository).save(mensagemCaptor.capture());
-        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
+        N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
 
         Mensagem mensagem = mensagemCaptor.getValue();
         assertEquals(textoLongo, mensagem.getConteudo());
         assertTrue(mensagem.getConteudoPrevia().length() <= 60);
         assertEquals("TEXTO", mensagem.getTipoMedia());
-        assertEquals("TEXTO", contextCaptor.getValue().tipoMedia());
-        assertEquals("wamid-long", contextCaptor.getValue().whatsappMessageId());
+        assertEquals("TEXTO", evento.contexto().tipoMedia());
+        assertEquals("wamid-long", evento.contexto().whatsappMessageId());
 
-        JsonNode payloadN8n = new ObjectMapper().readTree(payloadCaptor.getValue());
+        JsonNode payloadN8n = new ObjectMapper().readTree(evento.payloadMetaOriginal());
         JsonNode messages = payloadN8n.at("/entry/0/changes/0/value/messages");
         assertEquals(1, messages.size());
         assertEquals(textoLongo, messages.get(0).at("/text/body").asText());
@@ -545,15 +553,13 @@ class WhatsappInboundMapperTest {
         mapper.processarMensagemTexto(valuePayloadWithThreeSameTextMessages("phone-ultra"), rawBody);
 
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
-        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
-                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
         verify(mensagemRepository, times(3)).save(mensagemCaptor.capture());
-        verify(n8nEventService, times(3)).enviarPayloadMetaOriginal(eq(clinica), any(), contextCaptor.capture());
+        List<N8nMensagemRecebidaEvent> eventos = capturarEventosN8n(3);
         assertEquals(List.of("wamid-1", "wamid-2", "wamid-3"), mensagemCaptor.getAllValues().stream()
                 .map(Mensagem::getWhatsappMessageId)
                 .toList());
-        assertEquals(List.of("wamid-1", "wamid-2", "wamid-3"), contextCaptor.getAllValues().stream()
-                .map(N8nEventService.MetaWebhookContext::whatsappMessageId)
+        assertEquals(List.of("wamid-1", "wamid-2", "wamid-3"), eventos.stream()
+                .map(evento -> evento.contexto().whatsappMessageId())
                 .toList());
     }
 
@@ -608,7 +614,7 @@ class WhatsappInboundMapperTest {
         mapper.processarMensagemTexto(valuePayloadWithThreeMessages("phone-ultra"), rawBody);
 
         verify(mensagemRepository, times(3)).save(any(Mensagem.class));
-        verify(n8nEventService, times(3)).enviarPayloadMetaOriginal(eq(clinica), any(), any());
+        capturarEventosN8n(3);
     }
 
     @Test
@@ -663,16 +669,13 @@ class WhatsappInboundMapperTest {
         ), rawBody);
 
         ArgumentCaptor<MidiaMensagem> midiaCaptor = ArgumentCaptor.forClass(MidiaMensagem.class);
-        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
-        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
-                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
         verify(midiaMensagemRepository).save(midiaCaptor.capture());
-        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
+        N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
         assertEquals("AUDIO", midiaCaptor.getValue().getTipoMedia());
         assertEquals(0L, midiaCaptor.getValue().getTamanhoBytes());
-        assertEquals(40L, contextCaptor.getValue().mensagemId());
-        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-audio\""));
-        assertFalse(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
+        assertEquals(40L, evento.contexto().mensagemId());
+        assertTrue(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-audio\""));
+        assertFalse(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
     }
 
     @Test
@@ -727,7 +730,7 @@ class WhatsappInboundMapperTest {
         ), rawBody);
 
         verify(midiaMensagemRepository).save(any(MidiaMensagem.class));
-        verify(n8nEventService, never()).enviarPayloadMetaOriginal(any(), any(), any());
+        verificarNenhumEventoN8nPublicado();
         verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
     }
 
@@ -779,15 +782,12 @@ class WhatsappInboundMapperTest {
         ), rawBody);
 
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
-        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
-        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
-                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
         verify(mensagemRepository).save(mensagemCaptor.capture());
-        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
+        N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
         assertEquals("OUTRO", mensagemCaptor.getValue().getTipoMedia());
-        assertEquals(40L, contextCaptor.getValue().mensagemId());
-        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-sticker\""));
-        assertFalse(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
+        assertEquals(40L, evento.contexto().mensagemId());
+        assertTrue(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-sticker\""));
+        assertFalse(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
     }
 
     @Test
@@ -845,12 +845,11 @@ class WhatsappInboundMapperTest {
         mapper.processarMensagemTexto(audioPayload, rawBody);
         mapper.processarMensagemTexto(audioPayload, rawBody);
 
-        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
         verify(mensagemRepository, times(1)).save(any(Mensagem.class));
         verify(midiaMensagemRepository, times(1)).save(any(MidiaMensagem.class));
-        verify(n8nEventService, times(1)).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), any());
-        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-audio\""));
-        assertFalse(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
+        N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
+        assertTrue(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-audio\""));
+        assertFalse(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
     }
 
     @Test
@@ -904,11 +903,10 @@ class WhatsappInboundMapperTest {
         mapper.processarMensagemTexto(stickerPayload, rawBody);
         mapper.processarMensagemTexto(stickerPayload, rawBody);
 
-        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
         verify(mensagemRepository, times(1)).save(any(Mensagem.class));
-        verify(n8nEventService, times(1)).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), any());
-        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-sticker\""));
-        assertFalse(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
+        N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
+        assertTrue(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-sticker\""));
+        assertFalse(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
     }
 
     @Test
@@ -933,7 +931,7 @@ class WhatsappInboundMapperTest {
         assertTrue(result.isPresent());
         assertEquals("READ", result.get().getWhatsappStatus());
         verify(mensagemRepository).save(mensagem);
-        verify(n8nEventService, never()).enviarPayloadMetaOriginal(any(), any(), any());
+        verificarNenhumEventoN8nPublicado();
     }
 
     @Test
@@ -1000,17 +998,14 @@ class WhatsappInboundMapperTest {
         ), rawBody);
 
         ArgumentCaptor<MidiaMensagem> midiaCaptor = ArgumentCaptor.forClass(MidiaMensagem.class);
-        ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
-        ArgumentCaptor<N8nEventService.MetaWebhookContext> contextCaptor =
-                ArgumentCaptor.forClass(N8nEventService.MetaWebhookContext.class);
         verify(midiaMensagemRepository).save(midiaCaptor.capture());
-        verify(n8nEventService).enviarPayloadMetaOriginal(eq(clinica), payloadCaptor.capture(), contextCaptor.capture());
+        N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
         assertArrayEquals(documentBytes, midiaCaptor.getValue().getS3Chave());
         assertEquals("database", midiaCaptor.getValue().getS3Bucket());
         assertEquals(documentBytes.length, midiaCaptor.getValue().getTamanhoBytes());
-        assertEquals("DOCUMENTO", contextCaptor.getValue().tipoMedia());
-        assertTrue(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-doc\""));
-        assertFalse(new String(payloadCaptor.getValue(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
+        assertEquals("DOCUMENTO", evento.contexto().tipoMedia());
+        assertTrue(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-doc\""));
+        assertFalse(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
         verify(notificationService).notificarNovaMensagem(eq(atendimento), any());
     }
 
