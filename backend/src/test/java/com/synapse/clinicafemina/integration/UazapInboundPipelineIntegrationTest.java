@@ -102,7 +102,9 @@ class UazapInboundPipelineIntegrationTest {
                         new com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappMediaDownloader(
                                 whatsappOutboundClient, whatsappProperties),
                         new com.synapse.clinicafemina.integration.whatsapp.uazap.UazapWhatsappMediaDownloader(
-                                whatsappProperties)));
+                                whatsappProperties)),
+                org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class),
+                whatsappProperties);
         listener = new WhatsappInboundListener(mapper, new ObjectMapper(), broadcastService);
         lenient().when(horarioIaService.avaliar(any(Clinica.class)))
                 .thenReturn(new HorarioIaService.HorarioIaStatus(true, HorarioIaService.DENTRO_HORARIO));

@@ -11,6 +11,9 @@ import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappMediaDownloader;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
+import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
+import com.synapse.clinicafemina.integration.whatsapp.uazap.UazapPictureEnrichmentRequestedEvent;
 import com.synapse.clinicafemina.messaging.MensagemEntradaEvent;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
@@ -24,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,6 +65,8 @@ public class WhatsappInboundMapper {
     private final Environment environment;
     private final WhatsappOutboundClient whatsappOutboundClient;
     private final List<WhatsappMediaDownloader> mediaDownloaders;
+    private final ApplicationEventPublisher eventPublisher;
+    private final WhatsappProperties whatsappProperties;
 
     @Value("${WHATSAPP_PHONE_NUMBER_ID:}")
     private String envWhatsappPhoneId;
@@ -124,6 +130,7 @@ public class WhatsappInboundMapper {
         PacienteResolvido pacienteResolvido = resolverOuCriarPaciente(clinica, telefone, contato);
         Paciente paciente = pacienteResolvido.paciente();
         log.info("Paciente resolvido: id={}, criado={}", paciente.getId(), pacienteResolvido.criado());
+        solicitarEnriquecimentoFotoUazap(paciente);
  
         Atendimento atendimento = resolverOuCriarAtendimento(clinica, paciente);
         log.info("Atendimento resolvido: id={}, status={}", atendimento.getId(), atendimento.getStatus());
@@ -480,6 +487,20 @@ public class WhatsappInboundMapper {
         ));
     }
  
+    /**
+     * Publica o pedido de enriquecimento de foto SOMENTE quando o provider de WhatsApp ativo é a
+     * UAZAP. Para a UltraMedical (provider META, valor padrão), este método é um no-op — o evento
+     * nunca é publicado e o comportamento existente permanece 100% inalterado. O enriquecimento em
+     * si acontece de forma assíncrona, após o commit desta transação (ver
+     * {@code UazapPictureEnrichmentEventListener}).
+     */
+    private void solicitarEnriquecimentoFotoUazap(Paciente paciente) {
+        if (whatsappProperties.resolveProvider() != WhatsappProviderType.UAZAP) {
+            return;
+        }
+        eventPublisher.publishEvent(new UazapPictureEnrichmentRequestedEvent(paciente.getId()));
+    }
+
     private Optional<Clinica> resolverClinicaPorPayload(Map<String, Object> value) {
         Object metadata = value.get("metadata");
         if (!(metadata instanceof Map<?, ?> mapa)

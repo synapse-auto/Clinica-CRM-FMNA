@@ -50,7 +50,9 @@ class WhatsappInboundIdempotencyTest {
                 clinicaRepository, rabbitTemplate, n8nEventService, horarioIaService,
                 notificationService, new ObjectMapper(), payloadParser, environment, whatsappOutboundClient,
                 java.util.List.of(new com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappMediaDownloader(
-                        whatsappOutboundClient, new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties())));
+                        whatsappOutboundClient, new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties())),
+                mock(org.springframework.context.ApplicationEventPublisher.class),
+                new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties());
     }
 
     @Test

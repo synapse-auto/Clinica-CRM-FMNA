@@ -84,6 +84,9 @@ class WhatsappInboundMapperTest {
     @Mock
     private WhatsappOutboundClient whatsappOutboundClient;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     private WhatsappInboundMapper mapper;
     private Clinica clinica;
 
@@ -104,7 +107,9 @@ class WhatsappInboundMapperTest {
                 environment,
                 whatsappOutboundClient,
                 List.of(new com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappMediaDownloader(
-                        whatsappOutboundClient, new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties()))
+                        whatsappOutboundClient, new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties())),
+                eventPublisher,
+                new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties()
         );
 
         clinica = new Clinica();

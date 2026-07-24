@@ -75,6 +75,8 @@ public class WhatsappProperties {
         private String webhookSecret;
         private int connectTimeoutMs = 5000;
         private int readTimeoutMs = 15000;
+        /** {@code UAZAP_PICTURE_DIAGNOSTICS_ENABLED} — desabilitado por padrão. Ver {@code UazapPictureDiagnosticoController}. */
+        private boolean pictureDiagnosticsEnabled = false;
 
         public String getBaseUrl() {
             return baseUrl;
@@ -138,6 +140,14 @@ public class WhatsappProperties {
 
         public void setReadTimeoutMs(int readTimeoutMs) {
             this.readTimeoutMs = readTimeoutMs;
+        }
+
+        public boolean isPictureDiagnosticsEnabled() {
+            return pictureDiagnosticsEnabled;
+        }
+
+        public void setPictureDiagnosticsEnabled(boolean pictureDiagnosticsEnabled) {
+            this.pictureDiagnosticsEnabled = pictureDiagnosticsEnabled;
         }
     }
 }
