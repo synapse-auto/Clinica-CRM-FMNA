@@ -43,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -116,6 +117,7 @@ class ExternalSyncServiceTest {
 
         lenient().when(providerFactory.getProvider(ExternalProviderType.DARWIN)).thenReturn(provider);
         lenient().when(providerFactory.getProvider(ExternalProviderType.MEDWARE)).thenReturn(provider);
+        lenient().when(provider.supportsBulkSync()).thenReturn(true);
         lenient().when(externalSyncLockService.tryAcquire(any(), any()))
                 .thenReturn(java.util.Optional.of(org.mockito.Mockito.mock(ExternalSyncLockService.LockHandle.class)));
         lenient().when(integrationSyncLogService.iniciar(
@@ -1198,6 +1200,39 @@ class ExternalSyncServiceTest {
         verify(integrationSyncLogService).finalizar(
                 eq(99L), eq("IGNORADA_CONCORRENCIA"), any(ExternalSyncProgress.class),
                 eq("Execucao ignorada porque ja existe uma sincronizacao ativa"));
+    }
+
+    @Test
+    void should_reject_bulk_sync_with_explicit_exception_when_provider_does_not_support_it_without_creating_log_or_lock() {
+        when(providerFactory.getProvider(ExternalProviderType.DARWIN)).thenReturn(provider);
+        when(provider.supportsBulkSync()).thenReturn(false);
+
+        assertThrows(
+                com.synapse.clinicafemina.exception.BulkSyncNotSupportedException.class,
+                () -> service.sincronizar(clinica));
+
+        verify(externalSyncLockService, never()).tryAcquire(any(), any());
+        verify(integrationSyncLogService, never()).iniciar(any(), any(), any(), any(), any());
+        verify(integrationSyncLogService, never()).iniciar(any(), any(), any(), any(), any(), any());
+        verify(integrationSyncLogService, never()).finalizar(any(), any(), any(), any());
+        verify(provider, never()).getPatients(any(), any(), any(Integer.class));
+        verify(provider, never()).getAppointments(any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void should_keep_medware_bulk_sync_working_when_provider_supports_it() {
+        clinica.setExternalProvider(ExternalProviderType.MEDWARE);
+        when(providerFactory.getProvider(ExternalProviderType.MEDWARE)).thenReturn(provider);
+        when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
+        when(provider.supportsBulkSync()).thenReturn(true);
+        when(provider.getPatients(any(), any(), any(Integer.class)))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+        when(provider.getAppointments(any(), any(), any(Integer.class)))
+                .thenReturn(new PageResult<>(List.of(), false, null));
+
+        ExternalSyncResult result = service.sincronizar(clinica);
+
+        assertEquals("SUCESSO", result.status());
     }
 
     private Paciente pacienteExistente(String nome, String telefone) {

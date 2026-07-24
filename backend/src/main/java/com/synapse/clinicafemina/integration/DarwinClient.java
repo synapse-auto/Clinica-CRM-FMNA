@@ -1,81 +1,120 @@
 package com.synapse.clinicafemina.integration;
 
-import com.synapse.clinicafemina.dto.darwin.DarwinAppointmentDTO;
-import com.synapse.clinicafemina.dto.darwin.DarwinNoteDTO;
-import com.synapse.clinicafemina.dto.darwin.DarwinPageResponse;
-import com.synapse.clinicafemina.dto.darwin.DarwinPatientDTO;
-import lombok.extern.slf4j.Slf4j;
+import com.synapse.clinicafemina.dto.darwin.DarwinAvailableTimetablesResponse;
+import com.synapse.clinicafemina.dto.darwin.DarwinInsuranceListResponse;
+import com.synapse.clinicafemina.dto.darwin.DarwinLocationRef;
+import com.synapse.clinicafemina.dto.darwin.DarwinPatientRecordDTO;
+import com.synapse.clinicafemina.dto.darwin.DarwinPatientScheduleResponse;
+import com.synapse.clinicafemina.dto.darwin.DarwinProcedureListResponse;
+import com.synapse.clinicafemina.dto.darwin.DarwinProfessionalRef;
+import com.synapse.clinicafemina.dto.darwin.DarwinProfessionalTimetableDTO;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
 
 /**
- * Cliente HTTP Read-Only para a API do ERP Darwin.
- * Contrato estrito: SÓ MÉTODOS GET. Nenhuma escrita é permitida.
+ * Cliente HTTP read-only para a API oficial de integração Darwin (v1.0.9).
+ * Contrato estrito: somente os 8 endpoints GET documentados na coleção Postman oficial.
+ * Nenhum método de escrita (create/update/archive/delete) é implementado nesta fase.
  */
-@Slf4j
 @Component
 public class DarwinClient {
 
     private final RestClient restClient;
-    private final String apiUrl;
-    private final String apiToken;
 
     public DarwinClient(
             @Value("${app.darwin.api-url}") String apiUrl,
             @Value("${app.darwin.api-token}") String apiToken) {
-        this.apiUrl = apiUrl;
-        this.apiToken = apiToken;
         this.restClient = RestClient.builder()
                 .baseUrl(apiUrl)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiToken)
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }
 
-    public DarwinPageResponse<DarwinPatientDTO> getPatients(OffsetDateTime updatedAfter, String cursor, int limit) {
-        String uri = UriComponentsBuilder.fromPath("/v1/patients")
-                .queryParamIfPresent("updated_after", java.util.Optional.ofNullable(updatedAfter).map(dt -> dt.withOffsetSameInstant(ZoneOffset.UTC).toString()))
-                .queryParamIfPresent("cursor", java.util.Optional.ofNullable(cursor))
-                .queryParam("limit", limit)
+    public DarwinAvailableTimetablesResponse listarHorariosDisponiveis(
+            LocalDate date, List<String> professionalIds) {
+        String uri = UriComponentsBuilder.fromPath("/api/timetables/list/available")
+                .queryParam("date", date)
+                .queryParamIfPresent("professionalIds",
+                        Optional.ofNullable(professionalIds).filter(ids -> !ids.isEmpty()))
                 .build().toUriString();
+        return restClient.get().uri(uri).retrieve().body(DarwinAvailableTimetablesResponse.class);
+    }
 
-        log.debug("GET Darwin patients: {}", uri);
+    public List<DarwinProfessionalTimetableDTO> listarGradesDoProfissional(
+            String professionalId, String locationId, String status, String weekday,
+            Boolean isOnlineAvailable, LocalDate startDate) {
+        String uri = UriComponentsBuilder.fromPath("/api/timetables/list/professional")
+                .queryParamIfPresent("professionalId", Optional.ofNullable(professionalId))
+                .queryParamIfPresent("locationId", Optional.ofNullable(locationId))
+                .queryParamIfPresent("status", Optional.ofNullable(status))
+                .queryParamIfPresent("weekday", Optional.ofNullable(weekday))
+                .queryParamIfPresent("isOnlineAvailable", Optional.ofNullable(isOnlineAvailable))
+                .queryParamIfPresent("startDate", Optional.ofNullable(startDate))
+                .build().toUriString();
+        return restClient.get().uri(uri).retrieve().body(new ParameterizedTypeReference<>() {});
+    }
+
+    public List<DarwinProfessionalRef> listarProfissionaisDoLocal() {
         return restClient.get()
-                .uri(uri)
+                .uri("/api/professionals/list/locations")
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
     }
 
-    public DarwinPageResponse<DarwinAppointmentDTO> getAppointments(OffsetDateTime updatedAfter, String cursor, int limit) {
-        String uri = UriComponentsBuilder.fromPath("/v1/appointments")
-                .queryParamIfPresent("updated_after", java.util.Optional.ofNullable(updatedAfter).map(dt -> dt.withOffsetSameInstant(ZoneOffset.UTC).toString()))
-                .queryParamIfPresent("cursor", java.util.Optional.ofNullable(cursor))
-                .queryParam("limit", limit)
+    public DarwinPatientScheduleResponse listarAgendamentosPorCpf(
+            String cpf, LocalDate startDate, LocalDate endDate, String status) {
+        String uri = UriComponentsBuilder.fromPath("/api/schedules/list/patient")
+                .queryParam("cpf", cpf)
+                .queryParamIfPresent("startDate", Optional.ofNullable(startDate))
+                .queryParamIfPresent("endDate", Optional.ofNullable(endDate))
+                .queryParamIfPresent("status", Optional.ofNullable(status))
                 .build().toUriString();
+        return restClient.get().uri(uri).retrieve().body(DarwinPatientScheduleResponse.class);
+    }
 
-        log.debug("GET Darwin appointments: {}", uri);
+    public DarwinPatientRecordDTO buscarPacientePorCpf(String cpf) {
+        String uri = UriComponentsBuilder.fromPath("/api/patients/find/cpf")
+                .queryParam("cpf", cpf)
+                .build().toUriString();
+        return restClient.get().uri(uri).retrieve().body(DarwinPatientRecordDTO.class);
+    }
+
+    public DarwinProcedureListResponse listarProcedimentos(
+            String locationId, String name, Integer page, Integer amount) {
+        String uri = UriComponentsBuilder.fromPath("/api/procedures/list/location")
+                .queryParamIfPresent("locationId", Optional.ofNullable(locationId))
+                .queryParamIfPresent("name", Optional.ofNullable(name))
+                .queryParamIfPresent("page", Optional.ofNullable(page))
+                .queryParamIfPresent("amount", Optional.ofNullable(amount))
+                .build().toUriString();
+        return restClient.get().uri(uri).retrieve().body(DarwinProcedureListResponse.class);
+    }
+
+    public List<DarwinLocationRef> listarLocaisDoProfissional() {
         return restClient.get()
-                .uri(uri)
+                .uri("/api/locations/list/professional")
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
     }
 
-    public DarwinPageResponse<DarwinNoteDTO> getPatientNotes(String patientId, String cursor, int limit) {
-        String uri = UriComponentsBuilder.fromPath("/v1/patients/{patientId}/notes")
-                .queryParamIfPresent("cursor", java.util.Optional.ofNullable(cursor))
-                .queryParam("limit", limit)
-                .buildAndExpand(patientId).toUriString();
-
-        log.debug("GET Darwin notes");
-        return restClient.get()
-                .uri(uri)
-                .retrieve()
-                .body(new ParameterizedTypeReference<>() {});
+    public DarwinInsuranceListResponse listarConvenios(
+            String locationId, String name, Integer page, Integer amount) {
+        String uri = UriComponentsBuilder.fromPath("/api/insurances/list/location")
+                .queryParamIfPresent("locationId", Optional.ofNullable(locationId))
+                .queryParamIfPresent("name", Optional.ofNullable(name))
+                .queryParamIfPresent("page", Optional.ofNullable(page))
+                .queryParamIfPresent("amount", Optional.ofNullable(amount))
+                .build().toUriString();
+        return restClient.get().uri(uri).retrieve().body(DarwinInsuranceListResponse.class);
     }
 }

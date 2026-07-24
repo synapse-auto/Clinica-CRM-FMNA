@@ -1,26 +1,25 @@
 package com.synapse.clinicafemina.integration.external;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.synapse.clinicafemina.dto.darwin.DarwinAppointmentDTO;
-import com.synapse.clinicafemina.dto.darwin.DarwinNoteDTO;
-import com.synapse.clinicafemina.dto.darwin.DarwinPageResponse;
-import com.synapse.clinicafemina.dto.darwin.DarwinPatientDTO;
-import com.synapse.clinicafemina.integration.DarwinClient;
-import lombok.RequiredArgsConstructor;
+import com.synapse.clinicafemina.exception.BulkSyncNotSupportedException;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
-import java.util.Map;
 
+/**
+ * Provider Darwin: declara explicitamente suas capacidades ao invés de forçar o
+ * contrato antigo de sincronização em massa (que a API real não suporta — ver
+ * auditoria da coleção Postman "API de integração Darwin" v1.0.9).
+ *
+ * A API Darwin real oferece apenas consultas pontuais sob demanda (CPF, horários,
+ * catálogos) — expostas via {@link com.synapse.clinicafemina.service.DarwinConsultaService}
+ * e {@code DarwinClient}, não por este bean. Este componente existe apenas para que
+ * {@link ExternalProviderFactory#getProvider(ExternalProviderType)} sempre resolva um
+ * bean real para DARWIN, permitindo que {@code ExternalSyncService} consulte
+ * {@link #supportsBulkSync()} e rejeite a sincronização em massa de forma explícita —
+ * em vez de depender da ausência de bean como mecanismo de controle.
+ */
 @Component
-@RequiredArgsConstructor
 public class DarwinProvider implements ExternalClinicProvider {
-
-    private static final int DEFAULT_APPOINTMENT_MINUTES = 30;
-
-    private final DarwinClient darwinClient;
-    private final ObjectMapper objectMapper;
 
     @Override
     public ExternalProviderType getType() {
@@ -28,78 +27,27 @@ public class DarwinProvider implements ExternalClinicProvider {
     }
 
     @Override
+    public boolean supportsBulkSync() {
+        return false;
+    }
+
+    @Override
+    public boolean supportsOnDemandQueries() {
+        return true;
+    }
+
+    @Override
     public PageResult<ExternalPatientDTO> getPatients(OffsetDateTime updatedAfter, String cursor, int limit) {
-        DarwinPageResponse<DarwinPatientDTO> response = darwinClient.getPatients(updatedAfter, cursor, limit);
-        return new PageResult<>(
-                response.data().stream().map(this::toExternalPatient).toList(),
-                response.hasMore(),
-                response.nextCursor()
-        );
+        throw new BulkSyncNotSupportedException();
     }
 
     @Override
     public PageResult<ExternalAppointmentDTO> getAppointments(OffsetDateTime updatedAfter, String cursor, int limit) {
-        DarwinPageResponse<DarwinAppointmentDTO> response = darwinClient.getAppointments(updatedAfter, cursor, limit);
-        return new PageResult<>(
-                response.data().stream().map(this::toExternalAppointment).toList(),
-                response.hasMore(),
-                response.nextCursor()
-        );
+        throw new BulkSyncNotSupportedException();
     }
 
     @Override
     public PageResult<ExternalClinicalNoteDTO> getPatientNotes(String externalPatientId, String cursor, int limit) {
-        DarwinPageResponse<DarwinNoteDTO> response = darwinClient.getPatientNotes(externalPatientId, cursor, limit);
-        return new PageResult<>(
-                response.data().stream().map(this::toExternalNote).toList(),
-                response.hasMore(),
-                response.nextCursor()
-        );
-    }
-
-    private ExternalPatientDTO toExternalPatient(DarwinPatientDTO dto) {
-        return new ExternalPatientDTO(
-                dto.id(),
-                dto.fullName(),
-                dto.documentNumber(),
-                dto.email(),
-                dto.phone(),
-                dto.birthDate(),
-                dto.updatedAt(),
-                toMap(dto)
-        );
-    }
-
-    private ExternalAppointmentDTO toExternalAppointment(DarwinAppointmentDTO dto) {
-        OffsetDateTime endAt = dto.scheduledTime() != null
-                ? dto.scheduledTime().plusMinutes(DEFAULT_APPOINTMENT_MINUTES)
-                : null;
-        return new ExternalAppointmentDTO(
-                dto.id(),
-                dto.patientId(),
-                dto.scheduledTime(),
-                endAt,
-                "CONSULTA",
-                null,
-                dto.status(),
-                null,
-                null,
-                null,
-                toMap(dto)
-        );
-    }
-
-    private ExternalClinicalNoteDTO toExternalNote(DarwinNoteDTO dto) {
-        return new ExternalClinicalNoteDTO(
-                dto.id(),
-                dto.patientId(),
-                dto.content(),
-                dto.createdAt(),
-                toMap(dto)
-        );
-    }
-
-    private Map<String, Object> toMap(Object dto) {
-        return objectMapper.convertValue(dto, new TypeReference<>() {});
+        throw new BulkSyncNotSupportedException();
     }
 }

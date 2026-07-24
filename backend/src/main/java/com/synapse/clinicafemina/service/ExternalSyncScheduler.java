@@ -2,6 +2,9 @@ package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.config.ExternalSyncSchedulerProperties;
 import com.synapse.clinicafemina.domain.Clinica;
+import com.synapse.clinicafemina.integration.external.ExternalClinicProvider;
+import com.synapse.clinicafemina.integration.external.ExternalProviderFactory;
+import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import java.time.Clock;
 import java.time.LocalDate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,26 +25,31 @@ public class ExternalSyncScheduler {
     private final ExternalSyncSchedulerProperties properties;
     private final ClinicaConfigService clinicaConfigService;
     private final ExternalSyncService externalSyncService;
+    private final ExternalProviderFactory providerFactory;
     private final Clock clock;
 
     @Autowired
     public ExternalSyncScheduler(
             ExternalSyncSchedulerProperties properties,
             ClinicaConfigService clinicaConfigService,
-            ExternalSyncService externalSyncService
+            ExternalSyncService externalSyncService,
+            ExternalProviderFactory providerFactory
     ) {
-        this(properties, clinicaConfigService, externalSyncService, Clock.system(properties.zoneId()));
+        this(properties, clinicaConfigService, externalSyncService, providerFactory,
+                Clock.system(properties.zoneId()));
     }
 
     ExternalSyncScheduler(
             ExternalSyncSchedulerProperties properties,
             ClinicaConfigService clinicaConfigService,
             ExternalSyncService externalSyncService,
+            ExternalProviderFactory providerFactory,
             Clock clock
     ) {
         this.properties = properties;
         this.clinicaConfigService = clinicaConfigService;
         this.externalSyncService = externalSyncService;
+        this.providerFactory = providerFactory;
         this.clock = clock;
     }
 
@@ -52,6 +60,15 @@ public class ExternalSyncScheduler {
     public void sincronizarClinicaConfigurada() {
         try {
             Clinica clinica = clinicaConfigService.obterClinicaAtual();
+            ExternalProviderType providerType = clinica.getExternalProvider();
+            ExternalClinicProvider provider = providerFactory.getProvider(providerType);
+            if (!provider.supportsBulkSync()) {
+                log.info(
+                        "Sincronizacao externa agendada ignorada: provider={} nao suporta sincronizacao em "
+                                + "massa (integracao sob demanda)",
+                        providerType);
+                return;
+            }
             LocalDate hoje = LocalDate.now(clock);
             LocalDate dataInicio = hoje.minusDays(properties.getStartDaysBack());
             LocalDate dataFim = hoje.plusDays(properties.getEndDaysForward());

@@ -79,6 +79,7 @@ class ExternalSyncTransactionIntegrationTest {
         provider = mock(ExternalClinicProvider.class);
         when(providerFactory.getProvider(ExternalProviderType.MEDWARE)).thenReturn(provider);
         when(provider.getType()).thenReturn(ExternalProviderType.MEDWARE);
+        when(provider.supportsBulkSync()).thenReturn(true);
         when(provider.getPatientNotes(anyString(), isNull(), eq(100)))
                 .thenReturn(new PageResult<>(List.of(), false, null));
     }

@@ -112,6 +112,42 @@ public class GlobalExceptionHandler {
         );
     }
 
+    // ── 409 Provider externo sem suporte a sincronização em massa (Darwin) ────
+    @ExceptionHandler(BulkSyncNotSupportedException.class)
+    public ResponseEntity<Object> handleBulkSyncNotSupported(
+            BulkSyncNotSupportedException ex,
+            WebRequest request
+    ) {
+        log.info("Sincronizacao em massa solicitada para provider sem suporte a bulk sync");
+        return buildResponse(
+                HttpStatus.CONFLICT, ex.getMessage(), BulkSyncNotSupportedException.CODE, request);
+    }
+
+    // ── 409 Integração Darwin indisponível para a clínica/configuração atual ──
+    @ExceptionHandler(DarwinNotAvailableException.class)
+    public ResponseEntity<Object> handleDarwinNotAvailable(
+            DarwinNotAvailableException ex,
+            WebRequest request
+    ) {
+        log.info("Consulta Darwin sob demanda rejeitada: integracao indisponivel");
+        return buildResponse(
+                HttpStatus.CONFLICT, ex.getMessage(), DarwinNotAvailableException.CODE, request);
+    }
+
+    // ── Erros sanitizados repassados pela integração Darwin (sem stack trace) ─
+    @ExceptionHandler(DarwinIntegrationException.class)
+    public ResponseEntity<Object> handleDarwinIntegration(
+            DarwinIntegrationException ex,
+            WebRequest request
+    ) {
+        log.warn("Falha sanitizada na integracao Darwin: statusOrigem={}", ex.upstreamStatus());
+        HttpStatus status = HttpStatus.resolve(ex.upstreamStatus());
+        if (status == null) {
+            status = HttpStatus.BAD_GATEWAY;
+        }
+        return buildResponse(status, ex.getMessage(), DarwinIntegrationException.CODE, request);
+    }
+
     // ── 501 Não implementado ──────────────────────────────────────────────────
     @ExceptionHandler(UnsupportedOperationException.class)
     public ResponseEntity<Object> handleUnsupported(UnsupportedOperationException ex, WebRequest request) {

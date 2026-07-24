@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.service;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.IntegrationSyncLog;
 import com.synapse.clinicafemina.exception.BadRequestException;
+import com.synapse.clinicafemina.exception.BulkSyncNotSupportedException;
 import com.synapse.clinicafemina.integration.external.ExternalClinicProvider;
 import com.synapse.clinicafemina.integration.external.ExternalProviderFactory;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
@@ -49,6 +50,10 @@ public class ExternalSyncService {
             throw new BadRequestException("Clinica ou provider externo nao configurado");
         }
         ExternalProviderType providerType = clinica.getExternalProvider();
+        ExternalClinicProvider provider = providerFactory.getProvider(providerType);
+        if (!provider.supportsBulkSync()) {
+            throw new BulkSyncNotSupportedException();
+        }
         OffsetDateTime updatedAfter = resolverUpdatedAfter(clinica, providerType, dataInicio, origem);
         OffsetDateTime updatedAfterRegistrado = origem == ExternalSyncOrigin.AGENDADA || dataInicio == null
                 ? updatedAfter
@@ -73,7 +78,6 @@ public class ExternalSyncService {
             String status = "SUCESSO";
             String mensagemErro = null;
             try {
-                ExternalClinicProvider provider = providerFactory.getProvider(providerType);
                 log.info(
                         "Sincronizacao externa iniciada: clinica={}, provider={}, dataInicio={}, dataFim={}, updatedAfter={}",
                         clinica.getId(), providerType, dataInicio, dataFim, updatedAfter);
