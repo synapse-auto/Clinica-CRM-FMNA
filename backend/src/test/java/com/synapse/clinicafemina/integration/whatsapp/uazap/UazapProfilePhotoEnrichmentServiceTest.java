@@ -71,7 +71,7 @@ class UazapProfilePhotoEnrichmentServiceTest {
         when(photoClient.buscarFotoPerfil("5511999990000")).thenReturn(raw);
         when(payloadParser.parse(raw)).thenReturn(new UazapPictureEnrichmentOutcome(
                 200, "application/json", 2, "JSON", java.util.List.of("url"),
-                true, false, false, "https://cdn.example/foto.jpg", false, null));
+                true, false, false, "https://cdn.example/foto.jpg", false, null, java.util.List.of("url:string")));
 
         UazapPictureEnrichmentOutcome outcome = service.enriquecer(1L);
 

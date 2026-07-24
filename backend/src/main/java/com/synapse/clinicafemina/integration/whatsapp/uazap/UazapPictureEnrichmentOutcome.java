@@ -20,18 +20,20 @@ public record UazapPictureEnrichmentOutcome(
         boolean possuiBase64,
         String fotoUrl,
         boolean fotoPersistida,
-        String motivoNaoPersistida
+        String motivoNaoPersistida,
+        /** Caminhos de chaves + tipos (ex.: {@code "data.picture:string"}) — nunca valores. */
+        List<String> estrutura
 ) {
 
     /** Nenhuma chamada real foi feita à UAZAP (gate resolvido antes da requisição). */
     public static UazapPictureEnrichmentOutcome semTentativa(String motivo) {
         return new UazapPictureEnrichmentOutcome(
-                null, null, null, null, List.of(), false, false, false, null, false, motivo);
+                null, null, null, null, List.of(), false, false, false, null, false, motivo, List.of());
     }
 
     public UazapPictureEnrichmentOutcome comFotoPersistida() {
         return new UazapPictureEnrichmentOutcome(
                 statusHttp, contentType, bodyBytes, formato, chaves,
-                possuiUrlHttps, possuiQueryString, possuiBase64, fotoUrl, true, motivoNaoPersistida);
+                possuiUrlHttps, possuiQueryString, possuiBase64, fotoUrl, true, motivoNaoPersistida, estrutura);
     }
 }

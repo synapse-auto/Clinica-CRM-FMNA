@@ -18,7 +18,9 @@ public record UazapPictureDiagnosticoResponse(
         boolean possuiQueryString,
         boolean possuiBase64,
         boolean fotoPersistida,
-        String motivoNaoPersistida
+        String motivoNaoPersistida,
+        /** Caminhos de chaves + tipos (ex.: {@code "data.picture:string"}) — nunca valores, URLs, telefones ou nomes. */
+        List<String> estrutura
 ) {
     public static UazapPictureDiagnosticoResponse from(UazapPictureEnrichmentOutcome outcome) {
         return new UazapPictureDiagnosticoResponse(
@@ -31,7 +33,8 @@ public record UazapPictureDiagnosticoResponse(
                 outcome.possuiQueryString(),
                 outcome.possuiBase64(),
                 outcome.fotoPersistida(),
-                outcome.motivoNaoPersistida()
+                outcome.motivoNaoPersistida(),
+                outcome.estrutura()
         );
     }
 }

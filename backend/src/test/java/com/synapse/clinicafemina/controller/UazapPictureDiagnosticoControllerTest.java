@@ -67,7 +67,7 @@ class UazapPictureDiagnosticoControllerTest {
         admin.setClinica(clinica);
         when(usuarioPermissionService.exigirAdminInterno(authentication)).thenReturn(admin);
         UazapPictureDiagnosticoResponse esperado = new UazapPictureDiagnosticoResponse(
-                200, "application/json", 10, "JSON", java.util.List.of(), true, false, false, true, null);
+                200, "application/json", 10, "JSON", java.util.List.of(), true, false, false, true, null, java.util.List.of());
         when(diagnosticoService.diagnosticar(clinica, 1L)).thenReturn(esperado);
 
         ResponseEntity<UazapPictureDiagnosticoResponse> response =
