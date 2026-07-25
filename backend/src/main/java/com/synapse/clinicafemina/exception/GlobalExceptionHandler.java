@@ -11,6 +11,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
@@ -112,6 +113,18 @@ public class GlobalExceptionHandler {
         );
     }
 
+    // ── 409 Idempotency-Key reutilizada com payload diferente ─────────────────
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ResponseEntity<Object> handleIdempotencyConflict(
+            IdempotencyConflictException ex,
+            WebRequest request
+    ) {
+        log.info("Idempotency-Key reutilizada com payload diferente em [{}]",
+                request.getDescription(false).replace("uri=", ""));
+        return buildResponse(
+                HttpStatus.CONFLICT, ex.getMessage(), IdempotencyConflictException.CODE, request);
+    }
+
     // ── 409 Provider externo sem suporte a sincronização em massa (Darwin) ────
     @ExceptionHandler(BulkSyncNotSupportedException.class)
     public ResponseEntity<Object> handleBulkSyncNotSupported(
@@ -175,6 +188,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<Object> handleBadRequest(BadRequestException ex, WebRequest request) {
         return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<Object> handleMissingParameter(
+            MissingServletRequestParameterException ex, WebRequest request) {
+        log.warn("Parâmetro obrigatório ausente em [{}]: {}",
+                request.getDescription(false).replace("uri=", ""),
+                ex.getParameterName());
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                "Parametro obrigatório ausente: " + ex.getParameterName(),
+                request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

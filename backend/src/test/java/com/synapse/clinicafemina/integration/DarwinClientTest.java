@@ -1,13 +1,21 @@
 package com.synapse.clinicafemina.integration;
 
 import com.synapse.clinicafemina.dto.darwin.DarwinAvailableTimetablesResponse;
+import com.synapse.clinicafemina.dto.darwin.DarwinCreateFitInScheduleRequest;
+import com.synapse.clinicafemina.dto.darwin.DarwinCreatePatientRequest;
+import com.synapse.clinicafemina.dto.darwin.DarwinCreatePatientResponse;
+import com.synapse.clinicafemina.dto.darwin.DarwinCreateScheduleRequest;
 import com.synapse.clinicafemina.dto.darwin.DarwinInsuranceListResponse;
+import com.synapse.clinicafemina.dto.darwin.DarwinInsuranceProcedureRef;
 import com.synapse.clinicafemina.dto.darwin.DarwinLocationRef;
 import com.synapse.clinicafemina.dto.darwin.DarwinPatientRecordDTO;
 import com.synapse.clinicafemina.dto.darwin.DarwinPatientScheduleResponse;
 import com.synapse.clinicafemina.dto.darwin.DarwinProcedureListResponse;
 import com.synapse.clinicafemina.dto.darwin.DarwinProfessionalRef;
 import com.synapse.clinicafemina.dto.darwin.DarwinProfessionalTimetableDTO;
+import com.synapse.clinicafemina.dto.darwin.DarwinUpdatePatientRequest;
+import com.synapse.clinicafemina.dto.darwin.DarwinUpdateScheduleRequest;
+import com.synapse.clinicafemina.dto.darwin.DarwinWriteMessageResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,9 +29,11 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -33,9 +43,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.http.HttpHeaders.ACCEPT;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
+import static org.springframework.http.HttpHeaders.CONTENT_TYPE;
+import static org.springframework.http.HttpMethod.DELETE;
 import static org.springframework.http.HttpMethod.GET;
+import static org.springframework.http.HttpMethod.POST;
+import static org.springframework.http.HttpMethod.PUT;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestToUriTemplate;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -353,8 +368,8 @@ class DarwinClientTest {
     }
 
     @Test
-    @DisplayName("contrato read-only: nenhum método de escrita (create/update/archive/delete) é exposto")
-    void client_hasNoWriteMethods() {
+    @DisplayName("contrato exato: apenas os 8 metodos de leitura + 6 de escrita documentados na colecao, nada inventado")
+    void client_exposesOnlyDocumentedMethods() {
         List<String> metodosPublicos = Arrays.stream(DarwinClient.class.getDeclaredMethods())
                 .filter(m -> Modifier.isPublic(m.getModifiers()))
                 .map(Method::getName)
@@ -368,13 +383,149 @@ class DarwinClientTest {
                 "buscarPacientePorCpf",
                 "listarProcedimentos",
                 "listarLocaisDoProfissional",
-                "listarConvenios");
-        assertThat(metodosPublicos).noneMatch(nome -> {
-            String n = nome.toLowerCase(Locale.ROOT);
-            return n.startsWith("create") || n.startsWith("update") || n.startsWith("archive")
-                    || n.startsWith("delete") || n.startsWith("save") || n.startsWith("post")
-                    || n.startsWith("put") || n.startsWith("patch") || n.startsWith("remove")
-                    || n.startsWith("write") || n.startsWith("upload");
-        });
+                "listarConvenios",
+                "criarPaciente",
+                "atualizarPaciente",
+                "criarAgendamento",
+                "criarAgendamentoEncaixe",
+                "atualizarAgendamento",
+                "excluirAgendamento");
+    }
+
+    // ── Endpoints de escrita (Fase 6) — contrato exato da coleção Postman v1.0.9 ──
+
+    @Test
+    @DisplayName("criarPaciente envia POST /api/patients/create com Content-Type e omite campos nulos")
+    void criarPaciente_sendsExactContractAndOmitsNullFields() throws IOException {
+        DarwinCreatePatientRequest request = new DarwinCreatePatientRequest(
+                "Paciente Teste", "111.444.777-35", null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null);
+        server.expect(requestTo("https://darwin.test/api/patients/create"))
+                .andExpect(method(POST))
+                .andExpect(header(CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
+                .andExpect(httpRequest -> {
+                    String body = readBody(httpRequest);
+                    assertThat(body).contains("\"name\"").contains("\"cpf\"");
+                    assertThat(body).doesNotContain("\"rg\"").doesNotContain("\"email\"");
+                })
+                .andRespond(withSuccess(
+                        "{\"message\":\"ok\",\"patient\":{\"cpf\":\"111.444.777-35\",\"name\":\"Paciente Teste\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        DarwinCreatePatientResponse response = client.criarPaciente(request);
+
+        assertThat(response.patient().name()).isEqualTo("Paciente Teste");
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("atualizarPaciente envia PUT /api/patients/update e parseia a ficha atualizada")
+    void atualizarPaciente_sendsExactContract() {
+        DarwinUpdatePatientRequest request = new DarwinUpdatePatientRequest(
+                "111.444.777-35", null, null, null, "novo@exemplo.com", null, null, null, null, null,
+                null, null, null, null, null);
+        server.expect(requestTo("https://darwin.test/api/patients/update"))
+                .andExpect(method(PUT))
+                .andExpect(header(CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
+                .andRespond(withSuccess("""
+                        {"cpf":"111.444.777-35","name":"Paciente Teste","rg":null,"cns":null,"job":null,
+                         "email":"novo@exemplo.com","gender":null,"skinColor":null,"socialName":null,
+                         "motherName":null,"fatherName":null,"naturalness":null,"birthDate":null,
+                         "phoneNumber":null,"extraPhones":[],"address":null}
+                        """, MediaType.APPLICATION_JSON));
+
+        DarwinPatientRecordDTO response = client.atualizarPaciente(request);
+
+        assertThat(response.email()).isEqualTo("novo@exemplo.com");
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("criarAgendamento envia POST /api/schedules/create com Content-Type")
+    void criarAgendamento_sendsExactContract() {
+        DarwinCreateScheduleRequest request = new DarwinCreateScheduleRequest(
+                "tt-1", "Marcado", "09:00", "09:30", "2026-07-20T00:00:00.000Z", null,
+                List.of(new DarwinInsuranceProcedureRef("ins-1", "proc-1")), null,
+                new DarwinCreatePatientRequest("Paciente Teste", "111.444.777-35",
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+        server.expect(requestTo("https://darwin.test/api/schedules/create"))
+                .andExpect(method(POST))
+                .andExpect(header(CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
+                .andRespond(withSuccess("{\"message\":\"criado\"}", MediaType.APPLICATION_JSON));
+
+        DarwinWriteMessageResponse response = client.criarAgendamento(request);
+
+        assertThat(response.message()).isEqualTo("criado");
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("criarAgendamentoEncaixe envia POST /api/schedules/create/fitin")
+    void criarAgendamentoEncaixe_sendsExactContract() {
+        DarwinCreateFitInScheduleRequest request = new DarwinCreateFitInScheduleRequest(
+                "prof-1", null, "Marcado", "09:00", "09:30", "2026-07-20T00:00:00.000Z", null,
+                List.of(new DarwinInsuranceProcedureRef("ins-1", "proc-1")), null,
+                new DarwinCreatePatientRequest("Paciente Teste", "111.444.777-35",
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+        server.expect(requestTo("https://darwin.test/api/schedules/create/fitin"))
+                .andExpect(method(POST))
+                .andRespond(withSuccess("{\"message\":\"criado\"}", MediaType.APPLICATION_JSON));
+
+        DarwinWriteMessageResponse response = client.criarAgendamentoEncaixe(request);
+
+        assertThat(response.message()).isEqualTo("criado");
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("atualizarAgendamento envia PUT /api/schedules/update")
+    void atualizarAgendamento_sendsExactContract() {
+        DarwinUpdateScheduleRequest request = new DarwinUpdateScheduleRequest(
+                "sch-1", "Confirmado", null, null, null, null, null, null);
+        server.expect(requestTo("https://darwin.test/api/schedules/update"))
+                .andExpect(method(PUT))
+                .andRespond(withSuccess("{\"message\":\"atualizado\"}", MediaType.APPLICATION_JSON));
+
+        DarwinWriteMessageResponse response = client.atualizarAgendamento(request);
+
+        assertThat(response.message()).isEqualTo("atualizado");
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("excluirAgendamento envia DELETE /api/schedules/delete?scheduleId=...")
+    void excluirAgendamento_sendsExactContract() {
+        server.expect(requestToUriTemplate(
+                        "https://darwin.test/api/schedules/delete?scheduleId={id}", "sch-1"))
+                .andExpect(method(DELETE))
+                .andRespond(withSuccess("{\"message\":\"excluido\"}", MediaType.APPLICATION_JSON));
+
+        DarwinWriteMessageResponse response = client.excluirAgendamento("sch-1");
+
+        assertThat(response.message()).isEqualTo("excluido");
+        server.verify();
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {400, 401, 403, 404, 429, 500})
+    @DisplayName("erros HTTP em endpoints de escrita tambem propagam como excecao (nao sao engolidos)")
+    void writeEndpoints_errorStatus_propagatesAsException(int status) {
+        server.expect(requestTo("https://darwin.test/api/schedules/create"))
+                .andRespond(withStatus(HttpStatusCode.valueOf(status)));
+
+        DarwinCreateScheduleRequest request = new DarwinCreateScheduleRequest(
+                "tt-1", "Marcado", "09:00", "09:30", "2026-07-20T00:00:00.000Z", null,
+                List.of(new DarwinInsuranceProcedureRef("ins-1", "proc-1")), null,
+                new DarwinCreatePatientRequest("Paciente Teste", "111.444.777-35",
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+
+        assertThatThrownBy(() -> client.criarAgendamento(request))
+                .isInstanceOf(RestClientResponseException.class);
+    }
+
+    private String readBody(org.springframework.http.client.ClientHttpRequest request) throws IOException {
+        org.springframework.mock.http.client.MockClientHttpRequest mockRequest =
+                (org.springframework.mock.http.client.MockClientHttpRequest) request;
+        return new String(mockRequest.getBodyAsBytes(), StandardCharsets.UTF_8);
     }
 }

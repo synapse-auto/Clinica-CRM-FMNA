@@ -72,6 +72,39 @@ public class Agendamento {
     @JdbcTypeCode(SqlTypes.JSON)
     private String externalPayload;
 
+    @Column(name = "profissional_externo_id", length = 100)
+    private String profissionalExternoId;
+
+    @Column(name = "profissional_nome", length = 120)
+    private String profissionalNome;
+
+    @Column(name = "procedimento_externo_id", length = 100)
+    private String procedimentoExternoId;
+
+    @Column(name = "convenio_externo_id", length = 100)
+    private String convenioExternoId;
+
+    @Column(name = "convenio_nome", length = 120)
+    private String convenioNome;
+
+    @Column(name = "local_externo_id", length = 100)
+    private String localExternoId;
+
+    @Column(name = "local_nome", length = 120)
+    private String localNome;
+
+    @Column(name = "timetable_id", length = 100)
+    private String timetableId;
+
+    @Column(name = "sync_status", length = 30)
+    private String syncStatus = "SYNCED";
+
+    @Column(name = "sync_mensagem_erro", length = 255)
+    private String syncMensagemErro;
+
+    @Column(name = "sincronizado_em")
+    private OffsetDateTime sincronizadoEm;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     private OffsetDateTime criadoEm;
 

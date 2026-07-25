@@ -51,7 +51,8 @@ class IntegracaoDarwinControllerTest {
     @DisplayName("status() nao depende da clinica atual nem da guarda de disponibilidade")
     void status_bypassesGuard() {
         when(darwinConsultaService.status())
-                .thenReturn(new DarwinStatusResponse(true, "DARWIN", true, false, true));
+                .thenReturn(new DarwinStatusResponse(
+                        true, "DARWIN", true, false, true, false, true, true, "KNOWN_CRM_PATIENTS_ONLY"));
 
         DarwinStatusResponse result = controller.status();
 

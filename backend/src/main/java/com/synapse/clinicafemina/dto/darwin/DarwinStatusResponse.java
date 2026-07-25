@@ -9,5 +9,9 @@ public record DarwinStatusResponse(
         String provider,
         boolean configured,
         boolean bulkSyncSupported,
-        boolean onDemandQueriesSupported
+        boolean onDemandQueriesSupported,
+        boolean clinicWideListingSupported,
+        boolean localMirrorEnabled,
+        boolean knownPatientsBackfillSupported,
+        String coverage
 ) {}

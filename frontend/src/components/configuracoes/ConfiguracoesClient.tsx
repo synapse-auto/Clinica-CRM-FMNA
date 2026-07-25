@@ -15,6 +15,7 @@ import {
   UserCheck2,
   ArrowRight,
 } from 'lucide-react';
+import { DarwinBackfillCard } from '@/components/configuracoes/DarwinBackfillCard';
 import { DemoCard } from '@/components/demo/DemoCard';
 import { PageHeader } from '@/components/demo/PageHeader';
 import { StatusBadge } from '@/components/demo/StatusBadge';
@@ -103,6 +104,8 @@ function ConfiguracoesResumoView({ resumo, user }: { resumo: ConfiguracaoResumo;
           <MedwareSync resumo={resumo.ultimaSincronizacaoMedware} />
         </DemoCard>
       </div>
+
+      <DarwinBackfillCard />
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <DemoCard

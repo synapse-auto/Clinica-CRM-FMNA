@@ -14,6 +14,7 @@ import type {
 } from '@/types/dashboard';
 import type { ConfiguracaoResumo } from '@/types/configuracoes';
 import type { Agendamento, AgendaOptions } from '@/types/agendamento';
+import type { AgendaAgendamento, AgendaCapabilities, AgendaProfissional } from '@/types/agenda';
 import type {
   AtendenteOption,
   AtendimentoPage,
@@ -106,6 +107,24 @@ export async function getAgendaOptions(inicio?: string, fim?: string): Promise<A
     ? `?${new URLSearchParams({ inicio, fim }).toString()}`
     : '';
   return getJson<AgendaOptions>(`/api/agendamentos/opcoes${params}`);
+}
+
+export async function getAgendaFmna(
+  startDate: string,
+  endDate: string,
+): Promise<AgendaAgendamento[]> {
+  const params = new URLSearchParams({ startDate, endDate });
+  return getJson<AgendaAgendamento[]>(`/api/agenda?${params.toString()}`);
+}
+
+export async function getAgendaProfissionaisSSR(): Promise<AgendaProfissional[]> {
+  // Lanca em caso de erro (inclusive 501 do Medware, que nao suporta catalogo) para
+  // que o chamador distinga "catalogo vazio" de "catalogo nao suportado".
+  return getJson<AgendaProfissional[]>('/api/agenda/profissionais');
+}
+
+export async function getAgendaCapabilities(): Promise<AgendaCapabilities> {
+  return getJson<AgendaCapabilities>('/api/agenda/capabilities');
 }
 
 export async function getAtendimentosIniciais(): Promise<AtendimentoPage<AtendimentoResumo>> {

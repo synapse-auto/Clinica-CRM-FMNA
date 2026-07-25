@@ -62,6 +62,10 @@ class DarwinConsultaServiceTest {
         assertThat(status.configured()).isTrue();
         assertThat(status.bulkSyncSupported()).isFalse();
         assertThat(status.onDemandQueriesSupported()).isTrue();
+        assertThat(status.clinicWideListingSupported()).isFalse();
+        assertThat(status.localMirrorEnabled()).isTrue();
+        assertThat(status.knownPatientsBackfillSupported()).isTrue();
+        assertThat(status.coverage()).isEqualTo("KNOWN_CRM_PATIENTS_ONLY");
         verifyNoInteractions(darwinClient);
     }
 

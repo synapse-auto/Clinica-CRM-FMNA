@@ -29,6 +29,9 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> 
             ExternalProviderType externalSource,
             String externalId);
 
+    @EntityGraph(attributePaths = {"paciente", "medico"})
+    List<Agendamento> findByClinicaIdAndPacienteIdOrderByDataHoraInicioDesc(Long clinicaId, Long pacienteId);
+
     @Query("""
             SELECT COUNT(a) FROM Agendamento a
             WHERE a.clinica.id = :clinicaId

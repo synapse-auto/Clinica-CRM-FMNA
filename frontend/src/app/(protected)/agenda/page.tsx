@@ -1,19 +1,35 @@
 import { AgendaClient } from '@/components/agenda/AgendaClient';
 import { redirect } from 'next/navigation';
-import { getAgendaOptions, getAgendamentos, isBackendAuthorizationError } from '@/services/backend';
-import type { Agendamento, AgendaOptions } from '@/types/agendamento';
+import {
+  getAgendaCapabilities,
+  getAgendaFmna,
+  getAgendaProfissionaisSSR,
+  isBackendAuthorizationError,
+} from '@/services/backend';
+import type { AgendaAgendamento, AgendaCapabilities, AgendaProfissional } from '@/types/agenda';
+
+// Capacidades conservadoras usadas somente quando GET /api/agenda/capabilities falha —
+// nunca inferidas do catalogo. Sem catalogo/fitIn/escrita ate que o endpoint responda.
+const FALLBACK_CAPABILITIES: AgendaCapabilities = {
+  provider: 'DESCONHECIDO',
+  supportsCatalog: false,
+  supportsWriteOperations: false,
+  supportsFitIn: false,
+  supportsClinicWideListing: false,
+  supportsPatientLookup: false,
+  supportsBackfill: false,
+  coverage: 'DESCONHECIDA',
+};
 
 export default async function AgendaPage() {
   const range = getCurrentWeekRange();
-  let appointments: Agendamento[] = [];
-  let options: AgendaOptions = { pacientes: [], medicos: [] };
+  let appointments: AgendaAgendamento[] = [];
+  let profissionais: AgendaProfissional[] = [];
+  let capabilities: AgendaCapabilities = FALLBACK_CAPABILITIES;
   let error: string | null = null;
 
   try {
-    [appointments, options] = await Promise.all([
-      getAgendamentos(range.inicio, range.fim),
-      getAgendaOptions(range.inicio, range.fim),
-    ]);
+    appointments = await getAgendaFmna(range.inicio, range.fim);
   } catch (caughtError) {
     if (isBackendAuthorizationError(caughtError)) {
       redirect('/login');
@@ -21,10 +37,35 @@ export default async function AgendaPage() {
     error = 'Não foi possível carregar a agenda. Verifique a conexão e tente novamente.';
   }
 
+  if (!error) {
+    try {
+      capabilities = await getAgendaCapabilities();
+    } catch (caughtError) {
+      if (isBackendAuthorizationError(caughtError)) {
+        redirect('/login');
+      }
+      // Endpoint de capacidades indisponivel — mantem o fallback conservador
+      // (sem catalogo/fitIn/escrita); nunca inferido do catalogo.
+    }
+
+    if (capabilities.supportsCatalog) {
+      try {
+        profissionais = await getAgendaProfissionaisSSR();
+      } catch (caughtError) {
+        if (isBackendAuthorizationError(caughtError)) {
+          redirect('/login');
+        }
+        // Falha transitoria do catalogo nao altera as capacidades ja resolvidas acima.
+        profissionais = [];
+      }
+    }
+  }
+
   return (
     <AgendaClient
       initialAppointments={appointments}
-      initialOptions={options}
+      initialProfissionais={profissionais}
+      initialCapabilities={capabilities}
       initialError={error}
       weekStart={range.weekStart}
     />

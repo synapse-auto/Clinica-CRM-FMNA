@@ -49,6 +49,21 @@ public class N8nCallbackAuthorizationService {
         return new Autorizacao(clinica.getId());
     }
 
+    /**
+     * Variante sem atendimentoId, para callbacks N8N que operam sobre a Agenda
+     * (paciente/agendamento) em vez de um atendimento de conversa específico.
+     */
+    @Transactional(readOnly = true)
+    public Clinica autorizarClinica(String secret) {
+        validarSecret(secret, null);
+        Clinica clinica = clinicaConfigService.obterClinicaAtual();
+        if (!Boolean.TRUE.equals(clinica.getUsaN8n())) {
+            log.warn("Chamada N8N (agenda) recusada por integracao desabilitada.");
+            throw new AccessDeniedException("Integracao N8N desabilitada.");
+        }
+        return clinica;
+    }
+
     private void validarSecret(String secret, Long atendimentoId) {
         if (callbackSecret == null || callbackSecret.isBlank()) {
             log.warn("Chamada N8N recusada por secret nao configurado. atendimento={}", atendimentoId);

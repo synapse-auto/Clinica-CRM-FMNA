@@ -1,6 +1,10 @@
 package com.synapse.clinicafemina.integration;
 
 import com.synapse.clinicafemina.dto.darwin.DarwinAvailableTimetablesResponse;
+import com.synapse.clinicafemina.dto.darwin.DarwinCreateFitInScheduleRequest;
+import com.synapse.clinicafemina.dto.darwin.DarwinCreatePatientRequest;
+import com.synapse.clinicafemina.dto.darwin.DarwinCreatePatientResponse;
+import com.synapse.clinicafemina.dto.darwin.DarwinCreateScheduleRequest;
 import com.synapse.clinicafemina.dto.darwin.DarwinInsuranceListResponse;
 import com.synapse.clinicafemina.dto.darwin.DarwinLocationRef;
 import com.synapse.clinicafemina.dto.darwin.DarwinPatientRecordDTO;
@@ -8,6 +12,9 @@ import com.synapse.clinicafemina.dto.darwin.DarwinPatientScheduleResponse;
 import com.synapse.clinicafemina.dto.darwin.DarwinProcedureListResponse;
 import com.synapse.clinicafemina.dto.darwin.DarwinProfessionalRef;
 import com.synapse.clinicafemina.dto.darwin.DarwinProfessionalTimetableDTO;
+import com.synapse.clinicafemina.dto.darwin.DarwinUpdatePatientRequest;
+import com.synapse.clinicafemina.dto.darwin.DarwinUpdateScheduleRequest;
+import com.synapse.clinicafemina.dto.darwin.DarwinWriteMessageResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
@@ -21,9 +28,13 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Cliente HTTP read-only para a API oficial de integração Darwin (v1.0.9).
- * Contrato estrito: somente os 8 endpoints GET documentados na coleção Postman oficial.
- * Nenhum método de escrita (create/update/archive/delete) é implementado nesta fase.
+ * Cliente HTTP para a API oficial de integração Darwin (v1.0.9). Contrato estrito:
+ * somente os 8 endpoints GET de consulta e os 6 endpoints de escrita
+ * (patients/create, patients/update, schedules/create, schedules/create/fitin,
+ * schedules/update, schedules/delete) documentados na coleção Postman oficial.
+ * Nenhuma escrita real contra a API Darwin foi validada nesta sessão — apenas
+ * contrato (métodos/paths/headers) via testes com mock; ver roteiro de smoke test
+ * separado antes de autorizar uso em produção.
  */
 @Component
 public class DarwinClient {
@@ -116,5 +127,57 @@ public class DarwinClient {
                 .queryParamIfPresent("amount", Optional.ofNullable(amount))
                 .build().toUriString();
         return restClient.get().uri(uri).retrieve().body(DarwinInsuranceListResponse.class);
+    }
+
+    public DarwinCreatePatientResponse criarPaciente(DarwinCreatePatientRequest request) {
+        return restClient.post()
+                .uri("/api/patients/create")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(DarwinCreatePatientResponse.class);
+    }
+
+    public DarwinPatientRecordDTO atualizarPaciente(DarwinUpdatePatientRequest request) {
+        return restClient.put()
+                .uri("/api/patients/update")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(DarwinPatientRecordDTO.class);
+    }
+
+    public DarwinWriteMessageResponse criarAgendamento(DarwinCreateScheduleRequest request) {
+        return restClient.post()
+                .uri("/api/schedules/create")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(DarwinWriteMessageResponse.class);
+    }
+
+    public DarwinWriteMessageResponse criarAgendamentoEncaixe(DarwinCreateFitInScheduleRequest request) {
+        return restClient.post()
+                .uri("/api/schedules/create/fitin")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(DarwinWriteMessageResponse.class);
+    }
+
+    public DarwinWriteMessageResponse atualizarAgendamento(DarwinUpdateScheduleRequest request) {
+        return restClient.put()
+                .uri("/api/schedules/update")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(DarwinWriteMessageResponse.class);
+    }
+
+    public DarwinWriteMessageResponse excluirAgendamento(String scheduleId) {
+        String uri = UriComponentsBuilder.fromPath("/api/schedules/delete")
+                .queryParam("scheduleId", scheduleId)
+                .build().toUriString();
+        return restClient.delete().uri(uri).retrieve().body(DarwinWriteMessageResponse.class);
     }
 }

@@ -1,3 +1,15 @@
+> ⚠️ **Documento desatualizado.** Descreve o design original (bulk sync
+> `GET /v1/patients`/`/v1/appointments` + "Garantia No-Outbound"). A
+> implementação real evoluiu para consultas sob demanda (`DarwinConsultaService`,
+> 8 endpoints `GET /api/...`) **e hoje inclui 6 endpoints de escrita**
+> (`/api/patients/create`, `/api/patients/update`, `/api/schedules/create`,
+> `/api/schedules/create/fitin`, `/api/schedules/update`,
+> `/api/schedules/delete`) em `DarwinClient`/`DarwinAgendaProvider`. A afirmação
+> "Garantia No-Outbound" abaixo **não é mais verdadeira** — não seguir este
+> documento para decisões de segurança/arquitetura. Ver
+> `n8n-agenda-handoff.md` (contrato real da Agenda) e `DarwinClient.java` (fonte
+> de verdade dos endpoints implementados).
+
 # Contrato de Integração — API Darwin (Consumo Read-only)
 
 Mapeia a interface `APIDarwin` do Diagrama de Classes (`importarPacientes()`, `importarAgendamentos()`, `importarDadosClinicos()`).

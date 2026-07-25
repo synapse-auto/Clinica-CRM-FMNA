@@ -62,6 +62,8 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
 
     Optional<Paciente> findByClinicaIdAndCpfHash(Long clinicaId, String cpfHash);
 
+    List<Paciente> findByClinicaIdAndCpfHashIsNotNull(Long clinicaId);
+
     Optional<Paciente> findByClinicaIdAndExternalSourceAndExternalId(
             Long clinicaId,
             ExternalProviderType externalSource,

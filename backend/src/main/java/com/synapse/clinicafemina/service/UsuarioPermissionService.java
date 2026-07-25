@@ -60,7 +60,17 @@ public class UsuarioPermissionService {
         }
     }
 
-    /** Exige GESTOR + adminInterno=true — usado exclusivamente pelo diagnóstico de foto UAZAP. */
+    @Transactional(readOnly = true)
+    public boolean podeExecutarBackfillDarwin(Authentication authentication) {
+        try {
+            exigirAdminInterno(authentication);
+            return true;
+        } catch (AccessDeniedException exception) {
+            return false;
+        }
+    }
+
+    /** Exige GESTOR + adminInterno=true. Reaproveitado pelo diagnóstico de foto UAZAP e pelo backfill Darwin. */
     @Transactional(readOnly = true)
     public Usuario exigirAdminInterno(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {

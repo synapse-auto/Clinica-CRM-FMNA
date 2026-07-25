@@ -56,7 +56,9 @@ public class DarwinConsultaService {
     }
 
     public DarwinStatusResponse status() {
-        return new DarwinStatusResponse(enabled, "DARWIN", configured, false, true);
+        return new DarwinStatusResponse(
+                enabled, "DARWIN", configured, false, true,
+                false, true, true, "KNOWN_CRM_PATIENTS_ONLY");
     }
 
     public List<DarwinProfessionalRef> listarProfissionaisDoLocal() {

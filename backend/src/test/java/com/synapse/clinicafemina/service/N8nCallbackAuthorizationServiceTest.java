@@ -113,6 +113,90 @@ class N8nCallbackAuthorizationServiceTest {
         verify(atendimentoRepository).findByIdAndClinicaId(30L, 7L);
     }
 
+    // ---- autorizarClinica(secret): variante Agenda, sem atendimentoId ----
+
+    @Test
+    void should_authorize_agenda_callback_and_resolve_deployment_clinic() {
+        Clinica clinica = clinica(9L, "fmna", true);
+        N8nCallbackAuthorizationService service = service("fmna-secret");
+        when(clinicaConfigService.obterClinicaAtual()).thenReturn(clinica);
+
+        Clinica autorizada = service.autorizarClinica("fmna-secret");
+
+        assertEquals(9L, autorizada.getId());
+    }
+
+    @Test
+    void should_reject_agenda_callback_secrets_from_another_deployment() {
+        N8nCallbackAuthorizationService ultraService = service("ultra-secret");
+        N8nCallbackAuthorizationService fmnaService = service("fmna-secret");
+
+        assertThrows(
+                BadCredentialsException.class,
+                () -> ultraService.autorizarClinica("fmna-secret")
+        );
+        assertThrows(
+                BadCredentialsException.class,
+                () -> fmnaService.autorizarClinica("ultra-secret")
+        );
+
+        verify(clinicaConfigService, never()).obterClinicaAtual();
+    }
+
+    @Test
+    void should_reject_agenda_callback_when_deployment_secret_is_not_configured() {
+        N8nCallbackAuthorizationService service = service(" ");
+
+        assertThrows(
+                BadCredentialsException.class,
+                () -> service.autorizarClinica("qualquer-secret")
+        );
+
+        verify(clinicaConfigService, never()).obterClinicaAtual();
+    }
+
+    @Test
+    void should_reject_agenda_callback_when_n8n_is_disabled_for_deployment_clinic() {
+        Clinica clinicaConfigurada = clinica(7L, "deployment", false);
+        N8nCallbackAuthorizationService service = service("callback-secret");
+        when(clinicaConfigService.obterClinicaAtual()).thenReturn(clinicaConfigurada);
+
+        assertThrows(
+                AccessDeniedException.class,
+                () -> service.autorizarClinica("callback-secret")
+        );
+    }
+
+    @Test
+    void should_isolate_overlapping_clinica_ids_between_two_deployments() {
+        // Duas clinicas com o MESMO id (colisao hipotetica de dados/seed), cada uma
+        // resolvida por um ClinicaConfigService independente (um por deployment). O
+        // secret de um deployment nunca deve autorizar o outro, mesmo com ids iguais,
+        // e a tentativa cruzada nunca deve sequer consultar o resolver do deployment alvo.
+        ClinicaConfigService clinicaConfigServiceUltra = org.mockito.Mockito.mock(ClinicaConfigService.class);
+        ClinicaConfigService clinicaConfigServiceFmna = org.mockito.Mockito.mock(ClinicaConfigService.class);
+        Clinica clinicaUltra = clinica(7L, "ultramedical", true);
+        Clinica clinicaFmna = clinica(7L, "fmna", true);
+        N8nCallbackAuthorizationService ultraService =
+                new N8nCallbackAuthorizationService(atendimentoRepository, clinicaConfigServiceUltra, "ultra-secret");
+        N8nCallbackAuthorizationService fmnaService =
+                new N8nCallbackAuthorizationService(atendimentoRepository, clinicaConfigServiceFmna, "fmna-secret");
+
+        assertThrows(BadCredentialsException.class, () -> ultraService.autorizarClinica("fmna-secret"));
+        assertThrows(BadCredentialsException.class, () -> fmnaService.autorizarClinica("ultra-secret"));
+        verify(clinicaConfigServiceUltra, never()).obterClinicaAtual();
+        verify(clinicaConfigServiceFmna, never()).obterClinicaAtual();
+
+        when(clinicaConfigServiceUltra.obterClinicaAtual()).thenReturn(clinicaUltra);
+        when(clinicaConfigServiceFmna.obterClinicaAtual()).thenReturn(clinicaFmna);
+
+        Clinica resolvidaUltra = ultraService.autorizarClinica("ultra-secret");
+        Clinica resolvidaFmna = fmnaService.autorizarClinica("fmna-secret");
+
+        assertEquals("ultramedical", resolvidaUltra.getSlug());
+        assertEquals("fmna", resolvidaFmna.getSlug());
+    }
+
     private N8nCallbackAuthorizationService service(String callbackSecret) {
         return new N8nCallbackAuthorizationService(
                 atendimentoRepository,
