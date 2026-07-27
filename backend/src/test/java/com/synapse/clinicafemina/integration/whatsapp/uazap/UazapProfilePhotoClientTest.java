@@ -17,6 +17,7 @@ import java.net.SocketTimeoutException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
+import static org.springframework.http.HttpHeaders.ACCEPT;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -55,6 +56,7 @@ class UazapProfilePhotoClientTest {
         server.expect(requestTo(CONTACTS_URL))
                 .andExpect(method(org.springframework.http.HttpMethod.POST))
                 .andExpect(header(AUTHORIZATION, "Bearer secret-token"))
+                .andExpect(header(ACCEPT, "application/json,image/jpeg,image/png,image/webp"))
                 .andExpect(jsonPath("$.type").value("contacts"))
                 .andExpect(jsonPath("$.action").value("getPicture"))
                 .andExpect(jsonPath("$.contacts.to").value("5511999999999"))
@@ -66,6 +68,42 @@ class UazapProfilePhotoClientTest {
         assertThat(response.contentType()).contains("application/json");
         assertThat(new String(response.body())).contains("cdn.example");
         server.verify();
+    }
+
+    @Test
+    void http201JsonIsAccepted() {
+        server.expect(requestTo(CONTACTS_URL))
+                .andRespond(withStatus(HttpStatusCode.valueOf(201))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"status\":\"success\",\"data\":{}}"));
+
+        UazapPictureRawResponse response = client.buscarFotoPerfil("5511999999999");
+
+        assertThat(response.statusCode()).isEqualTo(201);
+        assertThat(response.contentType()).contains("application/json");
+    }
+
+    @Test
+    void binaryImageResponseIsPreservedForValidation() {
+        byte[] jpeg = {(byte) 0xff, (byte) 0xd8, (byte) 0xff, 1};
+        server.expect(requestTo(CONTACTS_URL))
+                .andRespond(withSuccess(jpeg, MediaType.IMAGE_JPEG));
+
+        UazapPictureRawResponse response = client.buscarFotoPerfil("5511999999999");
+
+        assertThat(response.contentType()).contains("image/jpeg");
+        assertThat(response.body()).containsExactly(jpeg);
+    }
+
+    @Test
+    void responseBodyReadIsCapped() {
+        byte[] oversized = new byte[4 * 1024 * 1024];
+        server.expect(requestTo(CONTACTS_URL))
+                .andRespond(withSuccess(oversized, MediaType.APPLICATION_OCTET_STREAM));
+
+        UazapPictureRawResponse response = client.buscarFotoPerfil("5511999999999");
+
+        assertThat(response.body()).hasSize((3 * 1024 * 1024) + 1);
     }
 
     @ParameterizedTest

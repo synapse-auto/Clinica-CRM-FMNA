@@ -45,4 +45,14 @@ public class UazapPictureDiagnosticoController {
         Usuario admin = usuarioPermissionService.exigirAdminInterno(authentication);
         return ResponseEntity.ok(diagnosticoService.diagnosticar(admin.getClinica(), request.pacienteId()));
     }
+
+    @PostMapping("/reprocessar")
+    public ResponseEntity<Void> reprocessar(
+            @RequestBody @Valid UazapPictureDiagnosticoRequest request,
+            Authentication authentication
+    ) {
+        Usuario admin = usuarioPermissionService.exigirAdminInterno(authentication);
+        diagnosticoService.reprocessar(admin.getClinica(), request.pacienteId());
+        return ResponseEntity.accepted().build();
+    }
 }

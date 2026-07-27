@@ -51,8 +51,27 @@ describe('ContactAvatar — iniciais centralizadas', () => {
 
   it('should_show_the_image_when_a_valid_https_photo_url_is_provided', () => {
     render(<ContactAvatar name="Maria Silva" url="https://cdn.example.com/foto.jpg" />);
-    expect(screen.getByRole('img')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Maria Silva' })).toBeInTheDocument();
     expect(screen.queryByText('MS')).not.toBeInTheDocument();
+  });
+
+  it('should_show_the_authenticated_internal_patient_photo_url', () => {
+    render(<ContactAvatar name="Maria Silva" url="/api/pacientes/42/foto?v=abcdef123456" />);
+    expect(screen.getByRole('img')).toHaveAttribute(
+      'src',
+      '/api/pacientes/42/foto?v=abcdef123456',
+    );
+  });
+
+  it('should_reject_an_arbitrary_relative_url', () => {
+    render(<ContactAvatar name="Maria Silva" url="/uploads/arbitrary.svg" />);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByText('MS')).toBeInTheDocument();
+  });
+
+  it('should_not_expose_a_phone_number_in_the_image_alt', () => {
+    render(<ContactAvatar name="+55 (11) 99999-0000" url="/api/pacientes/42/foto?v=abcdef123456" />);
+    expect(screen.getByRole('img')).toHaveAttribute('alt', 'Foto do contato');
   });
 
   it('should_fallback_to_initials_automatically_when_the_image_fails_to_load', () => {

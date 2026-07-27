@@ -67,7 +67,8 @@ class UazapPictureDiagnosticoControllerTest {
         admin.setClinica(clinica);
         when(usuarioPermissionService.exigirAdminInterno(authentication)).thenReturn(admin);
         UazapPictureDiagnosticoResponse esperado = new UazapPictureDiagnosticoResponse(
-                200, "application/json", 10, "JSON", java.util.List.of(), true, false, false, true, null, java.util.List.of());
+                200, "application/json", 10, "JSON", java.util.List.of(), true, false, false,
+                "cdn.example", true, null, java.util.List.of());
         when(diagnosticoService.diagnosticar(clinica, 1L)).thenReturn(esperado);
 
         ResponseEntity<UazapPictureDiagnosticoResponse> response =
@@ -76,5 +77,21 @@ class UazapPictureDiagnosticoControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(esperado);
         verify(diagnosticoService).diagnosticar(clinica, 1L);
+    }
+
+    @Test
+    void reprocessarAllowsControlledRetryWithoutDiagnosticsPayload() {
+        Clinica clinica = new Clinica();
+        clinica.setId(9L);
+        Usuario admin = new Gestor();
+        admin.setClinica(clinica);
+        when(usuarioPermissionService.exigirAdminInterno(authentication)).thenReturn(admin);
+
+        ResponseEntity<Void> response =
+                controller.reprocessar(new UazapPictureDiagnosticoRequest(1L), authentication);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(response.getBody()).isNull();
+        verify(diagnosticoService).reprocessar(clinica, 1L);
     }
 }

@@ -18,6 +18,7 @@ public record UazapPictureEnrichmentOutcome(
         boolean possuiUrlHttps,
         boolean possuiQueryString,
         boolean possuiBase64,
+        String hostFoto,
         String fotoUrl,
         boolean fotoPersistida,
         String motivoNaoPersistida,
@@ -28,12 +29,32 @@ public record UazapPictureEnrichmentOutcome(
     /** Nenhuma chamada real foi feita à UAZAP (gate resolvido antes da requisição). */
     public static UazapPictureEnrichmentOutcome semTentativa(String motivo) {
         return new UazapPictureEnrichmentOutcome(
-                null, null, null, null, List.of(), false, false, false, null, false, motivo, List.of());
+                null, null, null, null, List.of(), false, false, false,
+                null, null, false, motivo, List.of());
     }
 
     public UazapPictureEnrichmentOutcome comFotoPersistida() {
         return new UazapPictureEnrichmentOutcome(
                 statusHttp, contentType, bodyBytes, formato, chaves,
-                possuiUrlHttps, possuiQueryString, possuiBase64, fotoUrl, true, motivoNaoPersistida, estrutura);
+                possuiUrlHttps, possuiQueryString, possuiBase64, hostFoto,
+                fotoUrl, true, motivoNaoPersistida, estrutura);
+    }
+
+    public UazapPictureEnrichmentOutcome comMotivo(String motivo) {
+        return new UazapPictureEnrichmentOutcome(
+                statusHttp,
+                contentType,
+                bodyBytes,
+                formato,
+                chaves,
+                possuiUrlHttps,
+                possuiQueryString,
+                possuiBase64,
+                hostFoto,
+                fotoUrl,
+                false,
+                motivo,
+                estrutura
+        );
     }
 }

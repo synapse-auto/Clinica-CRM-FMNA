@@ -123,6 +123,6 @@ class WhatsappInboundMapperUazapPictureEventTest {
 
         mapper().processarMensagemTexto(payload());
 
-        verify(eventPublisher).publishEvent(new UazapPictureEnrichmentRequestedEvent(20L));
+        verify(eventPublisher).publishEvent(new UazapPictureEnrichmentRequestedEvent(20L, 2L));
     }
 }

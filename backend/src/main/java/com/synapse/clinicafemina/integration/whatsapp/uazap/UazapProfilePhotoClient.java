@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -14,6 +14,8 @@ import org.springframework.web.client.RestClientException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.net.http.HttpClient;
+import java.time.Duration;
 
 /**
  * Cliente HTTP isolado, exclusivo da UAZAP, para consultar a foto de perfil de um contato.
@@ -32,6 +34,8 @@ import java.util.Map;
 @Component
 public class UazapProfilePhotoClient {
 
+    private static final int MAX_RESPONSE_BYTES = (3 * 1024 * 1024) + 1;
+
     private final RestClient restClient;
     private final WhatsappProperties.Uazap config;
 
@@ -47,9 +51,12 @@ public class UazapProfilePhotoClient {
     }
 
     private static RestClient buildRestClient(RestClient.Builder builder, WhatsappProperties.Uazap uazap) {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(uazap.getConnectTimeoutMs());
-        factory.setReadTimeout(uazap.getReadTimeoutMs());
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(uazap.getConnectTimeoutMs()))
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
+        factory.setReadTimeout(Duration.ofMillis(uazap.getReadTimeoutMs()));
         return builder.clone().requestFactory(factory).build();
     }
 
@@ -68,10 +75,13 @@ public class UazapProfilePhotoClient {
             return restClient.post()
                     .uri(contactsUrl())
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + config.getToken())
+                    .header(HttpHeaders.ACCEPT, "application/json,image/jpeg,image/png,image/webp")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payload)
                     .exchange((request, response) -> {
-                        byte[] body = response.getBody() != null ? response.getBody().readAllBytes() : new byte[0];
+                        byte[] body = response.getBody() != null
+                                ? response.getBody().readNBytes(MAX_RESPONSE_BYTES)
+                                : new byte[0];
                         String contentType = response.getHeaders().getContentType() == null
                                 ? null
                                 : response.getHeaders().getContentType().toString();

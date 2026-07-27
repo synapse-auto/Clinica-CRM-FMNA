@@ -9,7 +9,7 @@ type Props = {
 };
 
 export function ContactAvatar({ name, url, variant = 'list' }: Props) {
-  const safeUrl = validHttpsUrl(url);
+  const safeUrl = validAvatarUrl(url);
   const imageKey = safeUrl ? `${name}\u0000${safeUrl}` : null;
   const [failedImageKey, setFailedImageKey] = useState<string | null>(null);
   const showImage = imageKey !== null && imageKey !== failedImageKey;
@@ -24,7 +24,9 @@ export function ContactAvatar({ name, url, variant = 'list' }: Props) {
       {showImage && safeUrl ? (
         <img
           src={safeUrl}
-          alt={name}
+          alt={avatarAlt(name)}
+          loading="lazy"
+          decoding="async"
           className="absolute inset-0 h-full w-full rounded-full object-cover"
           onError={() => setFailedImageKey(imageKey)}
         />
@@ -67,12 +69,24 @@ function initials(name: string) {
   return letras.slice(0, 2).join('').toUpperCase();
 }
 
-function validHttpsUrl(value?: string | null) {
+const INTERNAL_PATIENT_PHOTO =
+  /^\/api\/pacientes\/\d+\/foto(?:\?v=[a-f0-9]{8,64})?$/i;
+
+function validAvatarUrl(value?: string | null) {
   if (typeof value !== 'string' || !value.trim()) return null;
+  const trimmed = value.trim();
+  if (INTERNAL_PATIENT_PHOTO.test(trimmed)) return trimmed;
   try {
-    const url = new URL(value.trim());
+    const url = new URL(trimmed);
     return url.protocol === 'https:' && !url.username && !url.password ? url.toString() : null;
   } catch {
     return null;
   }
+}
+
+function avatarAlt(name: string) {
+  const cleaned = name.normalize('NFKD').trim();
+  return cleaned && !TELEFONE_REGEX.test(cleaned) && !NOME_PLACEHOLDER.has(cleaned.toLowerCase())
+    ? name
+    : 'Foto do contato';
 }

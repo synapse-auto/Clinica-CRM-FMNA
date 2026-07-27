@@ -6,10 +6,15 @@ import com.synapse.clinicafemina.dto.paciente.PacienteResumoDTO;
 import com.synapse.clinicafemina.dto.paciente.PacientePageResponse;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.PacienteService;
+import com.synapse.clinicafemina.service.PacienteFotoPerfilService;
 import com.synapse.clinicafemina.service.PacienteTagService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -35,6 +41,7 @@ public class PacienteController {
     private final ClinicaConfigService clinicaConfigService;
     private final PacienteService pacienteService;
     private final PacienteTagService pacienteTagService;
+    private final PacienteFotoPerfilService pacienteFotoPerfilService;
 
     /**
      * GET /api/pacientes
@@ -66,6 +73,29 @@ public class PacienteController {
     public PacienteResumoDTO buscarPorId(@PathVariable Long id) {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
         return pacienteService.buscarPorId(id, clinica);
+    }
+
+    @GetMapping("/{id}/foto")
+    public ResponseEntity<byte[]> obterFoto(
+            @PathVariable Long id,
+            @RequestHeader(name = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch
+    ) {
+        Clinica clinica = clinicaConfigService.obterClinicaAtual();
+        PacienteFotoPerfilService.FotoArmazenada foto =
+                pacienteFotoPerfilService.obter(id, clinica.getId());
+        String etag = "\"" + foto.sha256() + "\"";
+        if (etag.equals(ifNoneMatch)) {
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED)
+                    .eTag(foto.sha256())
+                    .cacheControl(CacheControl.noCache().cachePrivate())
+                    .build();
+        }
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(foto.contentType()))
+                .contentLength(foto.conteudo().length)
+                .eTag(foto.sha256())
+                .cacheControl(CacheControl.noCache().cachePrivate())
+                .body(foto.conteudo());
     }
 
     @GetMapping("/{id}/tags")

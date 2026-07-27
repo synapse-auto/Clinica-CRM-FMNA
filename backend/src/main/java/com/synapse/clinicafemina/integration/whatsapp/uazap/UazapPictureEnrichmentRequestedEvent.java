@@ -5,5 +5,5 @@ package com.synapse.clinicafemina.integration.whatsapp.uazap;
  * atendimento já commitados). Consumido apenas após o commit da transação
  * ({@code TransactionPhase.AFTER_COMMIT}), fora do caminho crítico do webhook.
  */
-public record UazapPictureEnrichmentRequestedEvent(Long pacienteId) {
+public record UazapPictureEnrichmentRequestedEvent(Long pacienteId, Long clinicaId) {
 }

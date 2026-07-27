@@ -17,6 +17,7 @@ public record UazapPictureDiagnosticoResponse(
         boolean possuiUrlHttps,
         boolean possuiQueryString,
         boolean possuiBase64,
+        String hostFoto,
         boolean fotoPersistida,
         String motivoNaoPersistida,
         /** Caminhos de chaves + tipos (ex.: {@code "data.picture:string"}) — nunca valores, URLs, telefones ou nomes. */
@@ -32,6 +33,7 @@ public record UazapPictureDiagnosticoResponse(
                 outcome.possuiUrlHttps(),
                 outcome.possuiQueryString(),
                 outcome.possuiBase64(),
+                outcome.hostFoto(),
                 outcome.fotoPersistida(),
                 outcome.motivoNaoPersistida(),
                 outcome.estrutura()

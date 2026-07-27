@@ -16,7 +16,10 @@ class UazapPicturePayloadParserTest {
 
     @BeforeEach
     void setUp() {
-        parser = new UazapPicturePayloadParser(new ObjectMapper());
+        parser = new UazapPicturePayloadParser(
+                new ObjectMapper(),
+                new UazapProfilePhotoImageValidator()
+        );
     }
 
     @Test
@@ -66,7 +69,7 @@ class UazapPicturePayloadParserTest {
         UazapPictureEnrichmentOutcome outcome = parse(200, "application/json", "{\"picture\":\"data:image/png;base64,AAAA\"}");
 
         assertThat(outcome.fotoUrl()).isNull();
-        assertThat(outcome.motivoNaoPersistida()).isEqualTo("ESQUEMA_NAO_HTTPS");
+        assertThat(outcome.motivoNaoPersistida()).isEqualTo("MAGIC_BYTES_INVALIDOS");
     }
 
     @Test
@@ -97,14 +100,15 @@ class UazapPicturePayloadParserTest {
     }
 
     @Test
-    @DisplayName("URL com query string (possivelmente temporária/assinada) não é persistida")
-    void temporaryOrSignedUrl_isNotPersisted() {
+    @DisplayName("URL assinada é aceita como fonte transitória para armazenamento interno")
+    void temporaryOrSignedUrl_isAcceptedAsTransientSource() {
         UazapPictureEnrichmentOutcome outcome = parse(200, "application/json",
                 "{\"picture\":\"https://cdn.example/foto.jpg?X-Amz-Signature=abc&Expires=123\"}");
 
-        assertThat(outcome.fotoUrl()).isNull();
+        assertThat(outcome.fotoUrl()).contains("X-Amz-Signature");
         assertThat(outcome.possuiQueryString()).isTrue();
-        assertThat(outcome.motivoNaoPersistida()).isEqualTo("URL_POSSIVELMENTE_TEMPORARIA_OU_ASSINADA");
+        assertThat(outcome.hostFoto()).isEqualTo("cdn.example");
+        assertThat(outcome.motivoNaoPersistida()).isNull();
     }
 
     @Test
@@ -126,18 +130,46 @@ class UazapPicturePayloadParserTest {
     }
 
     @Test
-    @DisplayName("Content-Type image/* é reconhecido mas não persistido (sem estratégia de armazenamento)")
-    void imageContentType_isRecognizedButNotPersisted() {
+    @DisplayName("Content-Type image/* válido é extraído como bytes para armazenamento interno")
+    void imageContentType_isExtractedAsBytes() {
         UazapPictureEnrichmentOutcome outcome = parser.parse(
                 new UazapPictureRawResponse(200, "image/jpeg", new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF}));
 
         assertThat(outcome.formato()).isEqualTo("IMAGEM");
         assertThat(outcome.fotoUrl()).isNull();
-        assertThat(outcome.motivoNaoPersistida()).isEqualTo("RESPOSTA_BINARIA_SEM_ESTRATEGIA_DE_ARMAZENAMENTO");
+        assertThat(outcome.motivoNaoPersistida()).isNull();
     }
 
     @Test
-    @DisplayName("status HTTP de erro é reportado sem tentar extrair foto")
+    @DisplayName("data URI PNG válida é decodificada como bytes")
+    void validPngDataUriIsDecodedAsBytes() {
+        String pngBase64 = "iVBORw0KGgo=";
+        UazapPictureExtraction extraction = parser.extract(new UazapPictureRawResponse(
+                200,
+                "application/json",
+                ("{\"data\":{\"picture\":\"data:image/png;base64," + pngBase64 + "\"}}")
+                        .getBytes(StandardCharsets.UTF_8)
+        ));
+
+        assertThat(extraction.source()).isNotNull();
+        assertThat(extraction.source().type()).isEqualTo(UazapPictureSource.Type.BYTES);
+        assertThat(extraction.source().contentType()).isEqualTo("image/png");
+        assertThat(extraction.source().bytes()).hasSize(8);
+    }
+
+    @Test
+    void urlFragmentIsRejected() {
+        UazapPictureEnrichmentOutcome outcome = parse(
+                200,
+                "application/json",
+                "{\"data\":{\"avatar\":\"https://cdn.example/photo.jpg#fragment\"}}"
+        );
+
+        assertThat(outcome.fotoUrl()).isNull();
+        assertThat(outcome.motivoNaoPersistida()).isEqualTo("URL_CONTEM_FRAGMENTO");
+    }
+
+    @Test
     void errorStatus_isReportedWithoutExtractingPhoto() {
         UazapPictureEnrichmentOutcome outcome = parser.parse(
                 new UazapPictureRawResponse(404, "application/json", "{\"error\":\"not found\"}".getBytes(StandardCharsets.UTF_8)));

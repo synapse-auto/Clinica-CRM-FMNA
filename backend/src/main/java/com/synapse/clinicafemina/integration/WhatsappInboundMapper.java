@@ -571,7 +571,10 @@ public class WhatsappInboundMapper {
         if (whatsappProperties.resolveProvider() != WhatsappProviderType.UAZAP) {
             return;
         }
-        eventPublisher.publishEvent(new UazapPictureEnrichmentRequestedEvent(paciente.getId()));
+        eventPublisher.publishEvent(new UazapPictureEnrichmentRequestedEvent(
+                paciente.getId(),
+                paciente.getClinica().getId()
+        ));
     }
 
     private Optional<Clinica> resolverClinicaPorPayload(Map<String, Object> value) {

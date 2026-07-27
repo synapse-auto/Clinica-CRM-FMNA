@@ -177,6 +177,10 @@ export async function forwardBackendRequest(
   if (contentDisposition) headers.set('Content-Disposition', contentDisposition);
   const contentLength = response.headers.get('content-length');
   if (contentLength) headers.set('Content-Length', contentLength);
+  const etag = response.headers.get('etag');
+  if (etag) headers.set('ETag', etag);
+  const cacheControl = response.headers.get('cache-control');
+  if (cacheControl) headers.set('Cache-Control', cacheControl);
   const body = response.status === 204 || response.status === 304
     ? null
     : await response.arrayBuffer();

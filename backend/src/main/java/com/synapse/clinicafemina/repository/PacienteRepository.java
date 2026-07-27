@@ -6,7 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -54,6 +56,18 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
     }
 
     Optional<Paciente> findByIdAndClinicaId(Long id, Long clinicaId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT p FROM Paciente p
+            WHERE p.id = :id
+              AND p.clinica.id = :clinicaId
+              AND p.deletadoEm IS NULL
+            """)
+    Optional<Paciente> findForPhotoUpdateByIdAndClinicaId(
+            @Param("id") Long id,
+            @Param("clinicaId") Long clinicaId
+    );
 
     /** Localiza paciente pelo número E.164 normalizado (usado na integração WhatsApp). */
     Optional<Paciente> findByClinicaIdAndTelefoneNormalizado(Long clinicaId, String telefoneNormalizado);

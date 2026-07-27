@@ -77,6 +77,8 @@ public class WhatsappProperties {
         private int readTimeoutMs = 15000;
         /** {@code UAZAP_PICTURE_DIAGNOSTICS_ENABLED} — desabilitado por padrão. Ver {@code UazapPictureDiagnosticoController}. */
         private boolean pictureDiagnosticsEnabled = false;
+        /** Hosts HTTPS adicionais, separados por virgula, autorizados a servir fotos. */
+        private String pictureAllowedHosts = "";
 
         public String getBaseUrl() {
             return baseUrl;
@@ -148,6 +150,14 @@ public class WhatsappProperties {
 
         public void setPictureDiagnosticsEnabled(boolean pictureDiagnosticsEnabled) {
             this.pictureDiagnosticsEnabled = pictureDiagnosticsEnabled;
+        }
+
+        public String getPictureAllowedHosts() {
+            return pictureAllowedHosts;
+        }
+
+        public void setPictureAllowedHosts(String pictureAllowedHosts) {
+            this.pictureAllowedHosts = pictureAllowedHosts;
         }
     }
 }

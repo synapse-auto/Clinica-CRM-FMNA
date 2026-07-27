@@ -22,18 +22,18 @@ class UazapPictureEnrichmentEventListenerTest {
     void delegatesToEnrichmentService() {
         UazapPictureEnrichmentEventListener listener = new UazapPictureEnrichmentEventListener(enrichmentService);
 
-        listener.aoConfirmarMensagem(new UazapPictureEnrichmentRequestedEvent(42L));
+        listener.aoConfirmarMensagem(new UazapPictureEnrichmentRequestedEvent(42L, 7L));
 
-        verify(enrichmentService).enriquecer(42L);
+        verify(enrichmentService).enriquecer(42L, 7L);
     }
 
     @Test
     @DisplayName("exceção do serviço de enriquecimento nunca propaga (webhook já foi respondido)")
     void serviceFailure_neverPropagates() {
         UazapPictureEnrichmentEventListener listener = new UazapPictureEnrichmentEventListener(enrichmentService);
-        when(enrichmentService.enriquecer(42L)).thenThrow(new RuntimeException("falha simulada"));
+        when(enrichmentService.enriquecer(42L, 7L)).thenThrow(new RuntimeException("falha simulada"));
 
-        assertThatCode(() -> listener.aoConfirmarMensagem(new UazapPictureEnrichmentRequestedEvent(42L)))
+        assertThatCode(() -> listener.aoConfirmarMensagem(new UazapPictureEnrichmentRequestedEvent(42L, 7L)))
                 .doesNotThrowAnyException();
     }
 }

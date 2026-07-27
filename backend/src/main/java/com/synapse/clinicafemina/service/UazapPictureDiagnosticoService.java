@@ -9,7 +9,6 @@ import com.synapse.clinicafemina.integration.whatsapp.uazap.UazapProfilePhotoEnr
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Orquestra o diagnóstico administrativo: garante que o paciente pertence à clínica do admin
@@ -23,11 +22,17 @@ public class UazapPictureDiagnosticoService {
     private final PacienteRepository pacienteRepository;
     private final UazapProfilePhotoEnrichmentService enrichmentService;
 
-    @Transactional
     public UazapPictureDiagnosticoResponse diagnosticar(Clinica clinica, Long pacienteId) {
         Paciente paciente = pacienteRepository.findByIdAndClinicaId(pacienteId, clinica.getId())
                 .orElseThrow(() -> new NotFoundException("Paciente não encontrado"));
-        UazapPictureEnrichmentOutcome outcome = enrichmentService.enriquecer(paciente.getId());
+        UazapPictureEnrichmentOutcome outcome =
+                enrichmentService.enriquecer(paciente.getId(), clinica.getId(), true);
         return UazapPictureDiagnosticoResponse.from(outcome);
+    }
+
+    public void reprocessar(Clinica clinica, Long pacienteId) {
+        Paciente paciente = pacienteRepository.findByIdAndClinicaId(pacienteId, clinica.getId())
+                .orElseThrow(() -> new NotFoundException("Paciente nao encontrado"));
+        enrichmentService.enriquecer(paciente.getId(), clinica.getId(), true);
     }
 }

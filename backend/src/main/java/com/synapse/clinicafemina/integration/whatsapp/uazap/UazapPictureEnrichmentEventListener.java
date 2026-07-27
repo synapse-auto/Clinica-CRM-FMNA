@@ -26,7 +26,7 @@ public class UazapPictureEnrichmentEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void aoConfirmarMensagem(UazapPictureEnrichmentRequestedEvent event) {
         try {
-            enrichmentService.enriquecer(event.pacienteId());
+            enrichmentService.enriquecer(event.pacienteId(), event.clinicaId());
         } catch (Exception exception) {
             log.warn("Falha não tratada no enriquecimento assíncrono de foto UAZAP; fluxo do webhook não é afetado. tipoErro={}",
                     exception.getClass().getSimpleName());
