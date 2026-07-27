@@ -13,6 +13,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.OffsetDateTime;
 import java.util.Collection;
@@ -26,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -199,7 +202,7 @@ class AtendimentoServiceTest {
 
         when(atendimentoRepository.findByIdAndClinicaId(3L, 1L))
                 .thenReturn(Optional.of(atendimento));
-        when(usuarioRepository.findAtivoByIdAndClinicaId(10L, 1L))
+        when(usuarioRepository.findById(10L))
                 .thenReturn(Optional.of(destinatario));
         when(usuarioRepository.findAtivoByIdAndClinicaId(11L, 1L))
                 .thenReturn(Optional.of(responsavel));
@@ -229,7 +232,7 @@ class AtendimentoServiceTest {
 
         when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L))
                 .thenReturn(Optional.of(atendimento));
-        when(usuarioRepository.findAtivoByIdAndClinicaId(10L, 1L))
+        when(usuarioRepository.findById(10L))
                 .thenReturn(Optional.of(destinatario));
         when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(transferenciaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -239,8 +242,9 @@ class AtendimentoServiceTest {
             mensagem.setId(88L);
             return mensagem;
         });
-        when(notificationService.notificarTransferenciaIa(eq(atendimento), any(Mensagem.class), anyString()))
-                .thenReturn(2);
+        when(notificationService.notificarTransferenciaIa(
+                eq(atendimento), any(Mensagem.class), anyString(), eq(destinatario), any()))
+                .thenReturn(new AtendimentoNotificationService.TransferenciaNotificacaoResultado(2, List.of(10L)));
 
         var result = service.transferirPorN8n(
                 3L,
@@ -268,7 +272,8 @@ class AtendimentoServiceTest {
                 eventos.stream().map(Mensagem::getTipoMedia).toList());
         assertEquals("Fim das mensagens com a IA", eventos.get(0).getConteudo());
         assertEquals("Atendimento #3 transferido para humano", eventos.get(1).getConteudo());
-        verify(notificationService).notificarTransferenciaIa(eq(atendimento), any(Mensagem.class), anyString());
+        verify(notificationService).notificarTransferenciaIa(
+                eq(atendimento), any(Mensagem.class), anyString(), eq(destinatario), any());
     }
 
     @Test
@@ -278,11 +283,13 @@ class AtendimentoServiceTest {
         destinatario.setClinica(clinica);
         destinatario.setPerfil("RECEPCIONISTA");
         when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L)).thenReturn(Optional.of(atendimento));
-        when(usuarioRepository.findAtivoByIdAndClinicaId(10L, 1L)).thenReturn(Optional.of(destinatario));
+        when(usuarioRepository.findById(10L)).thenReturn(Optional.of(destinatario));
         when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(transferenciaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(notificationService.notificarTransferenciaIa(eq(atendimento), isNull(), anyString())).thenReturn(0);
+        when(notificationService.notificarTransferenciaIa(
+                eq(atendimento), isNull(), anyString(), eq(destinatario), any()))
+                .thenReturn(new AtendimentoNotificationService.TransferenciaNotificacaoResultado(0, List.of()));
 
         var result = service.transferirPorN8n(
                 3L,
@@ -301,10 +308,21 @@ class AtendimentoServiceTest {
 
     @Test
     void should_make_n8n_transfer_idempotent_when_already_human() {
+        Recepcionista destinatario = new Recepcionista();
+        destinatario.setId(10L);
+        destinatario.setClinica(clinica);
+        destinatario.setPerfil("RECEPCIONISTA");
         atendimento.setTratadoPorIa(false);
+        atendimento.setAtendentePrincipal(destinatario);
         atendimento.setHumanoDesde(OffsetDateTime.parse("2026-07-03T12:00:00Z"));
         when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L))
                 .thenReturn(Optional.of(atendimento));
+        when(usuarioRepository.findById(10L)).thenReturn(Optional.of(destinatario));
+        when(mensagemRepository.existsSystemEvent(3L, 1L, "AI_HANDOFF_ENDED")).thenReturn(true);
+        when(mensagemRepository.existsSystemEvent(3L, 1L, "HUMAN_HANDOFF_START")).thenReturn(true);
+        when(notificationService.notificarTransferenciaIa(
+                eq(atendimento), isNull(), anyString(), eq(destinatario), any()))
+                .thenReturn(new AtendimentoNotificationService.TransferenciaNotificacaoResultado(0, List.of()));
 
         var result = service.transferirPorN8n(
                 3L,
@@ -317,10 +335,143 @@ class AtendimentoServiceTest {
         assertFalse(result.resumoRegistrado());
         assertEquals(0, result.notificacoesCriadas());
         verify(atendimentoRepository, never()).save(any());
-        verify(usuarioRepository, never()).findAtivoByIdAndClinicaId(anyLong(), anyLong());
+        verify(usuarioRepository).findById(10L);
         verify(transferenciaRepository, never()).save(any());
-        verify(notificationService, never()).notificarTransferenciaIa(any(), any(), anyString());
+        verify(notificationService).notificarTransferenciaIa(
+                eq(atendimento), isNull(), anyString(), eq(destinatario), any());
         verify(mensagemRepository, never()).save(any());
+    }
+
+    @Test
+    void should_repair_missing_handoff_events_for_idempotent_n8n_transfer() {
+        Recepcionista destinatario = new Recepcionista();
+        destinatario.setId(10L);
+        destinatario.setClinica(clinica);
+        destinatario.setPerfil("RECEPCIONISTA");
+        atendimento.setTratadoPorIa(false);
+        atendimento.setAtendentePrincipal(destinatario);
+        atendimento.setHumanoDesde(OffsetDateTime.parse("2026-07-03T12:00:00Z"));
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L)).thenReturn(Optional.of(atendimento));
+        when(usuarioRepository.findById(10L)).thenReturn(Optional.of(destinatario));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationService.notificarTransferenciaIa(
+                eq(atendimento), isNull(), anyString(), eq(destinatario), any()))
+                .thenReturn(new AtendimentoNotificationService.TransferenciaNotificacaoResultado(0, List.of()));
+
+        var result = service.transferirPorN8n(3L, new TransferirAtendimentoRequest(10L, "N8N"), 1L);
+
+        assertTrue(result.jaEstavaTransferido());
+        assertEquals(2, result.eventosCriados());
+        verify(mensagemRepository, times(2)).save(any(Mensagem.class));
+        verify(transferenciaRepository, never()).save(any());
+    }
+
+    @Test
+    void should_broadcast_n8n_transfer_only_after_commit() {
+        Recepcionista destinatario = new Recepcionista();
+        destinatario.setId(10L);
+        destinatario.setClinica(clinica);
+        destinatario.setPerfil("RECEPCIONISTA");
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L)).thenReturn(Optional.of(atendimento));
+        when(usuarioRepository.findById(10L)).thenReturn(Optional.of(destinatario));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferenciaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationService.notificarTransferenciaIa(
+                eq(atendimento), isNull(), anyString(), eq(destinatario), any()))
+                .thenReturn(new AtendimentoNotificationService.TransferenciaNotificacaoResultado(1, List.of(10L)));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.transferirPorN8n(3L, new TransferirAtendimentoRequest(10L, "N8N"), 1L);
+            verify(broadcastService, never()).broadcastTransferenciaParaDestinatarios(
+                    any(), anyLong(), anyLong(), anyLong(), anyString(), anyLong(), anyString(), anyString());
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        verify(broadcastService).broadcastTransferenciaParaDestinatarios(
+                any(), eq(10L), eq(3L), eq(0L), eq("IA"), eq(2L), anyString(), anyString());
+    }
+
+    @Test
+    void should_change_n8n_human_transfer_destination_when_requested() {
+        Recepcionista anterior = new Recepcionista();
+        anterior.setId(9L);
+        anterior.setClinica(clinica);
+        anterior.setPerfil("RECEPCIONISTA");
+        Recepcionista destino = new Recepcionista();
+        destino.setId(10L);
+        destino.setClinica(clinica);
+        destino.setPerfil("RECEPCIONISTA");
+        atendimento.setTratadoPorIa(false);
+        atendimento.setAtendentePrincipal(anterior);
+        atendimento.setHumanoDesde(OffsetDateTime.parse("2026-07-03T12:00:00Z"));
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L)).thenReturn(Optional.of(atendimento));
+        when(usuarioRepository.findById(10L)).thenReturn(Optional.of(destino));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferenciaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.existsSystemEvent(3L, 1L, "AI_HANDOFF_ENDED")).thenReturn(true);
+        when(mensagemRepository.existsSystemEvent(3L, 1L, "HUMAN_HANDOFF_START")).thenReturn(true);
+        when(notificationService.notificarTransferenciaIa(
+                eq(atendimento), isNull(), anyString(), eq(destino), any()))
+                .thenReturn(new AtendimentoNotificationService.TransferenciaNotificacaoResultado(1, List.of(10L)));
+
+        var result = service.transferirPorN8n(3L, new TransferirAtendimentoRequest(10L, "Nova fila"), 1L);
+
+        assertTrue(result.jaEstavaTransferido());
+        assertTrue(result.destinatarioAlterado());
+        assertEquals(10L, atendimento.getAtendentePrincipal().getId());
+        verify(transferenciaRepository).save(any(TransferenciaAtendimento.class));
+    }
+
+    @Test
+    void should_reject_n8n_transfer_destination_from_another_clinic() {
+        Clinica outraClinica = new Clinica();
+        outraClinica.setId(2L);
+        Recepcionista destinatario = new Recepcionista();
+        destinatario.setId(10L);
+        destinatario.setClinica(outraClinica);
+        destinatario.setPerfil("RECEPCIONISTA");
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L)).thenReturn(Optional.of(atendimento));
+        when(usuarioRepository.findById(10L)).thenReturn(Optional.of(destinatario));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.transferirPorN8n(3L, new TransferirAtendimentoRequest(10L, "N8N"), 1L));
+
+        assertTrue(error.getMessage().contains("outra clínica"));
+        verify(transferenciaRepository, never()).save(any());
+    }
+
+    @Test
+    void should_reject_inactive_n8n_transfer_destination() {
+        Recepcionista destinatario = new Recepcionista();
+        destinatario.setId(10L);
+        destinatario.setClinica(clinica);
+        destinatario.setPerfil("RECEPCIONISTA");
+        destinatario.setAtivo(false);
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L)).thenReturn(Optional.of(atendimento));
+        when(usuarioRepository.findById(10L)).thenReturn(Optional.of(destinatario));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> service.transferirPorN8n(3L, new TransferirAtendimentoRequest(10L, "N8N"), 1L));
+
+        assertTrue(error.getMessage().contains("inativo"));
+    }
+
+    @Test
+    void should_reject_medico_as_n8n_transfer_destination() {
+        Medico destinatario = new Medico();
+        destinatario.setId(10L);
+        destinatario.setClinica(clinica);
+        destinatario.setPerfil("MEDICO");
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L)).thenReturn(Optional.of(atendimento));
+        when(usuarioRepository.findById(10L)).thenReturn(Optional.of(destinatario));
+
+        assertThrows(IllegalStateException.class,
+                () -> service.transferirPorN8n(3L, new TransferirAtendimentoRequest(10L, "N8N"), 1L));
     }
 
     @Test

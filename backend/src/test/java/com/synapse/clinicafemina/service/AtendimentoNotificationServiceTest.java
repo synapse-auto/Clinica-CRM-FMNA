@@ -2,6 +2,7 @@ package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Clinica;
+import com.synapse.clinicafemina.domain.Gestor;
 import com.synapse.clinicafemina.domain.Mensagem;
 import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.domain.Usuario;
@@ -46,7 +47,8 @@ class AtendimentoNotificationServiceTest {
 
         when(usuarioRepository.findRecepcionistasAtivosByClinicaId(1L))
                 .thenReturn(List.of(recepcionista));
-        when(repository.existsByUsuarioIdAndMensagemIdAndTipo(10L, 88L, "TRANSFERENCIA_IA"))
+        when(repository.existsByUsuarioIdAndAtendimentoIdAndTipoDesde(
+                eq(10L), eq(30L), eq("TRANSFERENCIA_IA"), any()))
                 .thenReturn(false);
 
         AtendimentoNotificationService service = new AtendimentoNotificationService(repository, usuarioRepository);
@@ -55,6 +57,33 @@ class AtendimentoNotificationServiceTest {
 
         assertEquals(1, created);
         verify(usuarioRepository).findRecepcionistasAtivosByClinicaId(1L);
+        verify(repository).save(any());
+    }
+
+    @Test
+    void should_notify_gestor_selected_as_transfer_destination() {
+        Clinica clinica = new Clinica();
+        clinica.setId(1L);
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        Gestor gestor = new Gestor();
+        gestor.setId(1L);
+        gestor.setClinica(clinica);
+        gestor.setPerfil("GESTOR");
+
+        when(usuarioRepository.findRecepcionistasAtivosByClinicaId(1L)).thenReturn(List.of());
+        when(repository.existsByUsuarioIdAndAtendimentoIdAndTipoDesde(
+                eq(1L), eq(30L), eq("TRANSFERENCIA_IA"), any()))
+                .thenReturn(false);
+
+        AtendimentoNotificationService service = new AtendimentoNotificationService(repository, usuarioRepository);
+        var result = service.notificarTransferenciaIa(
+                atendimento, null, "N8N", gestor, java.time.OffsetDateTime.now()
+        );
+
+        assertEquals(1, result.criadas());
+        assertEquals(List.of(1L), result.destinatariosCriados());
         verify(repository).save(any());
     }
 }

@@ -33,6 +33,20 @@ public interface NotificacaoAtendimentoRepository extends JpaRepository<Notifica
 
     boolean existsByUsuarioIdAndAtendimentoIdAndTipo(Long usuarioId, Long atendimentoId, String tipo);
 
+    @Query("""
+            SELECT COUNT(n) > 0 FROM NotificacaoAtendimento n
+            WHERE n.usuario.id = :usuarioId
+              AND n.atendimento.id = :atendimentoId
+              AND n.tipo = :tipo
+              AND n.criadoEm >= :inicioCiclo
+            """)
+    boolean existsByUsuarioIdAndAtendimentoIdAndTipoDesde(
+            @Param("usuarioId") Long usuarioId,
+            @Param("atendimentoId") Long atendimentoId,
+            @Param("tipo") String tipo,
+            @Param("inicioCiclo") OffsetDateTime inicioCiclo
+    );
+
     @Modifying
     @Query("""
             UPDATE NotificacaoAtendimento n SET n.lidaEm = :lidaEm

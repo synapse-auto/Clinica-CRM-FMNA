@@ -79,6 +79,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [transferAlert, setTransferAlert] = useState<{ atendimentoId: number; descricao: string } | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const knownNotifications = useRef<Set<number> | null>(null);
@@ -212,6 +213,8 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       }
     }
   }, []);
+  const loadActiveConversationRef = useRef(loadActiveConversation);
+  loadActiveConversationRef.current = loadActiveConversation;
 
   // Marcar como lido fora do caminho crítico: otimista na lista e reconciliado em segundo plano.
   const markAsReadInBackground = useCallback((id: number) => {
@@ -316,8 +319,23 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
         ]);
         const ids = new Set(items.map((item) => item.id));
         if (knownNotifications.current) {
-          const hasNew = items.some((item) => !knownNotifications.current?.has(item.id));
-          if (hasNew) setNotificationCount(count);
+          const novas = items.filter((item) => !knownNotifications.current?.has(item.id));
+          if (novas.length > 0) {
+            setNotificationCount(count);
+            const transferencia = novas.find((item) => (
+              item.tipo === 'TRANSFERENCIA_IA' || item.tipo === 'ATENDIMENTO_ATRIBUIDO'
+            ));
+            if (transferencia) {
+              setTransferAlert({
+                atendimentoId: transferencia.atendimentoId,
+                descricao: transferencia.descricao,
+              });
+              void refreshListRef.current();
+              if (activeIdRef.current === transferencia.atendimentoId && !activeInFlight.current) {
+                void loadActiveConversationRef.current(transferencia.atendimentoId, 'revalidate');
+              }
+            }
+          }
         } else {
           setNotificationCount(count);
         }
@@ -328,7 +346,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       }
     }
     void pollNotifications();
-    const interval = window.setInterval(() => void pollNotifications(), 10000);
+    const interval = window.setInterval(() => void pollNotifications(), 5000);
     return () => window.clearInterval(interval);
   }, []);
 
@@ -396,6 +414,32 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
           {notificationCount} notificação(ões) nova(s)
           <button className="text-clinic-primary" onClick={() => void dismissNotifications()}>
             Marcar como lidas
+          </button>
+        </div>
+      ) : null}
+      {transferAlert ? (
+        <div
+          role="status"
+          className="absolute right-4 top-16 z-30 flex max-w-sm items-center gap-3 rounded-lg border border-clinic-primary/30 bg-clinic-surface px-3 py-2 text-[11px] font-semibold text-clinic-text shadow-lg"
+        >
+          <span>{transferAlert.descricao || 'Um atendimento foi transferido para você.'}</span>
+          <button
+            type="button"
+            className="shrink-0 text-clinic-primary"
+            onClick={() => {
+              setActiveId(transferAlert.atendimentoId);
+              setTransferAlert(null);
+            }}
+          >
+            Abrir
+          </button>
+          <button
+            type="button"
+            aria-label="Fechar aviso de transferência"
+            className="shrink-0 text-clinic-muted"
+            onClick={() => setTransferAlert(null)}
+          >
+            Fechar
           </button>
         </div>
       ) : null}

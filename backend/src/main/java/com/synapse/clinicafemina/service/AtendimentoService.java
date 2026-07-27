@@ -28,10 +28,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -53,6 +56,8 @@ public class AtendimentoService {
             AtendimentoDetalheDTO atendimento,
             boolean transferido,
             boolean jaEstavaTransferido,
+            boolean destinatarioAlterado,
+            int eventosCriados,
             boolean resumoRegistrado,
             int notificacoesCriadas,
             OffsetDateTime transferidoEm
@@ -175,57 +180,73 @@ public class AtendimentoService {
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
         validarAtendimentoTransferivel(atendimento);
 
-        if (Boolean.FALSE.equals(atendimento.getTratadoPorIa())) {
-            return new TransferenciaHumanoResultado(
-                    toDetalheDTO(atendimento),
-                    true,
-                    true,
-                    false,
-                    0,
-                    atendimento.getHumanoDesde()
-            );
-        }
-
         Usuario novoAtendente = buscarAtendente(request.novoAtendenteId(), clinicaId);
-        Usuario responsavel = buscarUsuario(request.novoAtendenteId(), clinicaId);
+        Usuario responsavel = novoAtendente;
         Usuario antigoAtendente = atendimento.getAtendentePrincipal();
-        OffsetDateTime transferidoEm = OffsetDateTime.now();
+        boolean jaEstavaTransferido = Boolean.FALSE.equals(atendimento.getTratadoPorIa());
+        boolean destinatarioAlterado = antigoAtendente == null
+                || !antigoAtendente.getId().equals(novoAtendente.getId());
+        OffsetDateTime transferidoEm = jaEstavaTransferido && !destinatarioAlterado
+                && atendimento.getHumanoDesde() != null
+                ? atendimento.getHumanoDesde()
+                : OffsetDateTime.now();
+        boolean transferenciaNova = !jaEstavaTransferido || destinatarioAlterado;
 
-        atendimento.setAtendentePrincipal(novoAtendente);
-        atendimento.setTratadoPorIa(false);
-        atendimento.setHumanoDesde(transferidoEm);
-        atendimento.setStatus("ATIVO");
-        atendimentoRepository.save(atendimento);
+        if (transferenciaNova) {
+            atendimento.setAtendentePrincipal(novoAtendente);
+            atendimento.setTratadoPorIa(false);
+            atendimento.setHumanoDesde(transferidoEm);
+            atendimento.setStatus("ATIVO");
+            atendimentoRepository.save(atendimento);
+        }
         String motivoTransferencia = request.motivoTransferencia() != null
                 ? request.motivoTransferencia()
                 : request.motivo();
-        transferenciaRepository.save(criarTransferencia(
-                atendimento,
-                antigoAtendente,
-                novoAtendente,
-                responsavel,
-                sanitizarTextoCurto(motivoTransferencia)
-        ));
+        if (transferenciaNova) {
+            transferenciaRepository.save(criarTransferencia(
+                    atendimento,
+                    antigoAtendente,
+                    novoAtendente,
+                    responsavel,
+                    sanitizarTextoCurto(motivoTransferencia)
+            ));
+        }
 
-        registrarEventosTransferencia(atendimento, transferidoEm);
+        int eventosCriados = registrarEventosTransferencia(atendimento, transferidoEm);
         ResumoTransferencia resumo = registrarResumoTransferencia(
                 atendimento,
                 request.resumoTransferencia(),
                 transferidoEm.plusNanos(2)
         );
-        int notificacoes = notificationService.notificarTransferenciaIa(
+        AtendimentoNotificationService.TransferenciaNotificacaoResultado notificacoes = notificationService.notificarTransferenciaIa(
                 atendimento,
                 resumo.mensagem(),
-                motivoTransferencia
+                motivoTransferencia,
+                novoAtendente,
+                transferidoEm
         );
+        boolean houveReparo = eventosCriados > 0 || resumo.registrado() || notificacoes.criadas() > 0;
+        if (transferenciaNova || houveReparo) {
+            LinkedHashSet<Long> destinatarios = new LinkedHashSet<>(notificacoes.destinatariosCriados());
+            destinatarios.add(novoAtendente.getId());
+            agendarBroadcastTransferenciaAposCommit(
+                    destinatarios,
+                    atendimento,
+                    antigoAtendente,
+                    novoAtendente,
+                    motivoTransferencia
+            );
+        }
         log.info("Transferência N8N para humano concluída. atendimentoId={} resumoRegistrado={} notificacoesCriadas={}",
-                id, resumo.registrado(), notificacoes);
+                id, resumo.registrado(), notificacoes.criadas());
         return new TransferenciaHumanoResultado(
                 toDetalheDTO(atendimento),
                 true,
-                false,
+                jaEstavaTransferido,
+                destinatarioAlterado,
+                eventosCriados,
                 resumo.registrado(),
-                notificacoes,
+                notificacoes.criadas(),
                 transferidoEm
         );
     }
@@ -315,24 +336,25 @@ public class AtendimentoService {
         }
     }
 
-    private void registrarEventosTransferencia(Atendimento atendimento, OffsetDateTime transferidoEm) {
+    private int registrarEventosTransferencia(Atendimento atendimento, OffsetDateTime transferidoEm) {
         Long atendimentoId = atendimento.getId();
         Long clinicaId = atendimento.getClinica().getId();
-        registrarEventoSistemaSeAusente(
+        int criados = registrarEventoSistemaSeAusente(
                 atendimento,
                 AI_HANDOFF_ENDED,
                 "Fim das mensagens com a IA",
                 transferidoEm
         );
-        registrarEventoSistemaSeAusente(
+        criados += registrarEventoSistemaSeAusente(
                 atendimento,
                 HUMAN_HANDOFF_START,
                 "Atendimento #" + atendimentoId + " transferido para humano",
                 transferidoEm.plusNanos(1)
         );
+        return criados;
     }
 
-    private void registrarEventoSistemaSeAusente(
+    private int registrarEventoSistemaSeAusente(
             Atendimento atendimento,
             String tipoMedia,
             String conteudo,
@@ -341,7 +363,7 @@ public class AtendimentoService {
         Long atendimentoId = atendimento.getId();
         Long clinicaId = atendimento.getClinica().getId();
         if (mensagemRepository.existsSystemEvent(atendimentoId, clinicaId, tipoMedia)) {
-            return;
+            return 0;
         }
         Mensagem evento = new Mensagem();
         evento.setAtendimento(atendimento);
@@ -353,6 +375,41 @@ public class AtendimentoService {
         evento.setWhatsappStatus("INTERNO");
         evento.setDataHora(dataHora);
         mensagemRepository.save(evento);
+        return 1;
+    }
+
+    private void agendarBroadcastTransferenciaAposCommit(
+            Set<Long> destinatarios,
+            Atendimento atendimento,
+            Usuario antigoAtendente,
+            Usuario novoAtendente,
+            String motivo
+    ) {
+        Long atendimentoId = atendimento.getId();
+        Long pacienteId = atendimento.getPaciente().getId();
+        String pacienteNome = atendimento.getPaciente().getNomeBusca();
+        Long antigoAtendenteId = antigoAtendente != null ? antigoAtendente.getId() : 0L;
+        String antigoAtendenteNome = antigoAtendente != null ? antigoAtendente.getNome() : "IA";
+        Runnable broadcast = () -> broadcastService.broadcastTransferenciaParaDestinatarios(
+                destinatarios,
+                novoAtendente.getId(),
+                atendimentoId,
+                antigoAtendenteId,
+                antigoAtendenteNome,
+                pacienteId,
+                pacienteNome,
+                sanitizarTextoCurto(motivo)
+        );
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            log.warn("Broadcast de transferência N8N não agendado sem transação sincronizada. atendimentoId={}", atendimentoId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                broadcast.run();
+            }
+        });
     }
 
     private ResumoTransferencia registrarResumoTransferencia(
@@ -402,7 +459,14 @@ public class AtendimentoService {
     }
 
     private Usuario buscarAtendente(Long usuarioId, Long clinicaId) {
-        Usuario usuario = buscarUsuario(usuarioId, clinicaId);
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new NotFoundException("Usuário destinatário não encontrado"));
+        if (usuario.getClinica() == null || !clinicaId.equals(usuario.getClinica().getId())) {
+            throw new IllegalArgumentException("Usuário destinatário pertence a outra clínica");
+        }
+        if (!Boolean.TRUE.equals(usuario.getAtivo()) || usuario.getDeletadoEm() != null) {
+            throw new IllegalStateException("Usuário destinatário está inativo ou excluído");
+        }
         if (!PERFIS_ATENDENTES.contains(usuario.getPerfil())) {
             throw new IllegalStateException("O usuário selecionado não pode receber atendimentos");
         }

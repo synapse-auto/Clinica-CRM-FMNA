@@ -9,6 +9,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.Map;
 
 /**
@@ -96,12 +97,36 @@ public class RealtimeBroadcastService {
         Map<String, Object> payload = Map.of(
                 "tipo", "ATENDIMENTO_TRANSFERIDO",
                 "atendimentoId", atendimentoId,
+                "novoAtendenteId", novoAtendenteId,
                 "de", Map.of("id", antigoAtendenteId, "nome", antigoAtendenteNome),
                 "paciente", Map.of("id", pacienteId, "nome", pacienteNome),
-                "motivo", motivo != null ? motivo : ""
+                "motivo", motivo != null ? motivo : "",
+                "atualizarMensagens", true,
+                "atualizarNotificacoes", true
         );
         messagingTemplate.convertAndSendToUser(
                 novoAtendenteId.toString(), "/queue/transferencias", payload);
+    }
+
+    public void broadcastTransferenciaParaDestinatarios(
+            Collection<Long> destinatarios,
+            Long novoAtendenteId,
+            Long atendimentoId,
+            Long antigoAtendenteId,
+            String antigoAtendenteNome,
+            Long pacienteId,
+            String pacienteNome,
+            String motivo
+    ) {
+        destinatarios.stream().distinct().forEach(destinatarioId -> broadcastTransferencia(
+                destinatarioId,
+                atendimentoId,
+                antigoAtendenteId,
+                antigoAtendenteNome,
+                pacienteId,
+                pacienteNome,
+                motivo
+        ));
     }
 
     /**

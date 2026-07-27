@@ -16,11 +16,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class AtendimentoNotificationService {
+
+    public record TransferenciaNotificacaoResultado(int criadas, List<Long> destinatariosCriados) {}
 
     private static final String NOVA_MENSAGEM = "NOVA_MENSAGEM";
     private static final String ATENDIMENTO_ATRIBUIDO = "ATENDIMENTO_ATRIBUIDO";
@@ -56,17 +60,37 @@ public class AtendimentoNotificationService {
 
     @Transactional
     public int notificarTransferenciaIa(Atendimento atendimento, Mensagem resumo, String motivo) {
-        List<Usuario> destinatarios = usuarioRepository.findRecepcionistasAtivosByClinicaId(
+        return notificarTransferenciaIa(
+                atendimento,
+                resumo,
+                motivo,
+                atendimento.getAtendentePrincipal(),
+                atendimento.getHumanoDesde() != null ? atendimento.getHumanoDesde() : OffsetDateTime.now()
+        ).criadas();
+    }
+
+    @Transactional
+    public TransferenciaNotificacaoResultado notificarTransferenciaIa(
+            Atendimento atendimento,
+            Mensagem resumo,
+            String motivo,
+            Usuario destinatarioPrincipal,
+            OffsetDateTime inicioCiclo
+    ) {
+        LinkedHashSet<Usuario> destinatarios = new LinkedHashSet<>();
+        if (destinatarioPrincipal != null) {
+            destinatarios.add(destinatarioPrincipal);
+        }
+        destinatarios.addAll(usuarioRepository.findRecepcionistasAtivosByClinicaId(
                 atendimento.getClinica().getId()
-        );
+        ));
         String descricao = descricaoTransferencia(motivo);
         int criadas = 0;
+        List<Long> destinatariosCriados = new ArrayList<>();
         for (Usuario destinatario : destinatarios) {
-            boolean existente = resumo != null
-                    ? repository.existsByUsuarioIdAndMensagemIdAndTipo(
-                            destinatario.getId(), resumo.getId(), TRANSFERENCIA_IA)
-                    : repository.existsByUsuarioIdAndAtendimentoIdAndTipo(
-                            destinatario.getId(), atendimento.getId(), TRANSFERENCIA_IA);
+            boolean existente = repository.existsByUsuarioIdAndAtendimentoIdAndTipoDesde(
+                    destinatario.getId(), atendimento.getId(), TRANSFERENCIA_IA, inicioCiclo
+            );
             if (!existente) {
                 repository.save(novaNotificacao(
                         destinatario,
@@ -76,9 +100,10 @@ public class AtendimentoNotificationService {
                         descricao
                 ));
                 criadas++;
+                destinatariosCriados.add(destinatario.getId());
             }
         }
-        return criadas;
+        return new TransferenciaNotificacaoResultado(criadas, List.copyOf(destinatariosCriados));
     }
 
     private String descricaoTransferencia(String motivo) {

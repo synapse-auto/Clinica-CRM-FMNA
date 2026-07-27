@@ -181,6 +181,9 @@ class N8nAtendimentoControllerTest {
                 .andExpect(jsonPath("$.modo").value("HUMANO"))
                 .andExpect(jsonPath("$.transferido").value(true))
                 .andExpect(jsonPath("$.jaEstavaTransferido").value(false))
+                .andExpect(jsonPath("$.novoAtendenteId").value(1))
+                .andExpect(jsonPath("$.destinatarioAlterado").value(true))
+                .andExpect(jsonPath("$.eventosCriados").value(2))
                 .andExpect(jsonPath("$.resumoRegistrado").value(true))
                 .andExpect(jsonPath("$.notificacoesCriadas").value(2));
 
@@ -312,6 +315,8 @@ class N8nAtendimentoControllerTest {
                 atendimentoHumano(),
                 true,
                 jaEstavaTransferido,
+                !jaEstavaTransferido,
+                2,
                 resumoRegistrado,
                 notificacoesCriadas,
                 OffsetDateTime.parse("2026-07-03T12:00:00Z")

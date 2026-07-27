@@ -74,6 +74,9 @@ public class N8nAtendimentoController {
         body.put("modo", "HUMANO");
         body.put("transferido", resultado.transferido());
         body.put("jaEstavaTransferido", resultado.jaEstavaTransferido());
+        body.put("novoAtendenteId", request.novoAtendenteId());
+        body.put("destinatarioAlterado", resultado.destinatarioAlterado());
+        body.put("eventosCriados", resultado.eventosCriados());
         body.put("resumoRegistrado", resultado.resumoRegistrado());
         body.put("notificacoesCriadas", resultado.notificacoesCriadas());
         body.put("transferidoEm", resultado.transferidoEm());

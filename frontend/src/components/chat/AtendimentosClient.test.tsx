@@ -305,4 +305,38 @@ describe('AtendimentosClient troca de conversa (latência)', () => {
     expect(services.enviarMensagem).not.toHaveBeenCalled();
     expect(services.enviarWhatsappTemplate).not.toHaveBeenCalled();
   });
+
+  it('should_refresh_the_open_chat_and_show_transfer_notice_when_a_new_notification_arrives', async () => {
+    vi.useFakeTimers();
+    services.getNotificacoes
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{
+        id: 91,
+        atendimentoId: 7,
+        tipo: 'TRANSFERENCIA_IA',
+        descricao: 'A IA transferiu um atendimento para humano',
+        lida: false,
+        criadoEm: '2026-07-27T12:00:00Z',
+      }]);
+    services.getNotificacoesResumo.mockResolvedValue(1);
+    services.listAtendimentos.mockResolvedValue({ content: [{ id: 7 }], totalElements: 1 });
+    services.getAtendimento.mockResolvedValue({ id: 7 });
+    services.getMensagens.mockResolvedValue([]);
+
+    render(<AtendimentosClient initialConversations={[{ id: 7 }]} atendentes={[]} user={gestor} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const detailCallsBeforeNotification = services.getAtendimento.mock.calls.length;
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByRole('status')).toHaveTextContent('A IA transferiu um atendimento para humano');
+    expect(services.getAtendimento.mock.calls.length).toBeGreaterThan(detailCallsBeforeNotification);
+    vi.useRealTimers();
+  });
 });
