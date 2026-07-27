@@ -1437,6 +1437,56 @@ describe('ChatWindow', () => {
     expect(screen.queryByText('Falha no envio')).not.toBeInTheDocument();
   });
 
+  it('should_render_handoff_markers_without_treating_them_as_whatsapp_messages', () => {
+    const ended: MensagemAtendimento = {
+      ...makeMessage(13, 'SISTEMA'),
+      remetente: 'SISTEMA',
+      tipoMedia: 'AI_HANDOFF_ENDED',
+      conteudo: 'Fim das mensagens com a IA',
+      whatsappStatus: 'INTERNO',
+    };
+    const started: MensagemAtendimento = {
+      ...makeMessage(14, 'SISTEMA'),
+      remetente: 'SISTEMA',
+      tipoMedia: 'HUMAN_HANDOFF_START',
+      conteudo: 'Atendimento #30 transferido para humano',
+      whatsappStatus: 'INTERNO',
+    };
+
+    render(<ChatWindow detail={detail} messages={[ended, started]} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
+
+    expect(screen.getByTestId('handoff-event-ai_handoff_ended')).toHaveTextContent('Fim das mensagens com a IA');
+    expect(screen.getByTestId('handoff-event-human_handoff_start')).toHaveTextContent('Atendimento #30 transferido para humano');
+    expect(screen.queryByTestId('status-icon')).not.toBeInTheDocument();
+  });
+
+  it('should_not_show_a_pending_clock_for_ai_messages_registered_after_external_send', () => {
+    const message: MensagemAtendimento = {
+      ...makeMessage(15, 'SAIDA'),
+      remetente: 'IA',
+      whatsappStatus: 'REGISTRADA',
+    };
+    render(<ChatWindow detail={detail} messages={[message]} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
+
+    expect(screen.getByText('IA')).toBeInTheDocument();
+    expect(screen.queryByTestId('status-icon')).not.toBeInTheDocument();
+  });
+
+  it('should_keep_delivery_status_distinct_from_ai_and_attendant_authorship', () => {
+    const messages: MensagemAtendimento[] = [
+      { ...makeMessage(16, 'SAIDA'), remetente: 'IA', whatsappStatus: 'PENDENTE' },
+      { ...makeMessage(17, 'SAIDA'), remetente: 'ATENDENTE', whatsappStatus: 'ENVIADA' },
+      { ...makeMessage(18, 'SAIDA'), remetente: 'ATENDENTE', whatsappStatus: 'ENTREGUE' },
+      { ...makeMessage(19, 'SAIDA'), remetente: 'IA', whatsappStatus: 'LIDA' },
+      { ...makeMessage(20, 'SAIDA'), remetente: 'IA', whatsappStatus: 'FALHA' },
+    ];
+    render(<ChatWindow detail={detail} messages={messages} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
+
+    expect(screen.getAllByText('IA')).toHaveLength(3);
+    expect(screen.getAllByText('Atendente')).toHaveLength(2);
+    expect(screen.getAllByTestId('status-icon')).toHaveLength(5);
+  });
+
   it('should_prevent_media_from_overflowing_the_bubble', () => {
     const imageMessage: MensagemAtendimento = {
       ...makeMessage(9, 'ENTRADA'),

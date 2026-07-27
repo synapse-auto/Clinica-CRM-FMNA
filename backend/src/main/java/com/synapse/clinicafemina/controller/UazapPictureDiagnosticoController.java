@@ -3,6 +3,9 @@ package com.synapse.clinicafemina.controller;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.uazap.UazapPictureDiagnosticoRequest;
 import com.synapse.clinicafemina.dto.uazap.UazapPictureDiagnosticoResponse;
+import com.synapse.clinicafemina.dto.uazap.UazapPictureReprocessarPendentesRequest;
+import com.synapse.clinicafemina.dto.uazap.UazapPictureReprocessarPendentesResponse;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
 import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import com.synapse.clinicafemina.service.UazapPictureDiagnosticoService;
 import com.synapse.clinicafemina.service.UsuarioPermissionService;
@@ -39,7 +42,7 @@ public class UazapPictureDiagnosticoController {
             @RequestBody @Valid UazapPictureDiagnosticoRequest request,
             Authentication authentication
     ) {
-        if (!whatsappProperties.getUazap().isPictureDiagnosticsEnabled()) {
+        if (!diagnosticoUazapDisponivel()) {
             return ResponseEntity.notFound().build();
         }
         Usuario admin = usuarioPermissionService.exigirAdminInterno(authentication);
@@ -51,11 +54,28 @@ public class UazapPictureDiagnosticoController {
             @RequestBody @Valid UazapPictureDiagnosticoRequest request,
             Authentication authentication
     ) {
-        if (!whatsappProperties.getUazap().isPictureDiagnosticsEnabled()) {
+        if (!diagnosticoUazapDisponivel()) {
             return ResponseEntity.notFound().build();
         }
         Usuario admin = usuarioPermissionService.exigirAdminInterno(authentication);
         diagnosticoService.reprocessar(admin.getClinica(), request.pacienteId());
         return ResponseEntity.accepted().build();
+    }
+
+    @PostMapping("/reprocessar-pendentes")
+    public ResponseEntity<UazapPictureReprocessarPendentesResponse> reprocessarPendentes(
+            @RequestBody @Valid UazapPictureReprocessarPendentesRequest request,
+            Authentication authentication
+    ) {
+        if (!diagnosticoUazapDisponivel()) {
+            return ResponseEntity.notFound().build();
+        }
+        Usuario admin = usuarioPermissionService.exigirAdminInterno(authentication);
+        return ResponseEntity.ok(diagnosticoService.reprocessarPendentes(admin.getClinica(), request.limiteEfetivo()));
+    }
+
+    private boolean diagnosticoUazapDisponivel() {
+        return whatsappProperties.getUazap().isPictureDiagnosticsEnabled()
+                && whatsappProperties.resolveProvider() == WhatsappProviderType.UAZAP;
     }
 }

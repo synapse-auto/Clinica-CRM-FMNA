@@ -5,6 +5,8 @@ import com.synapse.clinicafemina.domain.Gestor;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.uazap.UazapPictureDiagnosticoRequest;
 import com.synapse.clinicafemina.dto.uazap.UazapPictureDiagnosticoResponse;
+import com.synapse.clinicafemina.dto.uazap.UazapPictureReprocessarPendentesRequest;
+import com.synapse.clinicafemina.dto.uazap.UazapPictureReprocessarPendentesResponse;
 import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import com.synapse.clinicafemina.service.UazapPictureDiagnosticoService;
 import com.synapse.clinicafemina.service.UsuarioPermissionService;
@@ -60,6 +62,7 @@ class UazapPictureDiagnosticoControllerTest {
     @Test
     @DisplayName("flag habilitada: exige admin interno e delega ao serviço com a clínica do admin")
     void flagEnabled_delegatesToServiceWithAdminClinic() {
+        whatsappProperties.setProvider("UAZAP");
         whatsappProperties.getUazap().setPictureDiagnosticsEnabled(true);
         Clinica clinica = new Clinica();
         clinica.setId(9L);
@@ -93,6 +96,7 @@ class UazapPictureDiagnosticoControllerTest {
     @Test
     @DisplayName("reprocessar habilitado independe do enriquecimento automatico")
     void reprocessarAllowsControlledRetryWithoutAutomaticEnrichment() {
+        whatsappProperties.setProvider("UAZAP");
         whatsappProperties.getUazap().setPictureDiagnosticsEnabled(true);
         whatsappProperties.getUazap().setPictureEnrichmentEnabled(false);
         Clinica clinica = new Clinica();
@@ -107,5 +111,27 @@ class UazapPictureDiagnosticoControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         assertThat(response.getBody()).isNull();
         verify(diagnosticoService).reprocessar(clinica, 1L);
+    }
+
+    @Test
+    void reprocessarPendentesUsesOnlyTheAuthenticatedClinicAndSanitizedCounters() {
+        whatsappProperties.setProvider("UAZAP");
+        whatsappProperties.getUazap().setPictureDiagnosticsEnabled(true);
+        Clinica clinica = new Clinica();
+        clinica.setId(9L);
+        Usuario admin = new Gestor();
+        admin.setClinica(clinica);
+        when(usuarioPermissionService.exigirAdminInterno(authentication)).thenReturn(admin);
+        UazapPictureReprocessarPendentesResponse esperado =
+                new UazapPictureReprocessarPendentesResponse(3, 3, 1, 1, 1, 0);
+        when(diagnosticoService.reprocessarPendentes(clinica, 50)).thenReturn(esperado);
+
+        ResponseEntity<UazapPictureReprocessarPendentesResponse> response = controller.reprocessarPendentes(
+                new UazapPictureReprocessarPendentesRequest(50), authentication
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(esperado);
+        verify(diagnosticoService).reprocessarPendentes(clinica, 50);
     }
 }

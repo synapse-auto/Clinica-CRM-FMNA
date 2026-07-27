@@ -71,7 +71,12 @@ public class UazapProfilePhotoEnrichmentService {
             if (exception.semFoto()) {
                 fotoPerfilService.registrarSemFoto(tentativa, exception.motivo());
             } else {
-                fotoPerfilService.registrarFalha(tentativa, exception.motivo(), exception.temporaria());
+                boolean falhaConfiguracaoRecuperavel = "HOST_DE_FOTO_NAO_AUTORIZADO".equals(exception.motivo());
+                fotoPerfilService.registrarFalha(
+                        tentativa,
+                        exception.motivo(),
+                        falhaConfiguracaoRecuperavel || exception.temporaria()
+                );
             }
             log.warn("Foto UAZAP nao persistida apos download. motivo={}, temporaria={}",
                     exception.motivo(), exception.temporaria());

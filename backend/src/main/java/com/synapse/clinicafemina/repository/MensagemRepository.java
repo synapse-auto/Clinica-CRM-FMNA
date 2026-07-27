@@ -47,6 +47,18 @@ public interface MensagemRepository extends JpaRepository<Mensagem, Long> {
     );
 
     @Query("""
+            SELECT COUNT(m) > 0 FROM Mensagem m
+            WHERE m.atendimento.id = :atendimentoId
+              AND m.atendimento.clinica.id = :clinicaId
+              AND m.tipoMedia = :tipoMedia
+            """)
+    boolean existsSystemEvent(
+            @Param("atendimentoId") Long atendimentoId,
+            @Param("clinicaId") Long clinicaId,
+            @Param("tipoMedia") String tipoMedia
+    );
+
+    @Query("""
             SELECT MAX(m.dataHora) FROM Mensagem m
             WHERE m.atendimento.id = :atendimentoId
               AND m.atendimento.clinica.id = :clinicaId

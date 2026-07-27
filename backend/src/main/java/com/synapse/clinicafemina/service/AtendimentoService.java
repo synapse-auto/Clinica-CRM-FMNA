@@ -45,6 +45,8 @@ import java.util.Set;
 public class AtendimentoService {
 
     private static final Set<String> PERFIS_ATENDENTES = Set.of("GESTOR", "RECEPCIONISTA");
+    private static final String AI_HANDOFF_ENDED = "AI_HANDOFF_ENDED";
+    private static final String HUMAN_HANDOFF_START = "HUMAN_HANDOFF_START";
     private static final String AI_HANDOFF_SUMMARY = "AI_HANDOFF_SUMMARY";
 
     public record TransferenciaHumanoResultado(
@@ -205,7 +207,12 @@ public class AtendimentoService {
                 sanitizarTextoCurto(motivoTransferencia)
         ));
 
-        ResumoTransferencia resumo = registrarResumoTransferencia(atendimento, request.resumoTransferencia());
+        registrarEventosTransferencia(atendimento, transferidoEm);
+        ResumoTransferencia resumo = registrarResumoTransferencia(
+                atendimento,
+                request.resumoTransferencia(),
+                transferidoEm.plusNanos(2)
+        );
         int notificacoes = notificationService.notificarTransferenciaIa(
                 atendimento,
                 resumo.mensagem(),
@@ -308,7 +315,51 @@ public class AtendimentoService {
         }
     }
 
-    private ResumoTransferencia registrarResumoTransferencia(Atendimento atendimento, String resumo) {
+    private void registrarEventosTransferencia(Atendimento atendimento, OffsetDateTime transferidoEm) {
+        Long atendimentoId = atendimento.getId();
+        Long clinicaId = atendimento.getClinica().getId();
+        registrarEventoSistemaSeAusente(
+                atendimento,
+                AI_HANDOFF_ENDED,
+                "Fim das mensagens com a IA",
+                transferidoEm
+        );
+        registrarEventoSistemaSeAusente(
+                atendimento,
+                HUMAN_HANDOFF_START,
+                "Atendimento #" + atendimentoId + " transferido para humano",
+                transferidoEm.plusNanos(1)
+        );
+    }
+
+    private void registrarEventoSistemaSeAusente(
+            Atendimento atendimento,
+            String tipoMedia,
+            String conteudo,
+            OffsetDateTime dataHora
+    ) {
+        Long atendimentoId = atendimento.getId();
+        Long clinicaId = atendimento.getClinica().getId();
+        if (mensagemRepository.existsSystemEvent(atendimentoId, clinicaId, tipoMedia)) {
+            return;
+        }
+        Mensagem evento = new Mensagem();
+        evento.setAtendimento(atendimento);
+        evento.setDirecao("SISTEMA");
+        evento.setRemetente("SISTEMA");
+        evento.setTipoMedia(tipoMedia);
+        evento.setConteudo(conteudo);
+        evento.setConteudoPrevia(limitarPrevia(conteudo));
+        evento.setWhatsappStatus("INTERNO");
+        evento.setDataHora(dataHora);
+        mensagemRepository.save(evento);
+    }
+
+    private ResumoTransferencia registrarResumoTransferencia(
+            Atendimento atendimento,
+            String resumo,
+            OffsetDateTime dataHora
+    ) {
         if (resumo == null || resumo.isBlank()) {
             return new ResumoTransferencia(null, false);
         }
@@ -330,7 +381,7 @@ public class AtendimentoService {
         mensagem.setConteudo(conteudo);
         mensagem.setConteudoPrevia(limitarPrevia(conteudo));
         mensagem.setWhatsappStatus("INTERNO");
-        mensagem.setDataHora(OffsetDateTime.now());
+        mensagem.setDataHora(dataHora);
         return new ResumoTransferencia(mensagemRepository.save(mensagem), true);
     }
 

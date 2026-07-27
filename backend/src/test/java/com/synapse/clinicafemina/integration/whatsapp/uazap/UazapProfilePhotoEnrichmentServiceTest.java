@@ -154,6 +154,24 @@ class UazapProfilePhotoEnrichmentServiceTest {
         verify(fotoPerfilService, never()).salvarSucesso(any(), any());
     }
 
+    @Test
+    void unauthorizedHostUsesRecoverableFailureInsteadOfThirtyDayPermanentCooldown() {
+        properties.setProvider("UAZAP");
+        URI uri = URI.create("https://pps.whatsapp.net/foto.jpg");
+        UazapPictureRawResponse raw = new UazapPictureRawResponse(200, "application/json", new byte[] {1});
+        when(fotoPerfilService.iniciar(1L, 2L, false)).thenReturn(Optional.of(tentativa));
+        when(photoClient.buscarFotoPerfil(anyString())).thenReturn(raw);
+        when(payloadParser.extract(raw)).thenReturn(new UazapPictureExtraction(
+                outcome("JSON", uri.toString(), null), UazapPictureSource.url(uri)
+        ));
+        when(photoDownloader.baixar(uri))
+                .thenThrow(UazapProfilePhotoDownloadException.permanente("HOST_DE_FOTO_NAO_AUTORIZADO"));
+
+        service.enriquecer(1L, 2L);
+
+        verify(fotoPerfilService).registrarFalha(tentativa, "HOST_DE_FOTO_NAO_AUTORIZADO", true);
+    }
+
     private UazapPictureEnrichmentOutcome outcome(String formato, String fotoUrl, String motivo) {
         return new UazapPictureEnrichmentOutcome(
                 200, "application/json", 10, formato, List.of("data"),

@@ -30,6 +30,7 @@ public class PacienteFotoPerfilService {
     private static final Duration PERMANENT_FAILURE_COOLDOWN = Duration.ofDays(30);
     private static final Duration TEMPORARY_FAILURE_BASE = Duration.ofMinutes(15);
     private static final Duration TEMPORARY_FAILURE_MAX = Duration.ofHours(24);
+    private static final String HOST_NOT_AUTHORIZED = "HOST_DE_FOTO_NAO_AUTORIZADO";
 
     private final PacienteRepository pacienteRepository;
     private final PacienteFotoPerfilRepository fotoRepository;
@@ -72,7 +73,8 @@ public class PacienteFotoPerfilService {
                 && !foto.getUltimaTentativaEm().isBefore(agora.minus(CLAIM_LEASE));
         boolean cooldownAtivo = foto.getProximaTentativaEm() != null
                 && foto.getProximaTentativaEm().isAfter(agora);
-        if (pendingAtivo || (!forcar && cooldownAtivo)) {
+        boolean falhaDeConfiguracaoRecuperavel = HOST_NOT_AUTHORIZED.equals(foto.getMotivoUltimaFalha());
+        if (pendingAtivo || (!forcar && cooldownAtivo && !falhaDeConfiguracaoRecuperavel)) {
             return Optional.empty();
         }
 

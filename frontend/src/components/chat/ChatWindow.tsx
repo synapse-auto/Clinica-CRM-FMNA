@@ -14,6 +14,7 @@ import {
   Plus,
   Send,
   Search,
+  UserRound,
 } from 'lucide-react';
 import {
   DEFAULT_WHATSAPP_CAPABILITIES,
@@ -575,6 +576,9 @@ function MessageBubble({
   if (message.tipoMedia === 'AI_HANDOFF_SUMMARY') {
     return <AiHandoffSummaryMessage message={message} />;
   }
+  if (message.tipoMedia === 'AI_HANDOFF_ENDED' || message.tipoMedia === 'HUMAN_HANDOFF_START') {
+    return <HandoffSystemEvent message={message} />;
+  }
   const outbound = message.direcao === 'SAIDA';
   const failed = message.whatsappStatus === 'FALHA';
   const template = message.tipoMedia === 'TEMPLATE';
@@ -601,6 +605,7 @@ function MessageBubble({
         ) : message.conteudo}</div>
       </div>
       <div className="mt-1 flex items-center gap-1 text-[10px] text-clinic-muted">
+        {outbound ? <MessageAuthor message={message} /> : null}
         {new Intl.DateTimeFormat('pt-BR', {
           hour: '2-digit',
           minute: '2-digit',
@@ -614,6 +619,31 @@ function MessageBubble({
       </div>
     </div>
   );
+}
+
+function HandoffSystemEvent({ message }: { message: MensagemAtendimento }) {
+  const aiEnded = message.tipoMedia === 'AI_HANDOFF_ENDED';
+  return (
+    <div className="flex w-full justify-center py-1" data-testid={`handoff-event-${message.tipoMedia.toLowerCase()}`}>
+      <span className={`max-w-[92%] rounded-full border px-3 py-1.5 text-center text-[10px] font-bold shadow-sm ${
+        aiEnded
+          ? 'border-clinic-danger/30 bg-clinic-danger/10 text-clinic-danger'
+          : 'border-clinic-success/30 bg-clinic-success/10 text-clinic-success'
+      }`}>
+        {message.conteudo}
+      </span>
+    </div>
+  );
+}
+
+function MessageAuthor({ message }: { message: MensagemAtendimento }) {
+  if (message.remetente === 'IA') {
+    return <span className="inline-flex items-center gap-0.5 font-semibold text-clinic-primary"><Bot className="h-3 w-3" />IA</span>;
+  }
+  if (message.remetente === 'ATENDENTE') {
+    return <span className="inline-flex items-center gap-0.5 font-semibold"><UserRound className="h-3 w-3" />Atendente</span>;
+  }
+  return null;
 }
 
 function AiHandoffSummaryMessage({ message }: { message: MensagemAtendimento }) {
@@ -732,9 +762,10 @@ function isPrependedSequence(previousIds: number[], currentIds: number[]) {
 }
 
 function StatusIcon({ status }: { status: string | null }) {
-  if (status === 'FALHA') return <AlertCircle className="h-3 w-3 text-clinic-danger" />;
-  if (status === 'READ' || status === 'LIDA') return <CheckCheck className="h-3 w-3 text-clinic-cyan" />;
-  if (status === 'DELIVERED' || status === 'ENTREGUE') return <CheckCheck className="h-3 w-3" />;
-  if (status === 'ENVIADA') return <Check className="h-3 w-3" />;
-  return <Clock3 className="h-3 w-3" />;
+  if (status === 'FALHA' || status === 'FAILED') return <AlertCircle data-testid="status-icon" className="h-3 w-3 text-clinic-danger" />;
+  if (status === 'READ' || status === 'LIDA') return <CheckCheck data-testid="status-icon" className="h-3 w-3 text-clinic-cyan" />;
+  if (status === 'DELIVERED' || status === 'ENTREGUE') return <CheckCheck data-testid="status-icon" className="h-3 w-3" />;
+  if (status === 'ENVIADA' || status === 'SENT') return <Check data-testid="status-icon" className="h-3 w-3" />;
+  if (status === 'PENDENTE' || status === 'PENDING') return <Clock3 data-testid="status-icon" className="h-3 w-3" />;
+  return null;
 }

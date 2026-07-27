@@ -96,6 +96,19 @@ class PacienteFotoPerfilServiceTest {
     }
 
     @Test
+    void previousUnauthorizedHostFailureIsEligibleForRetryAfterConfigurationFix() {
+        estado.setStatus(PacienteFotoStatus.PERMANENT_FAILURE);
+        estado.setMotivoUltimaFalha("HOST_DE_FOTO_NAO_AUTORIZADO");
+        estado.setProximaTentativaEm(java.time.OffsetDateTime.now(CLOCK).plusDays(30));
+        when(pacienteRepository.findForPhotoUpdateByIdAndClinicaId(10L, 2L)).thenReturn(Optional.of(paciente));
+        when(fotoRepository.findByPacienteIdAndClinica_Id(10L, 2L)).thenReturn(Optional.of(estado));
+
+        assertThat(service.iniciar(10L, 2L, false)).isPresent();
+        assertThat(estado.getStatus()).isEqualTo(PacienteFotoStatus.PENDING);
+        verify(fotoRepository).save(estado);
+    }
+
+    @Test
     void successStoresBytesAndOnlyAnInternalVersionedUrl() {
         byte[] png = {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
         when(pacienteRepository.findByIdAndClinicaId(10L, 2L)).thenReturn(Optional.of(paciente));

@@ -258,13 +258,45 @@ class AtendimentoServiceTest {
         assertTrue(result.resumoRegistrado());
         assertEquals(2, result.notificacoesCriadas());
         assertFalse(atendimento.getTratadoPorIa());
-        assertEquals("SISTEMA", ((Mensagem) org.mockito.Mockito.mockingDetails(mensagemRepository)
+        List<Mensagem> eventos = org.mockito.Mockito.mockingDetails(mensagemRepository)
                 .getInvocations().stream()
                 .filter(invocation -> invocation.getMethod().getName().equals("save"))
-                .findFirst()
-                .orElseThrow()
-                .getArgument(0)).getDirecao());
+                .map(invocation -> (Mensagem) invocation.getArgument(0))
+                .filter(mensagem -> "SISTEMA".equals(mensagem.getDirecao()))
+                .toList();
+        assertEquals(List.of("AI_HANDOFF_ENDED", "HUMAN_HANDOFF_START", "AI_HANDOFF_SUMMARY"),
+                eventos.stream().map(Mensagem::getTipoMedia).toList());
+        assertEquals("Fim das mensagens com a IA", eventos.get(0).getConteudo());
+        assertEquals("Atendimento #3 transferido para humano", eventos.get(1).getConteudo());
         verify(notificationService).notificarTransferenciaIa(eq(atendimento), any(Mensagem.class), anyString());
+    }
+
+    @Test
+    void should_register_handoff_markers_even_without_ai_summary() {
+        Recepcionista destinatario = new Recepcionista();
+        destinatario.setId(10L);
+        destinatario.setClinica(clinica);
+        destinatario.setPerfil("RECEPCIONISTA");
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L)).thenReturn(Optional.of(atendimento));
+        when(usuarioRepository.findAtivoByIdAndClinicaId(10L, 1L)).thenReturn(Optional.of(destinatario));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferenciaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationService.notificarTransferenciaIa(eq(atendimento), isNull(), anyString())).thenReturn(0);
+
+        var result = service.transferirPorN8n(
+                3L,
+                new TransferirAtendimentoRequest(10L, "Transferido pelo N8N"),
+                1L
+        );
+
+        List<String> tipos = org.mockito.Mockito.mockingDetails(mensagemRepository)
+                .getInvocations().stream()
+                .filter(invocation -> invocation.getMethod().getName().equals("save"))
+                .map(invocation -> ((Mensagem) invocation.getArgument(0)).getTipoMedia())
+                .toList();
+        assertEquals(List.of("AI_HANDOFF_ENDED", "HUMAN_HANDOFF_START"), tipos);
+        assertFalse(result.resumoRegistrado());
     }
 
     @Test
@@ -288,6 +320,7 @@ class AtendimentoServiceTest {
         verify(usuarioRepository, never()).findAtivoByIdAndClinicaId(anyLong(), anyLong());
         verify(transferenciaRepository, never()).save(any());
         verify(notificationService, never()).notificarTransferenciaIa(any(), any(), anyString());
+        verify(mensagemRepository, never()).save(any());
     }
 
     @Test
