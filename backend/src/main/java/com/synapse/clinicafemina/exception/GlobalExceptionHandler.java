@@ -190,6 +190,23 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(N8nTransferPayloadException.class)
+    public ResponseEntity<Object> handleN8nTransferPayload(
+            N8nTransferPayloadException ex,
+            WebRequest request
+    ) {
+        log.warn("Payload de transferência N8N rejeitado em [{}]. camposInvalidos={}",
+                path(request),
+                ex.getDetails().keySet());
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                "Payload de transferência inválido.",
+                "INVALID_TRANSFER_PAYLOAD",
+                ex.getDetails(),
+                request
+        );
+    }
+
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<Object> handleMissingParameter(
             MissingServletRequestParameterException ex, WebRequest request) {
@@ -212,6 +229,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Object> handleUnreadableMessage(HttpMessageNotReadableException ex, WebRequest request) {
+        if (isN8nTransferPath(request)) {
+            log.warn("JSON inválido no callback de transferência N8N em [{}]", path(request));
+            return buildResponse(
+                    HttpStatus.BAD_REQUEST,
+                    "O corpo da requisição não contém um JSON válido.",
+                    "INVALID_JSON",
+                    request
+            );
+        }
         log.warn("JSON inválido em [{}]: {}",
                 request.getDescription(false).replace("uri=", ""),
                 ex.getMessage());
@@ -258,5 +284,31 @@ public class GlobalExceptionHandler {
         }
         body.put("path", request.getDescription(false).replace("uri=", ""));
         return new ResponseEntity<>(body, status);
+    }
+
+    private ResponseEntity<Object> buildResponse(
+            HttpStatus status,
+            String message,
+            String code,
+            Map<String, String> details,
+            WebRequest request
+    ) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", OffsetDateTime.now());
+        body.put("status", status.value());
+        body.put("error", status.getReasonPhrase());
+        body.put("code", code);
+        body.put("message", message);
+        body.put("details", details);
+        body.put("path", path(request));
+        return new ResponseEntity<>(body, status);
+    }
+
+    private boolean isN8nTransferPath(WebRequest request) {
+        return path(request).matches("/api/n8n/atendimentos/[^/]+/transferir-humano");
+    }
+
+    private String path(WebRequest request) {
+        return request.getDescription(false).replace("uri=", "");
     }
 }

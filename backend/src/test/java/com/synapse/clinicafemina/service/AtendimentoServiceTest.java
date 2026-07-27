@@ -2,6 +2,7 @@ package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.domain.*;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
+import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.dto.WhatsappCapabilitiesDTO;
 import com.synapse.clinicafemina.repository.*;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
@@ -438,10 +439,10 @@ class AtendimentoServiceTest {
         when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L)).thenReturn(Optional.of(atendimento));
         when(usuarioRepository.findById(10L)).thenReturn(Optional.of(destinatario));
 
-        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+        NotFoundException error = assertThrows(NotFoundException.class,
                 () -> service.transferirPorN8n(3L, new TransferirAtendimentoRequest(10L, "N8N"), 1L));
 
-        assertTrue(error.getMessage().contains("outra clínica"));
+        assertTrue(error.getMessage().contains("não encontrado"));
         verify(transferenciaRepository, never()).save(any());
     }
 

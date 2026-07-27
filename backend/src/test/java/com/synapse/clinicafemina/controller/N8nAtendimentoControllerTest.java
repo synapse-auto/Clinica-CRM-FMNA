@@ -18,7 +18,9 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.mockito.ArgumentCaptor;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -277,6 +279,107 @@ class N8nAtendimentoControllerTest {
                 .andExpect(jsonPath("$.atendentePrincipal").doesNotExist());
 
         verify(atendimentoService).ativarModoIa(30L, 7L);
+    }
+
+    @Test
+    void should_accept_n8n_transfer_aliases_with_number_or_numeric_string_id() throws Exception {
+        autorizar("test-secret");
+        when(atendimentoService.transferirPorN8n(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L)))
+                .thenReturn(resultadoHumano(false, true, 2));
+
+        for (String field : new String[]{"novoAtendenteId", "atendenteId", "novo_atendente_id", "atendente_id"}) {
+            mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-humano")
+                            .header("X-N8N-SECRET", "test-secret")
+                            .contentType("application/json")
+                            .content("{\"%s\":\"1\",\"motivo\":\"Transferido pelo N8N\"}".formatted(field)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.novoAtendenteId").value(1));
+        }
+
+        verify(atendimentoService, org.mockito.Mockito.times(4))
+                .transferirPorN8n(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L));
+    }
+
+    @Test
+    void should_reject_invalid_n8n_transfer_ids_with_contract_error() throws Exception {
+        autorizar("test-secret");
+
+        for (String payload : new String[]{
+                "{}",
+                "{\"novoAtendenteId\":null}",
+                "{\"novoAtendenteId\":\"\"}",
+                "{\"novoAtendenteId\":\"abc\"}",
+                "{\"novoAtendenteId\":0}",
+                "{\"novoAtendenteId\":-1}"
+        }) {
+            mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-humano")
+                            .header("X-N8N-SECRET", "test-secret")
+                            .contentType("application/json")
+                            .content(payload))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_TRANSFER_PAYLOAD"))
+                    .andExpect(jsonPath("$.message").value("Payload de transferência inválido."))
+                    .andExpect(jsonPath("$.details.novoAtendenteId")
+                            .value("Informe um ID numérico de gestor ou recepcionista."));
+        }
+
+        verify(atendimentoService, never()).transferirPorN8n(any(), any(), any());
+    }
+
+    @Test
+    void should_return_specific_error_for_invalid_n8n_transfer_json() throws Exception {
+        mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-humano")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("{\"novoAtendenteId\":1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_JSON"))
+                .andExpect(jsonPath("$.message").value("O corpo da requisição não contém um JSON válido."));
+
+        verify(atendimentoService, never()).transferirPorN8n(any(), any(), any());
+    }
+
+    @Test
+    void should_enforce_n8n_transfer_text_limits_without_calling_service() throws Exception {
+        autorizar("test-secret");
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-humano")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("{\"novoAtendenteId\":1,\"motivoTransferencia\":\"%s\",\"resumoTransferencia\":\"%s\"}"
+                                .formatted("m".repeat(501), "r".repeat(4097))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TRANSFER_PAYLOAD"))
+                .andExpect(jsonPath("$.details.motivoTransferencia").exists())
+                .andExpect(jsonPath("$.details.resumoTransferencia").exists());
+
+        verify(atendimentoService, never()).transferirPorN8n(any(), any(), any());
+    }
+
+    @Test
+    void should_normalize_valid_n8n_transfer_text_without_losing_newlines_or_quotes() throws Exception {
+        autorizar("test-secret");
+        when(atendimentoService.transferirPorN8n(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L)))
+                .thenReturn(resultadoHumano(false, true, 2));
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-humano")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "novoAtendenteId": 1,
+                                  "motivoTransferencia": "  Paciente pediu \\"atendente\\"  ",
+                                  "resumoTransferencia": "Linha um\\nLinha dois"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<TransferirAtendimentoRequest> requestCaptor =
+                ArgumentCaptor.forClass(TransferirAtendimentoRequest.class);
+        verify(atendimentoService).transferirPorN8n(eq(30L), requestCaptor.capture(), eq(7L));
+        assertEquals(1L, requestCaptor.getValue().novoAtendenteId());
+        assertEquals("Paciente pediu \"atendente\"", requestCaptor.getValue().motivoTransferencia());
+        assertEquals("Linha um\nLinha dois", requestCaptor.getValue().resumoTransferencia());
     }
 
     private MensagemDTO mensagemDto(Long id, String conteudo, String status) {

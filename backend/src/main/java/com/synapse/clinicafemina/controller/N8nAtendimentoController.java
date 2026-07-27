@@ -4,6 +4,7 @@ import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
+import com.synapse.clinicafemina.dto.n8n.N8nTransferirHumanoRequest;
 import com.synapse.clinicafemina.service.AtendimentoService;
 import com.synapse.clinicafemina.service.MensagemService;
 import com.synapse.clinicafemina.service.N8nCallbackAuthorizationService;
@@ -56,17 +57,24 @@ public class N8nAtendimentoController {
     public ResponseEntity<Map<String, Object>> transferirHumano(
             @PathVariable Long atendimentoId,
             @RequestHeader(value = "X-N8N-SECRET", required = false) String secret,
-            @RequestBody @Valid TransferirAtendimentoRequest request
+            @RequestBody N8nTransferirHumanoRequest request
     ) {
         N8nCallbackAuthorizationService.Autorizacao autorizacao =
                 authorizationService.autorizar(secret, atendimentoId);
+        TransferirAtendimentoRequest transferencia = request.paraTransferencia();
+        log.info("Callback N8N de transferencia validado. atendimentoId={} clinicaId={} novoAtendenteIdTipo={} motivoChars={} resumoChars={}",
+                atendimentoId,
+                autorizacao.clinicaId(),
+                request.tipoNovoAtendenteId(),
+                request.motivoChars(),
+                request.resumoChars());
         AtendimentoService.TransferenciaHumanoResultado resultado = atendimentoService.transferirPorN8n(
                 atendimentoId,
-                request,
+                transferencia,
                 autorizacao.clinicaId()
         );
         log.info("Atendimento {} transferido para humano por callback N8N. novoAtendente={}",
-                atendimentoId, request.novoAtendenteId());
+                atendimentoId, transferencia.novoAtendenteId());
         Map<String, Object> body = new LinkedHashMap<>(objectMapper.convertValue(
                 resultado.atendimento(), new TypeReference<Map<String, Object>>() {}
         ));
@@ -74,7 +82,7 @@ public class N8nAtendimentoController {
         body.put("modo", "HUMANO");
         body.put("transferido", resultado.transferido());
         body.put("jaEstavaTransferido", resultado.jaEstavaTransferido());
-        body.put("novoAtendenteId", request.novoAtendenteId());
+        body.put("novoAtendenteId", transferencia.novoAtendenteId());
         body.put("destinatarioAlterado", resultado.destinatarioAlterado());
         body.put("eventosCriados", resultado.eventosCriados());
         body.put("resumoRegistrado", resultado.resumoRegistrado());

@@ -462,7 +462,7 @@ public class AtendimentoService {
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new NotFoundException("Usuário destinatário não encontrado"));
         if (usuario.getClinica() == null || !clinicaId.equals(usuario.getClinica().getId())) {
-            throw new IllegalArgumentException("Usuário destinatário pertence a outra clínica");
+            throw new NotFoundException("Usuário destinatário não encontrado");
         }
         if (!Boolean.TRUE.equals(usuario.getAtivo()) || usuario.getDeletadoEm() != null) {
             throw new IllegalStateException("Usuário destinatário está inativo ou excluído");
