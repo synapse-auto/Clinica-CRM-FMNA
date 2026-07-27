@@ -9,9 +9,11 @@ import com.synapse.clinicafemina.dto.AtendenteOptionDTO;
 import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
 import com.synapse.clinicafemina.dto.AtendimentoResumoDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
+import com.synapse.clinicafemina.dto.WhatsappCapabilitiesDTO;
 import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.AtendimentoTagRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
@@ -361,6 +363,10 @@ public class AtendimentoService {
         WhatsappWindowService.WindowState janela = whatsappWindowService.avaliar(
                 atendimento.getId(), atendimento.getClinica().getId()
         );
+        WhatsappCapabilitiesDTO capabilities = whatsappWindowService.capabilities();
+        if (capabilities == null) {
+            capabilities = WhatsappCapabilitiesDTO.forProvider(WhatsappProviderType.META);
+        }
         return new AtendimentoDetalheDTO(
                 atendimento.getId(),
                 atendimento.getStatus(),
@@ -391,7 +397,9 @@ public class AtendimentoService {
                 janela.expiraEm(),
                 janela.ultimaMensagemEntradaEm(),
                 janela.aguardandoRespostaTemplate(),
-                whatsappOutboundClient.templatesDisponiveis()
+                capabilities.supportsMessageTemplates()
+                        && whatsappOutboundClient.templatesDisponiveis(),
+                capabilities
         );
     }
 

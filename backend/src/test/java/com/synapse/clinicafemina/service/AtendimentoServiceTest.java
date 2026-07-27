@@ -2,8 +2,10 @@ package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.domain.*;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
+import com.synapse.clinicafemina.dto.WhatsappCapabilitiesDTO;
 import com.synapse.clinicafemina.repository.*;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -124,6 +126,21 @@ class AtendimentoServiceTest {
         assertEquals(2, result.getTotalElements());
         verify(mensagemRepository, never()).findFirstByAtendimentoIdOrderByDataHoraDesc(3L);
         verify(mensagemRepository, never()).findFirstByAtendimentoIdOrderByDataHoraDesc(4L);
+    }
+
+    @Test
+    void should_expose_uazap_capabilities_without_meta_template_lookup() {
+        when(atendimentoRepository.findByIdAndClinicaId(3L, 1L)).thenReturn(Optional.of(atendimento));
+        when(whatsappWindowService.capabilities())
+                .thenReturn(WhatsappCapabilitiesDTO.forProvider(WhatsappProviderType.UAZAP));
+
+        var result = service.buscarPorId(3L, 1L);
+
+        assertEquals(WhatsappProviderType.UAZAP, result.whatsappCapabilities().provider());
+        assertFalse(result.whatsappCapabilities().enforcesCustomerCareWindow());
+        assertFalse(result.whatsappCapabilities().supportsMessageTemplates());
+        assertFalse(result.whatsappTemplatesDisponiveis());
+        verify(whatsappOutboundClient, never()).templatesDisponiveis();
     }
 
     @Test

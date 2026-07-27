@@ -12,5 +12,15 @@ package com.synapse.clinicafemina.integration.whatsapp;
  */
 public enum WhatsappProviderType {
     META,
-    UAZAP
+    UAZAP;
+
+    /** Meta enforces the customer-care window; UAZAP does not expose that rule here. */
+    public boolean enforcesCustomerCareWindow() {
+        return this == META;
+    }
+
+    /** Templates are a Meta Cloud API capability, not a generic WhatsApp capability. */
+    public boolean supportsMessageTemplates() {
+        return this == META;
+    }
 }

@@ -348,7 +348,10 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       await refreshList();
       if (activeIdRef.current === targetId) {
         setError(sentMessage?.whatsappStatus === 'FALHA'
-          ? mensagemFalhaAmigavel(sentMessage.motivoFalha)
+          ? mensagemFalhaAmigavel(
+              sentMessage.motivoFalha,
+              detail?.whatsappCapabilities?.enforcesCustomerCareWindow ?? true
+            )
           : null);
       }
     } catch (cause) {
@@ -511,9 +514,9 @@ function mergeMensagem(current: MensagemAtendimento[], next: MensagemAtendimento
   return current.map((message) => message.id === next.id ? next : message);
 }
 
-function mensagemFalhaAmigavel(reason: string | null) {
-  if (reason?.toLocaleLowerCase('pt-BR').includes('24h')
-      || reason?.toLocaleLowerCase('pt-BR').includes('template')) {
+function mensagemFalhaAmigavel(reason: string | null, enforcesCustomerCareWindow = true) {
+  const normalized = reason?.toLocaleLowerCase('pt-BR') ?? '';
+  if (enforcesCustomerCareWindow && (normalized.includes('24h') || normalized.includes('template'))) {
     return 'Mensagem n\u00e3o enviada: a janela de atendimento de 24 horas foi encerrada pela Meta. Use um template aprovado ou aguarde uma nova mensagem do paciente.';
   }
   return reason ?? 'Mensagem n\u00e3o enviada pelo WhatsApp.';

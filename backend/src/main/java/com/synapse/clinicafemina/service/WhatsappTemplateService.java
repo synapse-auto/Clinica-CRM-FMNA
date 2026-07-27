@@ -10,6 +10,8 @@ import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.exception.WhatsappTemplateSendException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderResolver;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
@@ -49,11 +51,11 @@ public class WhatsappTemplateService {
     private final UsuarioRepository usuarioRepository;
     private final WhatsappOutboundClient whatsappClient;
     private final WhatsappTemplateMapper templateMapper;
+    private final WhatsappProviderType providerType;
     private final Clock clock;
     private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
     private final Map<String, OffsetDateTime> recentSends = new ConcurrentHashMap<>();
 
-    @Autowired
     public WhatsappTemplateService(
             AtendimentoRepository atendimentoRepository,
             MensagemRepository mensagemRepository,
@@ -62,7 +64,21 @@ public class WhatsappTemplateService {
             WhatsappTemplateMapper templateMapper
     ) {
         this(atendimentoRepository, mensagemRepository, usuarioRepository,
-                whatsappClient, templateMapper, Clock.systemUTC());
+                whatsappClient, templateMapper, Clock.systemUTC(),
+                WhatsappProviderType.META);
+    }
+
+    @Autowired
+    public WhatsappTemplateService(
+            AtendimentoRepository atendimentoRepository,
+            MensagemRepository mensagemRepository,
+            UsuarioRepository usuarioRepository,
+            WhatsappOutboundClient whatsappClient,
+            WhatsappTemplateMapper templateMapper,
+            WhatsappProviderResolver providerResolver
+    ) {
+        this(atendimentoRepository, mensagemRepository, usuarioRepository,
+                whatsappClient, templateMapper, Clock.systemUTC(), providerResolver.resolve().getType());
     }
 
     WhatsappTemplateService(
@@ -73,17 +89,34 @@ public class WhatsappTemplateService {
             WhatsappTemplateMapper templateMapper,
             Clock clock
     ) {
+        this(atendimentoRepository, mensagemRepository, usuarioRepository,
+                whatsappClient, templateMapper, clock, WhatsappProviderType.META);
+    }
+
+    WhatsappTemplateService(
+            AtendimentoRepository atendimentoRepository,
+            MensagemRepository mensagemRepository,
+            UsuarioRepository usuarioRepository,
+            WhatsappOutboundClient whatsappClient,
+            WhatsappTemplateMapper templateMapper,
+            Clock clock,
+            WhatsappProviderType providerType
+    ) {
         this.atendimentoRepository = atendimentoRepository;
         this.mensagemRepository = mensagemRepository;
         this.usuarioRepository = usuarioRepository;
         this.whatsappClient = whatsappClient;
         this.templateMapper = templateMapper;
+        this.providerType = providerType;
         this.clock = clock;
     }
 
     @Transactional(readOnly = true)
     public List<WhatsappTemplateDTO> listar(Long atendimentoId, Long clinicaId) {
         buscarAtendimento(atendimentoId, clinicaId);
+        if (!providerType.supportsMessageTemplates()) {
+            return List.of();
+        }
         return definitions().stream()
                 .map(WhatsappTemplateMapper.TemplateDefinition::dto)
                 .sorted(templateComparator())
@@ -98,6 +131,9 @@ public class WhatsappTemplateService {
             EnviarTemplateWhatsappRequest request
     ) {
         Atendimento atendimento = buscarAtendimentoAtivo(atendimentoId, clinicaId);
+        if (!providerType.supportsMessageTemplates()) {
+            throw new BadRequestException("Templates nao suportados pelo provider de WhatsApp");
+        }
         Usuario remetente = buscarRemetente(remetenteUsuarioId, clinicaId);
         WhatsappTemplateMapper.TemplateDefinition definition = localizar(request.nome(), request.idioma());
         WhatsappTemplateMapper.PreparedTemplate prepared = templateMapper.prepare(

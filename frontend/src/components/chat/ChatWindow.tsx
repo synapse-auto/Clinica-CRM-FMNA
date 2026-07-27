@@ -14,10 +14,11 @@ import {
   Send,
   Search,
 } from 'lucide-react';
-import type {
-  AtendimentoDetalhe,
-  EnviarTemplateWhatsappRequest,
-  MensagemAtendimento,
+import {
+  DEFAULT_WHATSAPP_CAPABILITIES,
+  type AtendimentoDetalhe,
+  type EnviarTemplateWhatsappRequest,
+  type MensagemAtendimento,
 } from '@/types/atendimento';
 import type { MensagemRapida } from '@/types/operacional';
 import { ContactAvatar } from './ContactAvatar';
@@ -61,8 +62,11 @@ export function ChatWindow({ detail, loading = false, messages, quickMessages, b
   const previousScrollTop = useRef(0);
   const isNearBottom = useRef(true);
   const filteredQuickMessages = filterQuickMessages(quickMessages, quickSearch);
-  const windowOpen = detail?.janelaWhatsappAberta !== false;
-  const templatesAvailable = detail?.whatsappTemplatesDisponiveis === true;
+  const capabilities = detail?.whatsappCapabilities ?? DEFAULT_WHATSAPP_CAPABILITIES;
+  const enforcesCustomerCareWindow = capabilities.enforcesCustomerCareWindow;
+  const templatesSupported = capabilities.supportsMessageTemplates;
+  const windowOpen = !enforcesCustomerCareWindow || detail?.janelaWhatsappAberta !== false;
+  const templatesAvailable = templatesSupported && detail?.whatsappTemplatesDisponiveis === true;
 
   const scrollToLastMessage = useCallback((behavior: ScrollBehavior = 'auto') => {
     const container = messageScrollContainer.current;
@@ -329,6 +333,7 @@ export function ChatWindow({ detail, loading = false, messages, quickMessages, b
           <MessageBubble
             key={message.id}
             message={message}
+            enforcesCustomerCareWindow={enforcesCustomerCareWindow}
             onMediaLayoutChanged={detail ? () => handleMediaLayoutChanged(detail.id) : undefined}
           />
         ))}
@@ -410,7 +415,7 @@ export function ChatWindow({ detail, loading = false, messages, quickMessages, b
             </div>
           </div>
         ) : null}
-        {detail && !windowOpen ? (
+        {detail && enforcesCustomerCareWindow && !windowOpen ? (
           <div className={`${CHAT_CONTENT_WIDTH} flex flex-col items-center rounded-lg border border-clinic-warning/35 bg-clinic-warning/10 px-4 py-5 text-center`}>
             <Clock3 className="h-5 w-5 text-clinic-warning" />
             <p className="mt-2 max-w-2xl text-xs font-bold text-clinic-text">
@@ -433,7 +438,7 @@ export function ChatWindow({ detail, loading = false, messages, quickMessages, b
           </div>
         ) : (
           <div className={CHAT_CONTENT_WIDTH}>
-            {detail ? <WhatsappWindowIndicator expiresAt={detail.janelaWhatsappExpiraEm} /> : null}
+            {detail && enforcesCustomerCareWindow ? <WhatsappWindowIndicator expiresAt={detail.janelaWhatsappExpiraEm} /> : null}
             <div className="mt-2 flex items-center gap-2.5">
               <button
                 type="button"
@@ -466,14 +471,16 @@ export function ChatWindow({ detail, loading = false, messages, quickMessages, b
                         <FileUp className="mt-0.5 h-4 w-4 shrink-0" />
                         <span><span className="block font-bold">Enviar arquivo</span>{!windowOpen ? <span className="mt-0.5 block text-[10px] text-clinic-muted">Disponível somente dentro da janela de 24 horas.</span> : null}</span>
                       </Menu.Item>
-                      <Menu.Item
-                        disabled={!templatesAvailable || busy}
-                        onClick={() => openTemplates(addButton.current)}
-                        className="flex cursor-default items-start gap-3 rounded-md px-3 py-2.5 text-xs outline-none data-[highlighted]:bg-clinic-hover data-[disabled]:opacity-45"
-                      >
-                        <MessageSquareText className="mt-0.5 h-4 w-4 shrink-0" />
-                        <span><span className="block font-bold">Templates</span>{!templatesAvailable ? <span className="mt-0.5 block text-[10px] text-clinic-muted">Templates da Meta não estão configurados para esta clínica.</span> : null}</span>
-                      </Menu.Item>
+                      {templatesSupported ? (
+                        <Menu.Item
+                          disabled={!templatesAvailable || busy}
+                          onClick={() => openTemplates(addButton.current)}
+                          className="flex cursor-default items-start gap-3 rounded-md px-3 py-2.5 text-xs outline-none data-[highlighted]:bg-clinic-hover data-[disabled]:opacity-45"
+                        >
+                          <MessageSquareText className="mt-0.5 h-4 w-4 shrink-0" />
+                          <span><span className="block font-bold">Templates</span>{!templatesAvailable ? <span className="mt-0.5 block text-[10px] text-clinic-muted">Templates da Meta não estão configurados para esta clínica.</span> : null}</span>
+                        </Menu.Item>
+                      ) : null}
                     </Menu.Popup>
                   </Menu.Positioner>
                 </Menu.Portal>
@@ -501,12 +508,14 @@ export function ChatWindow({ detail, loading = false, messages, quickMessages, b
           </div>
         )}
       </div>
-      <WhatsappTemplateDialog
-        open={templatesOpen}
-        atendimentoId={detail?.id ?? null}
-        onOpenChange={changeTemplatesOpen}
-        onSend={onSendTemplate ?? (() => Promise.resolve())}
-      />
+      {templatesSupported ? (
+        <WhatsappTemplateDialog
+          open={templatesOpen}
+          atendimentoId={detail?.id ?? null}
+          onOpenChange={changeTemplatesOpen}
+          onSend={onSendTemplate ?? (() => Promise.resolve())}
+        />
+      ) : null}
     </section>
   );
 }
@@ -555,9 +564,11 @@ function WhatsappWindowIndicator({ expiresAt }: { expiresAt: string | null }) {
 
 function MessageBubble({
   message,
+  enforcesCustomerCareWindow,
   onMediaLayoutChanged,
 }: {
   message: MensagemAtendimento;
+  enforcesCustomerCareWindow: boolean;
   onMediaLayoutChanged?: () => void;
 }) {
   const outbound = message.direcao === 'SAIDA';
@@ -593,7 +604,7 @@ function MessageBubble({
         {outbound ? <StatusIcon status={message.whatsappStatus} /> : null}
         {message.whatsappStatus === 'FALHA' ? (
           <span className="font-semibold text-clinic-danger">
-            {mensagemFalhaAmigavel(message.motivoFalha)}
+            {mensagemFalhaAmigavel(message.motivoFalha, enforcesCustomerCareWindow)}
           </span>
         ) : null}
       </div>
@@ -601,9 +612,9 @@ function MessageBubble({
   );
 }
 
-function mensagemFalhaAmigavel(reason: string | null) {
+function mensagemFalhaAmigavel(reason: string | null, enforcesCustomerCareWindow = true) {
   const normalized = reason?.toLocaleLowerCase('pt-BR') ?? '';
-  if (normalized.includes('24h') || normalized.includes('template')) {
+  if (enforcesCustomerCareWindow && (normalized.includes('24h') || normalized.includes('template'))) {
     return 'Mensagem n\u00e3o enviada. A janela de atendimento de 24 horas foi encerrada pela Meta. Use um template aprovado ou aguarde uma nova mensagem do paciente.';
   }
   return reason ?? 'Falha no envio';

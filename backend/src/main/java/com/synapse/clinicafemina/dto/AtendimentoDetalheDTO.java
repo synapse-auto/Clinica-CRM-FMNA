@@ -20,7 +20,8 @@ public record AtendimentoDetalheDTO(
         OffsetDateTime janelaWhatsappExpiraEm,
         OffsetDateTime ultimaMensagemEntradaEm,
         Boolean aguardandoRespostaTemplate,
-        Boolean whatsappTemplatesDisponiveis
+        Boolean whatsappTemplatesDisponiveis,
+        WhatsappCapabilitiesDTO whatsappCapabilities
 ) {
     public AtendimentoDetalheDTO(
             Long id,
@@ -33,7 +34,7 @@ public record AtendimentoDetalheDTO(
             AtendenteDTO atendentePrincipal
     ) {
         this(id, status, tratadoPorIa, dataInicio, dataEncerramento, naoLidas,
-                paciente, atendentePrincipal, null, null, null, null, null);
+                paciente, atendentePrincipal, null, null, null, null, null, null);
     }
 
     public record PacienteDetalheDTO(

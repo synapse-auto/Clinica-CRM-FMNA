@@ -12,6 +12,7 @@ import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.exception.WhatsappTemplateSendException;
 import com.synapse.clinicafemina.exception.WhatsappTemplateParametersException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
@@ -112,6 +113,29 @@ class WhatsappTemplateServiceTest {
         service.listar(10L, 1L);
 
         verify(whatsappClient, times(2)).listarTemplatesPagina(any());
+    }
+
+    @Test
+    void should_not_call_meta_for_uazap_template_listing() {
+        when(atendimentoRepository.findByIdAndClinicaId(10L, 1L)).thenReturn(Optional.of(atendimento));
+
+        var templates = uazapService().listar(10L, 1L);
+
+        assertTrue(templates.isEmpty());
+        verify(whatsappClient, never()).configuracaoTemplatesKey();
+        verify(whatsappClient, never()).listarTemplatesPagina(any());
+    }
+
+    @Test
+    void should_reject_uazap_template_send_before_persistence_or_meta_call() {
+        when(atendimentoRepository.findByIdAndClinicaId(10L, 1L)).thenReturn(Optional.of(atendimento));
+
+        assertThrows(BadRequestException.class,
+                () -> uazapService().enviar(10L, 1L, 20L, request()));
+
+        verify(mensagemRepository, never()).save(any(Mensagem.class));
+        verify(whatsappClient, never()).configuracaoTemplatesKey();
+        verify(whatsappClient, never()).enviarTemplate(any(), any(), any(), any());
     }
 
     @Test
@@ -271,6 +295,18 @@ class WhatsappTemplateServiceTest {
                 .thenReturn(new WhatsappOutboundClient.TemplatePage(
                         List.of(template("confirmacao", "APPROVED")), null
                 ));
+    }
+
+    private WhatsappTemplateService uazapService() {
+        return new WhatsappTemplateService(
+                atendimentoRepository,
+                mensagemRepository,
+                usuarioRepository,
+                whatsappClient,
+                new WhatsappTemplateMapper(new WhatsappTemplateParameterMapper()),
+                Clock.fixed(Instant.parse("2026-07-16T12:00:00Z"), ZoneOffset.UTC),
+                WhatsappProviderType.UAZAP
+        );
     }
 
     private Map<String, Object> template(String name, String status) {

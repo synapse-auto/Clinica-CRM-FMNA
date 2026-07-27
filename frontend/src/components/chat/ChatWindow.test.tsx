@@ -40,6 +40,18 @@ const detail: AtendimentoDetalhe = {
   whatsappTemplatesDisponiveis: true,
 };
 
+const uazapDetail: AtendimentoDetalhe = {
+  ...detail,
+  janelaWhatsappAberta: false,
+  janelaWhatsappExpiraEm: '2026-07-14T18:00:00Z',
+  whatsappTemplatesDisponiveis: false,
+  whatsappCapabilities: {
+    provider: 'UAZAP',
+    enforcesCustomerCareWindow: false,
+    supportsMessageTemplates: false,
+  },
+};
+
 const scrollIntoViewMock = vi.fn();
 const scrollToMock = vi.fn(function scrollTo(this: HTMLElement, options: ScrollToOptions) {
   this.scrollTop = Number(options.top ?? 0);
@@ -580,6 +592,51 @@ describe('ChatWindow', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menuitem', { name: /Templates/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Adicionar' })).toHaveFocus();
+  });
+
+  it('should_keep_uazap_composer_available_without_window_or_templates', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ChatWindow
+        detail={uazapDetail}
+        messages={[]}
+        quickMessages={quickMessages}
+        busy={false}
+        error={null}
+        onSend={onSend}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.queryByText(/Janela do WhatsApp|24 horas|Nova mensagem/)).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Digite uma mensagem...')).toBeEnabled();
+
+    await user.type(screen.getByPlaceholderText('Digite uma mensagem...'), 'Mensagem UAZAP');
+    await user.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    expect(onSend).toHaveBeenCalledWith('Mensagem UAZAP');
+  });
+
+  it('should_not_mount_or_fetch_meta_templates_for_uazap', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChatWindow
+        detail={uazapDetail}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Adicionar' }));
+    expect(screen.getByRole('menuitem', { name: /Enviar arquivo/ })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /Templates/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Enviar template do WhatsApp' })).not.toBeInTheDocument();
+    expect(getTemplatesMock).not.toHaveBeenCalled();
   });
 
   it('should_hide_free_composer_when_window_is_closed_and_open_templates_directly', async () => {

@@ -70,6 +70,19 @@ export type AtendimentoDetalhe = {
   ultimaMensagemEntradaEm: string | null;
   aguardandoRespostaTemplate: boolean | null;
   whatsappTemplatesDisponiveis: boolean | null;
+  whatsappCapabilities?: WhatsappCapabilities | null;
+};
+
+export type WhatsappCapabilities = {
+  provider: 'META' | 'UAZAP' | string;
+  enforcesCustomerCareWindow: boolean;
+  supportsMessageTemplates: boolean;
+};
+
+export const DEFAULT_WHATSAPP_CAPABILITIES: WhatsappCapabilities = {
+  provider: 'META',
+  enforcesCustomerCareWindow: true,
+  supportsMessageTemplates: true,
 };
 
 export type WhatsappTemplateStatus = 'APPROVED' | 'PENDING' | 'PAUSED' | 'REJECTED' | string;

@@ -1,6 +1,7 @@
 package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.exception.WhatsappWindowClosedException;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
 import com.synapse.clinicafemina.repository.MensagemRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class WhatsappWindowServiceTest {
@@ -95,5 +97,23 @@ class WhatsappWindowServiceTest {
                 .thenReturn(Optional.of(NOW.minusDays(3)));
 
         assertFalse(service.avaliar(10L, 1L).aguardandoRespostaTemplate());
+    }
+
+    @Test
+    void should_not_apply_customer_care_window_for_uazap() {
+        WhatsappWindowService uazapService = new WhatsappWindowService(
+                mensagemRepository,
+                WhatsappProviderType.UAZAP,
+                Clock.fixed(Instant.parse("2026-07-16T12:00:00Z"), ZoneOffset.UTC)
+        );
+
+        var result = uazapService.avaliar(10L, 1L);
+
+        assertTrue(result.aberta());
+        assertEquals(null, result.expiraEm());
+        assertEquals(null, result.ultimaMensagemEntradaEm());
+        assertFalse(result.aguardandoRespostaTemplate());
+        uazapService.exigirAberta(10L, 1L);
+        verifyNoInteractions(mensagemRepository);
     }
 }
