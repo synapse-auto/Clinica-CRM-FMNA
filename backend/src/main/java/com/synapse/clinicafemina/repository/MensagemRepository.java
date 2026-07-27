@@ -35,6 +35,18 @@ public interface MensagemRepository extends JpaRepository<Mensagem, Long> {
     Optional<Mensagem> findFirstByAtendimentoIdOrderByDataHoraDesc(Long atendimentoId);
 
     @Query("""
+            SELECT m FROM Mensagem m
+            WHERE m.atendimento.id = :atendimentoId
+              AND m.atendimento.clinica.id = :clinicaId
+              AND m.tipoMedia = 'AI_HANDOFF_SUMMARY'
+            ORDER BY m.dataHora DESC
+            """)
+    Optional<Mensagem> findLatestAiHandoffSummary(
+            @Param("atendimentoId") Long atendimentoId,
+            @Param("clinicaId") Long clinicaId
+    );
+
+    @Query("""
             SELECT MAX(m.dataHora) FROM Mensagem m
             WHERE m.atendimento.id = :atendimentoId
               AND m.atendimento.clinica.id = :clinicaId

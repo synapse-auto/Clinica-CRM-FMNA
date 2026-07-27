@@ -7,6 +7,8 @@ import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.service.AtendimentoService;
 import com.synapse.clinicafemina.service.MensagemService;
 import com.synapse.clinicafemina.service.N8nCallbackAuthorizationService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -29,6 +33,7 @@ public class N8nAtendimentoController {
     private final MensagemService mensagemService;
     private final AtendimentoService atendimentoService;
     private final N8nCallbackAuthorizationService authorizationService;
+    private final ObjectMapper objectMapper;
 
     @PostMapping("/{atendimentoId}/responder")
     public ResponseEntity<MensagemDTO> responder(
@@ -48,22 +53,31 @@ public class N8nAtendimentoController {
     }
 
     @PostMapping("/{atendimentoId}/transferir-humano")
-    public ResponseEntity<AtendimentoDetalheDTO> transferirHumano(
+    public ResponseEntity<Map<String, Object>> transferirHumano(
             @PathVariable Long atendimentoId,
             @RequestHeader(value = "X-N8N-SECRET", required = false) String secret,
             @RequestBody @Valid TransferirAtendimentoRequest request
     ) {
         N8nCallbackAuthorizationService.Autorizacao autorizacao =
                 authorizationService.autorizar(secret, atendimentoId);
-        AtendimentoDetalheDTO atendimento = atendimentoService.transferir(
+        AtendimentoService.TransferenciaHumanoResultado resultado = atendimentoService.transferirPorN8n(
                 atendimentoId,
                 request,
-                autorizacao.clinicaId(),
-                request.novoAtendenteId()
+                autorizacao.clinicaId()
         );
         log.info("Atendimento {} transferido para humano por callback N8N. novoAtendente={}",
                 atendimentoId, request.novoAtendenteId());
-        return ResponseEntity.ok(atendimento);
+        Map<String, Object> body = new LinkedHashMap<>(objectMapper.convertValue(
+                resultado.atendimento(), new TypeReference<Map<String, Object>>() {}
+        ));
+        body.put("atendimentoId", resultado.atendimento().id());
+        body.put("modo", "HUMANO");
+        body.put("transferido", resultado.transferido());
+        body.put("jaEstavaTransferido", resultado.jaEstavaTransferido());
+        body.put("resumoRegistrado", resultado.resumoRegistrado());
+        body.put("notificacoesCriadas", resultado.notificacoesCriadas());
+        body.put("transferidoEm", resultado.transferidoEm());
+        return ResponseEntity.ok(body);
     }
 
     @PatchMapping("/{atendimentoId}/modo-ia")

@@ -31,6 +31,8 @@ public interface NotificacaoAtendimentoRepository extends JpaRepository<Notifica
 
     boolean existsByUsuarioIdAndMensagemIdAndTipo(Long usuarioId, Long mensagemId, String tipo);
 
+    boolean existsByUsuarioIdAndAtendimentoIdAndTipo(Long usuarioId, Long atendimentoId, String tipo);
+
     @Modifying
     @Query("""
             UPDATE NotificacaoAtendimento n SET n.lidaEm = :lidaEm

@@ -3,6 +3,8 @@ package com.synapse.clinicafemina.repository;
 import com.synapse.clinicafemina.domain.Atendimento;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -69,6 +71,19 @@ public interface AtendimentoRepository extends JpaRepository<Atendimento, Long> 
     );
 
     Optional<Atendimento> findByIdAndClinicaId(Long id, Long clinicaId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT a FROM Atendimento a
+            JOIN FETCH a.paciente
+            LEFT JOIN FETCH a.atendentePrincipal
+            WHERE a.id = :id
+              AND a.clinica.id = :clinicaId
+            """)
+    Optional<Atendimento> findByIdAndClinicaIdForUpdate(
+            @Param("id") Long id,
+            @Param("clinicaId") Long clinicaId
+    );
 
     @Query("""
             SELECT a FROM Atendimento a

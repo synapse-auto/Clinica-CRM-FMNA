@@ -1409,6 +1409,34 @@ describe('ChatWindow', () => {
     expect(bubble).toHaveClass('max-w-[min(88%,760px)]', 'break-words');
   });
 
+  it('should_render_ai_handoff_summary_as_a_distinct_internal_card', () => {
+    const summary: MensagemAtendimento = {
+      ...makeMessage(12, 'SISTEMA'),
+      remetente: 'IA',
+      tipoMedia: 'AI_HANDOFF_SUMMARY',
+      conteudo: 'Paciente pediu retorno com a recepção.',
+      conteudoPrevia: 'Paciente pediu retorno com a recepção.',
+      whatsappStatus: 'INTERNO',
+    };
+
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[summary]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByTestId('ai-handoff-summary')).toBeInTheDocument();
+    expect(screen.getByText('Resumo da IA para o atendimento')).toBeInTheDocument();
+    expect(screen.getByText('Paciente pediu retorno com a recepção.')).toBeInTheDocument();
+    expect(screen.queryByText('Falha no envio')).not.toBeInTheDocument();
+  });
+
   it('should_prevent_media_from_overflowing_the_bubble', () => {
     const imageMessage: MensagemAtendimento = {
       ...makeMessage(9, 'ENTRADA'),

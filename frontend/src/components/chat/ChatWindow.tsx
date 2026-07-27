@@ -4,6 +4,7 @@ import { Menu } from '@base-ui/react/menu';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import {
   AlertCircle,
+  Bot,
   Check,
   CheckCheck,
   Clock3,
@@ -571,6 +572,9 @@ function MessageBubble({
   enforcesCustomerCareWindow: boolean;
   onMediaLayoutChanged?: () => void;
 }) {
+  if (message.tipoMedia === 'AI_HANDOFF_SUMMARY') {
+    return <AiHandoffSummaryMessage message={message} />;
+  }
   const outbound = message.direcao === 'SAIDA';
   const failed = message.whatsappStatus === 'FALHA';
   const template = message.tipoMedia === 'TEMPLATE';
@@ -609,6 +613,34 @@ function MessageBubble({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function AiHandoffSummaryMessage({ message }: { message: MensagemAtendimento }) {
+  return (
+    <article
+      data-testid="ai-handoff-summary"
+      className="mx-auto w-full max-w-[760px] rounded-2xl border border-clinic-primary/25 bg-clinic-primary/5 px-4 py-3 text-clinic-text shadow-sm sm:px-5"
+    >
+      <div className="flex items-center gap-2 text-clinic-primary">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-clinic-primary/12">
+          <Bot className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="text-xs font-extrabold">Resumo da IA para o atendimento</p>
+          <p className="text-[10px] font-semibold text-clinic-muted">Transferência para atendimento humano</p>
+        </div>
+      </div>
+      <p className="mt-3 whitespace-pre-wrap break-words text-[12px] leading-5 text-clinic-text">
+        {message.conteudo}
+      </p>
+      <time className="mt-2 block text-right text-[10px] text-clinic-muted">
+        {new Intl.DateTimeFormat('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }).format(new Date(message.dataHora))}
+      </time>
+    </article>
   );
 }
 

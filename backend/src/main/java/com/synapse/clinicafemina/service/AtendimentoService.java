@@ -1,6 +1,7 @@
 package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.domain.Atendimento;
+import com.synapse.clinicafemina.domain.Mensagem;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.domain.Tag;
 import com.synapse.clinicafemina.domain.TransferenciaAtendimento;
@@ -35,6 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
@@ -43,6 +45,18 @@ import java.util.Set;
 public class AtendimentoService {
 
     private static final Set<String> PERFIS_ATENDENTES = Set.of("GESTOR", "RECEPCIONISTA");
+    private static final String AI_HANDOFF_SUMMARY = "AI_HANDOFF_SUMMARY";
+
+    public record TransferenciaHumanoResultado(
+            AtendimentoDetalheDTO atendimento,
+            boolean transferido,
+            boolean jaEstavaTransferido,
+            boolean resumoRegistrado,
+            int notificacoesCriadas,
+            OffsetDateTime transferidoEm
+    ) {}
+
+    private record ResumoTransferencia(Mensagem mensagem, boolean registrado) {}
 
     private final AtendimentoRepository atendimentoRepository;
     private final MensagemRepository mensagemRepository;
@@ -150,6 +164,66 @@ public class AtendimentoService {
     }
 
     @Transactional
+    public TransferenciaHumanoResultado transferirPorN8n(
+            Long id,
+            TransferirAtendimentoRequest request,
+            Long clinicaId
+    ) {
+        Atendimento atendimento = atendimentoRepository.findByIdAndClinicaIdForUpdate(id, clinicaId)
+                .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
+        validarAtendimentoTransferivel(atendimento);
+
+        if (Boolean.FALSE.equals(atendimento.getTratadoPorIa())) {
+            return new TransferenciaHumanoResultado(
+                    toDetalheDTO(atendimento),
+                    true,
+                    true,
+                    false,
+                    0,
+                    atendimento.getHumanoDesde()
+            );
+        }
+
+        Usuario novoAtendente = buscarAtendente(request.novoAtendenteId(), clinicaId);
+        Usuario responsavel = buscarUsuario(request.novoAtendenteId(), clinicaId);
+        Usuario antigoAtendente = atendimento.getAtendentePrincipal();
+        OffsetDateTime transferidoEm = OffsetDateTime.now();
+
+        atendimento.setAtendentePrincipal(novoAtendente);
+        atendimento.setTratadoPorIa(false);
+        atendimento.setHumanoDesde(transferidoEm);
+        atendimento.setStatus("ATIVO");
+        atendimentoRepository.save(atendimento);
+        String motivoTransferencia = request.motivoTransferencia() != null
+                ? request.motivoTransferencia()
+                : request.motivo();
+        transferenciaRepository.save(criarTransferencia(
+                atendimento,
+                antigoAtendente,
+                novoAtendente,
+                responsavel,
+                sanitizarTextoCurto(motivoTransferencia)
+        ));
+
+        ResumoTransferencia resumo = registrarResumoTransferencia(atendimento, request.resumoTransferencia());
+        int notificacoes = notificationService.notificarTransferenciaIa(
+                atendimento,
+                resumo.mensagem(),
+                motivoTransferencia
+        );
+        log.info("Transferência N8N para humano concluída. atendimentoId={} resumoRegistrado={} notificacoesCriadas={}",
+                id, resumo.registrado(), notificacoes);
+        return new TransferenciaHumanoResultado(
+                toDetalheDTO(atendimento),
+                true,
+                false,
+                resumo.registrado(),
+                notificacoes,
+                transferidoEm
+        );
+    }
+
+    @Transactional
     public AtendimentoDetalheDTO assumir(Long id, Long clinicaId, Long usuarioId) {
         return transferir(
                 id,
@@ -222,6 +296,53 @@ public class AtendimentoService {
     private Atendimento buscarOuFalhar(Long id, Long clinicaId) {
         return atendimentoRepository.findByIdAndClinicaId(id, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
+    }
+
+    private void validarAtendimentoTransferivel(Atendimento atendimento) {
+        String status = atendimento.getStatus();
+        if ("ENCERRADO".equalsIgnoreCase(status)
+                || "CANCELADO".equalsIgnoreCase(status)
+                || "FINALIZADO".equalsIgnoreCase(status)
+                || atendimento.getDataEncerramento() != null) {
+            throw new IllegalStateException("Não é possível transferir um atendimento encerrado ou cancelado");
+        }
+    }
+
+    private ResumoTransferencia registrarResumoTransferencia(Atendimento atendimento, String resumo) {
+        if (resumo == null || resumo.isBlank()) {
+            return new ResumoTransferencia(null, false);
+        }
+        Long atendimentoId = atendimento.getId();
+        Long clinicaId = atendimento.getClinica().getId();
+        Optional<Mensagem> existente = mensagemRepository.findLatestAiHandoffSummary(atendimentoId, clinicaId);
+        if (existente.isPresent()) {
+            return new ResumoTransferencia(existente.get(), false);
+        }
+        String conteudo = sanitizarTextoCurto(resumo);
+        if (conteudo.isBlank()) {
+            return new ResumoTransferencia(null, false);
+        }
+        Mensagem mensagem = new Mensagem();
+        mensagem.setAtendimento(atendimento);
+        mensagem.setDirecao("SISTEMA");
+        mensagem.setRemetente("IA");
+        mensagem.setTipoMedia(AI_HANDOFF_SUMMARY);
+        mensagem.setConteudo(conteudo);
+        mensagem.setConteudoPrevia(limitarPrevia(conteudo));
+        mensagem.setWhatsappStatus("INTERNO");
+        mensagem.setDataHora(OffsetDateTime.now());
+        return new ResumoTransferencia(mensagemRepository.save(mensagem), true);
+    }
+
+    private String limitarPrevia(String conteudo) {
+        if (conteudo.length() <= 60) {
+            return conteudo;
+        }
+        return conteudo.substring(0, 57) + "...";
+    }
+
+    private String sanitizarTextoCurto(String valor) {
+        return valor == null ? "" : valor.replaceAll("<[^>]*>", "").trim();
     }
 
     private Usuario buscarUsuario(Long usuarioId, Long clinicaId) {

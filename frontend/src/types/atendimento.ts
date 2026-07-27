@@ -125,9 +125,9 @@ export type EnviarTemplateWhatsappRequest = {
 
 export type MensagemAtendimento = {
   id: number;
-  direcao: 'ENTRADA' | 'SAIDA';
+  direcao: 'ENTRADA' | 'SAIDA' | 'SISTEMA';
   remetente: 'PACIENTE' | 'ATENDENTE' | 'IA' | 'SISTEMA';
-  tipoMedia: 'TEXTO' | 'IMAGEM' | 'AUDIO' | 'DOCUMENTO' | 'TEMPLATE';
+  tipoMedia: 'TEXTO' | 'IMAGEM' | 'AUDIO' | 'DOCUMENTO' | 'TEMPLATE' | 'AI_HANDOFF_SUMMARY';
   conteudo: string | null;
   conteudoPrevia: string | null;
   whatsappStatus: string | null;
@@ -157,7 +157,7 @@ export type AtendimentoFilter =
 export type NotificacaoAtendimento = {
   id: number;
   atendimentoId: number;
-  tipo: 'NOVA_MENSAGEM' | 'ATENDIMENTO_ATRIBUIDO';
+  tipo: 'NOVA_MENSAGEM' | 'ATENDIMENTO_ATRIBUIDO' | 'TRANSFERENCIA_IA';
   descricao: string;
   lida: boolean;
   criadoEm: string;

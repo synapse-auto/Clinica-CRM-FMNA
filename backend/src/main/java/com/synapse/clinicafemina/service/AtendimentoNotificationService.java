@@ -24,6 +24,7 @@ public class AtendimentoNotificationService {
 
     private static final String NOVA_MENSAGEM = "NOVA_MENSAGEM";
     private static final String ATENDIMENTO_ATRIBUIDO = "ATENDIMENTO_ATRIBUIDO";
+    private static final String TRANSFERENCIA_IA = "TRANSFERENCIA_IA";
 
     private final NotificacaoAtendimentoRepository repository;
     private final UsuarioRepository usuarioRepository;
@@ -46,6 +47,51 @@ public class AtendimentoNotificationService {
                 destinatario, atendimento, null, ATENDIMENTO_ATRIBUIDO,
                 "Um atendimento foi atribuído a você"
         ));
+    }
+
+    @Transactional
+    public int notificarTransferenciaIa(Atendimento atendimento, Mensagem resumo) {
+        return notificarTransferenciaIa(atendimento, resumo, null);
+    }
+
+    @Transactional
+    public int notificarTransferenciaIa(Atendimento atendimento, Mensagem resumo, String motivo) {
+        List<Usuario> destinatarios = usuarioRepository.findRecepcionistasAtivosByClinicaId(
+                atendimento.getClinica().getId()
+        );
+        String descricao = descricaoTransferencia(motivo);
+        int criadas = 0;
+        for (Usuario destinatario : destinatarios) {
+            boolean existente = resumo != null
+                    ? repository.existsByUsuarioIdAndMensagemIdAndTipo(
+                            destinatario.getId(), resumo.getId(), TRANSFERENCIA_IA)
+                    : repository.existsByUsuarioIdAndAtendimentoIdAndTipo(
+                            destinatario.getId(), atendimento.getId(), TRANSFERENCIA_IA);
+            if (!existente) {
+                repository.save(novaNotificacao(
+                        destinatario,
+                        atendimento,
+                        resumo,
+                        TRANSFERENCIA_IA,
+                        descricao
+                ));
+                criadas++;
+            }
+        }
+        return criadas;
+    }
+
+    private String descricaoTransferencia(String motivo) {
+        String base = "A IA transferiu um atendimento para humano";
+        if (motivo == null || motivo.isBlank()) {
+            return base;
+        }
+        String seguro = motivo.replaceAll("<[^>]*>", "").trim();
+        if (seguro.isBlank()) {
+            return base;
+        }
+        String trecho = seguro.length() > 120 ? seguro.substring(0, 117) + "..." : seguro;
+        return base + ": " + trecho;
     }
 
     @Transactional(readOnly = true)

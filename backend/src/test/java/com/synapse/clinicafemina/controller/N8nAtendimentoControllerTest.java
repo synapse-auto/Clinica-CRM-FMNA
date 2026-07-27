@@ -159,8 +159,8 @@ class N8nAtendimentoControllerTest {
     @Test
     void should_transfer_to_human_with_valid_n8n_secret_without_jwt() throws Exception {
         autorizar("test-secret");
-        when(atendimentoService.transferir(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L), eq(1L)))
-                .thenReturn(atendimentoHumano());
+        when(atendimentoService.transferirPorN8n(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L)))
+                .thenReturn(resultadoHumano(false, true, 2));
 
         mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-humano")
                         .header("X-N8N-SECRET", "test-secret")
@@ -168,16 +168,23 @@ class N8nAtendimentoControllerTest {
                         .content("""
                                 {
                                   "novoAtendenteId": 1,
-                                  "motivo": "Transferido pelo N8N"
+                                  "motivo": "Transferido pelo N8N",
+                                  "resumoTransferencia": "Paciente pediu continuidade com a recepção.",
+                                  "motivoTransferencia": "Solicitação do paciente"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(30))
                 .andExpect(jsonPath("$.status").value("ATIVO"))
                 .andExpect(jsonPath("$.tratadoPorIa").value(false))
-                .andExpect(jsonPath("$.atendentePrincipal.id").value(1));
+                .andExpect(jsonPath("$.atendentePrincipal.id").value(1))
+                .andExpect(jsonPath("$.modo").value("HUMANO"))
+                .andExpect(jsonPath("$.transferido").value(true))
+                .andExpect(jsonPath("$.jaEstavaTransferido").value(false))
+                .andExpect(jsonPath("$.resumoRegistrado").value(true))
+                .andExpect(jsonPath("$.notificacoesCriadas").value(2));
 
-        verify(atendimentoService).transferir(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L), eq(1L));
+        verify(atendimentoService).transferirPorN8n(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L));
     }
 
     @Test
@@ -194,7 +201,7 @@ class N8nAtendimentoControllerTest {
                                 """))
                 .andExpect(status().isUnauthorized());
 
-        verify(atendimentoService, never()).transferir(any(), any(), any(), any());
+        verify(atendimentoService, never()).transferirPorN8n(any(), any(), any());
     }
 
     @Test
@@ -212,13 +219,13 @@ class N8nAtendimentoControllerTest {
                                 """))
                 .andExpect(status().isUnauthorized());
 
-        verify(atendimentoService, never()).transferir(any(), any(), any(), any());
+        verify(atendimentoService, never()).transferirPorN8n(any(), any(), any());
     }
 
     @Test
     void should_return_clear_error_when_n8n_transfer_target_attendant_is_invalid() throws Exception {
         autorizar("test-secret");
-        when(atendimentoService.transferir(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L), eq(999L)))
+        when(atendimentoService.transferirPorN8n(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L)))
                 .thenThrow(new NotFoundException("Usuário não encontrado"));
 
         mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-humano")
@@ -237,7 +244,7 @@ class N8nAtendimentoControllerTest {
     @Test
     void should_not_allow_n8n_transfer_when_atendimento_is_closed() throws Exception {
         autorizar("test-secret");
-        when(atendimentoService.transferir(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L), eq(1L)))
+        when(atendimentoService.transferirPorN8n(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L)))
                 .thenThrow(new IllegalStateException("Não é possível transferir um atendimento encerrado"));
 
         mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-humano")
@@ -294,6 +301,21 @@ class N8nAtendimentoControllerTest {
     private void rejeitarSecret(String secret) {
         when(authorizationService.autorizar(secret, 30L))
                 .thenThrow(new BadCredentialsException("Credencial N8N invalida."));
+    }
+
+    private AtendimentoService.TransferenciaHumanoResultado resultadoHumano(
+            boolean jaEstavaTransferido,
+            boolean resumoRegistrado,
+            int notificacoesCriadas
+    ) {
+        return new AtendimentoService.TransferenciaHumanoResultado(
+                atendimentoHumano(),
+                true,
+                jaEstavaTransferido,
+                resumoRegistrado,
+                notificacoesCriadas,
+                OffsetDateTime.parse("2026-07-03T12:00:00Z")
+        );
     }
 
     private AtendimentoDetalheDTO atendimentoHumano() {
