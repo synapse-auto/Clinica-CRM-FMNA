@@ -1,5 +1,7 @@
 package com.synapse.clinicafemina.integration.whatsapp.uazap;
 
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
+import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -21,10 +23,16 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class UazapPictureEnrichmentEventListener {
 
     private final UazapProfilePhotoEnrichmentService enrichmentService;
+    private final WhatsappProperties whatsappProperties;
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void aoConfirmarMensagem(UazapPictureEnrichmentRequestedEvent event) {
+        if (whatsappProperties.resolveProvider() != WhatsappProviderType.UAZAP
+                || !whatsappProperties.getUazap().isPictureEnrichmentEnabled()) {
+            log.debug("Evento de foto UAZAP ignorado: enriquecimento automatico desativado");
+            return;
+        }
         try {
             enrichmentService.enriquecer(event.pacienteId(), event.clinicaId());
         } catch (Exception exception) {

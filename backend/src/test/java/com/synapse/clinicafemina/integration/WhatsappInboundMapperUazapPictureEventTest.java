@@ -30,8 +30,11 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -109,20 +112,47 @@ class WhatsappInboundMapperUazapPictureEventTest {
     }
 
     @Test
-    @DisplayName("provider META (default, UltraMedical): nunca publica o evento de foto UAZAP")
-    void metaProvider_neverPublishesEvent() {
+    @DisplayName("provider META e flag false: nunca publica o evento de foto UAZAP")
+    void metaProviderWithFlagDisabled_neverPublishesEvent() {
         mapper().processarMensagemTexto(payload());
 
         verify(eventPublisher, never()).publishEvent(any(UazapPictureEnrichmentRequestedEvent.class));
     }
 
     @Test
-    @DisplayName("provider UAZAP (FMNA): publica o evento com o pacienteId após a mensagem ser persistida")
-    void uazapProvider_publishesEventWithPacienteId() {
+    @DisplayName("provider META e flag true: nunca publica o evento de foto UAZAP")
+    void metaProviderWithFlagEnabled_neverPublishesEvent() {
+        whatsappProperties.getUazap().setPictureEnrichmentEnabled(true);
+
+        mapper().processarMensagemTexto(payload());
+
+        verify(eventPublisher, never()).publishEvent(any(UazapPictureEnrichmentRequestedEvent.class));
+    }
+
+    @Test
+    @DisplayName("provider UAZAP e flag false: preserva mensagem, atendimento e evento N8N")
+    void uazapProviderWithFlagDisabled_preservesInboundFlowWithoutPictureEvent() {
         whatsappProperties.setProvider("UAZAP");
 
         mapper().processarMensagemTexto(payload());
 
-        verify(eventPublisher).publishEvent(new UazapPictureEnrichmentRequestedEvent(20L, 2L));
+        verify(pacienteRepository, atLeastOnce()).save(any(Paciente.class));
+        verify(atendimentoRepository, atLeastOnce()).save(any(Atendimento.class));
+        verify(mensagemRepository).save(any(Mensagem.class));
+        verify(notificationService).notificarNovaMensagem(any(Atendimento.class), any(Mensagem.class));
+        verify(eventPublisher, times(1)).publishEvent(isA(N8nMensagemRecebidaEvent.class));
+        verify(eventPublisher, never()).publishEvent(any(UazapPictureEnrichmentRequestedEvent.class));
+    }
+
+    @Test
+    @DisplayName("provider UAZAP e flag true: publica exatamente um evento com o pacienteId")
+    void uazapProviderWithFlagEnabled_publishesOneEventWithPacienteId() {
+        whatsappProperties.setProvider("UAZAP");
+        whatsappProperties.getUazap().setPictureEnrichmentEnabled(true);
+
+        mapper().processarMensagemTexto(payload());
+
+        verify(eventPublisher, times(1))
+                .publishEvent(new UazapPictureEnrichmentRequestedEvent(20L, 2L));
     }
 }

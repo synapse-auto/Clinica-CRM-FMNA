@@ -51,6 +51,9 @@ public class UazapPictureDiagnosticoController {
             @RequestBody @Valid UazapPictureDiagnosticoRequest request,
             Authentication authentication
     ) {
+        if (!whatsappProperties.getUazap().isPictureDiagnosticsEnabled()) {
+            return ResponseEntity.notFound().build();
+        }
         Usuario admin = usuarioPermissionService.exigirAdminInterno(authentication);
         diagnosticoService.reprocessar(admin.getClinica(), request.pacienteId());
         return ResponseEntity.accepted().build();

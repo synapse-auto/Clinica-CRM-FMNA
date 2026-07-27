@@ -58,6 +58,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class UazapPictureDiagnosticoControllerSecurityTest {
 
     private static final String ENDPOINT = "/api/admin/integracoes/uazap/foto/diagnostico";
+    private static final String REPROCESS_ENDPOINT = "/api/admin/integracoes/uazap/foto/reprocessar";
 
     @Autowired
     private MockMvc mockMvc;
@@ -182,6 +183,42 @@ class UazapPictureDiagnosticoControllerSecurityTest {
         assertFalse(json.toString().contains("Paciente Diagnostico"), "resposta nunca deve conter o nome do paciente");
         // Sem rede real disponível: a chamada à UAZAP falha (conexão recusada) — o motivo sanitizado é reportado.
         assertFalse(json.get("fotoPersistida").asBoolean());
+    }
+
+    @Test
+    void receptionist_cannotReprocessPicture() throws Exception {
+        mockMvc.perform(post(REPROCESS_ENDPOINT)
+                        .header("Authorization", "Bearer " + login(recepcionistaEmail))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pacienteId\":%d}".formatted(pacienteId)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void gestorWithoutAdminInterno_cannotReprocessPicture() throws Exception {
+        mockMvc.perform(post(REPROCESS_ENDPOINT)
+                        .header("Authorization", "Bearer " + login(gestorComumEmail))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pacienteId\":%d}".formatted(pacienteId)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminInterno_cannotReprocessCrossClinicPatient() throws Exception {
+        mockMvc.perform(post(REPROCESS_ENDPOINT)
+                        .header("Authorization", "Bearer " + login(adminInternoEmail))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pacienteId\":%d}".formatted(pacienteOutraClinicaId)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void adminInterno_canReprocessOwnClinicPatientWithAutomaticEnrichmentDisabled() throws Exception {
+        mockMvc.perform(post(REPROCESS_ENDPOINT)
+                        .header("Authorization", "Bearer " + login(adminInternoEmail))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pacienteId\":%d}".formatted(pacienteId)))
+                .andExpect(status().isAccepted());
     }
 
     private String login(String email) throws Exception {

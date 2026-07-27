@@ -571,6 +571,10 @@ public class WhatsappInboundMapper {
         if (whatsappProperties.resolveProvider() != WhatsappProviderType.UAZAP) {
             return;
         }
+        if (!whatsappProperties.getUazap().isPictureEnrichmentEnabled()) {
+            log.debug("Enriquecimento automatico de foto UAZAP desativado");
+            return;
+        }
         eventPublisher.publishEvent(new UazapPictureEnrichmentRequestedEvent(
                 paciente.getId(),
                 paciente.getClinica().getId()

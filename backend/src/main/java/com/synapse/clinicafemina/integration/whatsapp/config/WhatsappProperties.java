@@ -75,6 +75,8 @@ public class WhatsappProperties {
         private String webhookSecret;
         private int connectTimeoutMs = 5000;
         private int readTimeoutMs = 15000;
+        /** {@code UAZAP_PICTURE_ENRICHMENT_ENABLED} - fluxo automatico desabilitado por padrao. */
+        private boolean pictureEnrichmentEnabled = false;
         /** {@code UAZAP_PICTURE_DIAGNOSTICS_ENABLED} — desabilitado por padrão. Ver {@code UazapPictureDiagnosticoController}. */
         private boolean pictureDiagnosticsEnabled = false;
         /** Hosts HTTPS adicionais, separados por virgula, autorizados a servir fotos. */
@@ -142,6 +144,14 @@ public class WhatsappProperties {
 
         public void setReadTimeoutMs(int readTimeoutMs) {
             this.readTimeoutMs = readTimeoutMs;
+        }
+
+        public boolean isPictureEnrichmentEnabled() {
+            return pictureEnrichmentEnabled;
+        }
+
+        public void setPictureEnrichmentEnabled(boolean pictureEnrichmentEnabled) {
+            this.pictureEnrichmentEnabled = pictureEnrichmentEnabled;
         }
 
         public boolean isPictureDiagnosticsEnabled() {

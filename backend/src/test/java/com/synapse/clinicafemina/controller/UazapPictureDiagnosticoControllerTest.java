@@ -80,7 +80,21 @@ class UazapPictureDiagnosticoControllerTest {
     }
 
     @Test
-    void reprocessarAllowsControlledRetryWithoutDiagnosticsPayload() {
+    @DisplayName("reprocessar com diagnostico desabilitado retorna 404 sem tocar no serviço")
+    void reprocessarWithDiagnosticsDisabled_returnsNotFound() {
+        ResponseEntity<Void> response =
+                controller.reprocessar(new UazapPictureDiagnosticoRequest(1L), authentication);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        verify(usuarioPermissionService, never()).exigirAdminInterno(any());
+        verify(diagnosticoService, never()).reprocessar(any(), any());
+    }
+
+    @Test
+    @DisplayName("reprocessar habilitado independe do enriquecimento automatico")
+    void reprocessarAllowsControlledRetryWithoutAutomaticEnrichment() {
+        whatsappProperties.getUazap().setPictureDiagnosticsEnabled(true);
+        whatsappProperties.getUazap().setPictureEnrichmentEnabled(false);
         Clinica clinica = new Clinica();
         clinica.setId(9L);
         Usuario admin = new Gestor();
