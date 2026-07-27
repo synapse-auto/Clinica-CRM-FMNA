@@ -8,6 +8,7 @@ import com.synapse.clinicafemina.dto.agendamento.AgendamentoResponse;
 import com.synapse.clinicafemina.dto.agendamento.AgendamentoUpdateRequest;
 import com.synapse.clinicafemina.service.AgendamentoService;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
+import com.synapse.clinicafemina.service.CancelamentoAgendamentoService;
 import jakarta.validation.Valid;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -34,6 +35,7 @@ public class AgendamentoController {
 
     private final ClinicaConfigService clinicaConfigService;
     private final AgendamentoService agendamentoService;
+    private final CancelamentoAgendamentoService cancelamentoAgendamentoService;
 
     @GetMapping
     public List<AgendamentoResponse> listar(
@@ -80,6 +82,8 @@ public class AgendamentoController {
             @RequestBody @Valid AgendamentoCancelRequest request
     ) {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
-        return agendamentoService.cancelar(clinica, id, request);
+        AgendamentoResponse response = agendamentoService.cancelar(clinica, id, request);
+        cancelamentoAgendamentoService.registrarCancelamentoManual(clinica, id, request.motivo());
+        return response;
     }
 }

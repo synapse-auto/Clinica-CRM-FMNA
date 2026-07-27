@@ -14,6 +14,7 @@ export const AUTH_MENU_ITEMS: readonly AuthMenuItem[] = [
   { name: 'Atendimentos', href: '/atendimentos', profiles: ALL_PROFILES },
   { name: 'Dashboard', href: '/dashboard', profiles: ALL_PROFILES },
   { name: 'Agenda', href: '/agenda', profiles: ALL_PROFILES },
+  { name: 'Cancelamentos', href: '/cancelamentos', profiles: ALL_PROFILES },
   { name: 'Pacientes', href: '/pacientes', profiles: OPERATIONAL_PROFILES },
   { name: 'Equipe', href: '/equipe', profiles: ['GESTOR'] },
   { name: 'Automação', href: '/automacao-ia', profiles: ['GESTOR'] },

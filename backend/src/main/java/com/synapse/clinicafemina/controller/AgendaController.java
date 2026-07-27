@@ -15,6 +15,7 @@ import com.synapse.clinicafemina.dto.agenda.NovoPacienteRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.service.AgendaService;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
+import com.synapse.clinicafemina.service.CancelamentoAgendamentoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -50,6 +51,7 @@ public class AgendaController {
 
     private final ClinicaConfigService clinicaConfigService;
     private final AgendaService agendaService;
+    private final CancelamentoAgendamentoService cancelamentoAgendamentoService;
 
     @GetMapping("/capabilities")
     public AgendaCapabilitiesDTO capabilities() {
@@ -151,6 +153,7 @@ public class AgendaController {
     public void cancelar(@PathVariable Long id, @RequestParam(required = false, defaultValue = "Cancelado pelo CRM") String motivo) {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
         agendaService.cancelarAgendamento(clinica, id, motivo);
+        cancelamentoAgendamentoService.registrarCancelamentoManual(clinica, id, motivo);
     }
 
     private LocalDate parseData(String valor, String nomeParametro) {

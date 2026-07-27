@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import {
   BadgeHelp,
   Calendar,
+  ClipboardX,
   ChevronRight,
   Clock,
   LayoutDashboard,
@@ -32,6 +33,7 @@ const menuIcons = {
   '/atendimentos': MessageSquare,
   '/dashboard': LayoutDashboard,
   '/agenda': Calendar,
+  '/cancelamentos': ClipboardX,
   '/pacientes': Users,
   '/equipe': UserPlus,
   '/automacao-ia': Zap,

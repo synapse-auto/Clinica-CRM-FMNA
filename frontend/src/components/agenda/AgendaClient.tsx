@@ -67,7 +67,7 @@ export function AgendaClient({
 }: AgendaClientProps) {
   const initialRange = useMemo(() => buildWeekRange(weekStart), [weekStart]);
   const [appointments, setAppointments] = useState(initialAppointments);
-  const [profissionais, setProfissionais] = useState(initialProfissionais);
+  const [catalogProfissionais, setCatalogProfissionais] = useState(initialProfissionais);
   // Capacidades vem exclusivamente de GET /api/agenda/capabilities (via SSR) e nunca
   // sao recalculadas a partir do sucesso/falha de outras chamadas (ex.: catalogo).
   const capabilities = initialCapabilities;
@@ -89,6 +89,10 @@ export function AgendaClient({
   const activeAppointments = useMemo(
     () => appointments.filter((item) => item.status !== 'CANCELADO'),
     [appointments],
+  );
+  const profissionais = useMemo(
+    () => mergeAvailableProfessionals(catalogProfissionais, appointments),
+    [appointments, catalogProfissionais],
   );
   const normalizedPatientSearch = normalizeSearchText(patientSearch);
   const visibleAppointments = useMemo(() => appointments.filter((item) => (
@@ -131,7 +135,12 @@ export function AgendaClient({
     try {
       const data = await listarAgenda(nextRange.apiStart, nextRange.apiEnd);
       setAppointments(data);
-      setSelectedDoctor('all');
+      const nextProfessionals = mergeAvailableProfessionals(catalogProfissionais, data);
+      setSelectedDoctor((current) => (
+        current === 'all' || nextProfessionals.some((doctor) => professionalKey(doctor) === current)
+          ? current
+          : 'all'
+      ));
       setRange(nextRange);
       setCustomStart(nextRange.startDate);
       setCustomEnd(nextRange.endDate);
@@ -146,12 +155,10 @@ export function AgendaClient({
     // exibidas — elas vem exclusivamente de GET /api/agenda/capabilities.
     if (capabilities.supportsCatalog) {
       try {
-        setProfissionais(await listarProfissionais());
+        setCatalogProfissionais(await listarProfissionais());
       } catch {
-        setProfissionais([]);
+        // A falha do catálogo não apaga profissionais já presentes nos agendamentos.
       }
-    } else {
-      setProfissionais([]);
     }
     setLoading(false);
   }
@@ -423,7 +430,7 @@ function DoctorFilters({
 type DoctorFilter = { id: 'all'; nome: string } | AgendaProfissional;
 
 function filterKey(doctor: DoctorFilter): string {
-  return doctor.id === 'all' ? 'all' : doctor.id;
+  return 'origem' in doctor ? professionalKey(doctor) : 'all';
 }
 
 function DayTabs({
@@ -881,7 +888,8 @@ function buildDoctorBuckets(
 ) {
   const buckets = new Map<string, { key: string; label: string }>();
   profissionais.forEach((doctor) => {
-    buckets.set(doctor.id, { key: doctor.id, label: doctor.nome || 'Sem profissional' });
+    const key = professionalKey(doctor);
+    buckets.set(key, { key, label: doctor.nome || 'Sem profissional' });
   });
   appointments.forEach((appointment) => {
     const key = appointmentDoctorKey(appointment);
@@ -906,8 +914,34 @@ function appointmentDoctorKey(appointment: AgendaAgendamento) {
 }
 
 function appointmentDoctorIdentity(appointment: AgendaAgendamento) {
-  if (appointment.profissionalId?.trim()) return appointment.profissionalId.trim();
-  return `name:${normalizeDoctorName(appointment.profissionalNome ?? 'sem profissional')}`;
+  return professionalKey({
+    id: appointment.profissionalId ?? '',
+    nome: appointment.profissionalNome ?? 'Sem profissional',
+    origem: appointment.provider ?? appointment.origem,
+  });
+}
+
+function professionalKey(doctor: AgendaProfissional): string {
+  const id = doctor.id?.trim();
+  const source = doctor.origem?.trim().toUpperCase();
+  if (id) return source ? `${source}:${id}` : id;
+  return `NOME:${normalizeDoctorName(doctor.nome || 'Sem profissional')}`;
+}
+
+function mergeAvailableProfessionals(
+  catalog: AgendaProfissional[],
+  currentAppointments: AgendaAgendamento[],
+): AgendaProfissional[] {
+  const merged = new Map<string, AgendaProfissional>();
+  [...catalog, ...currentAppointments.map((appointment) => ({
+    id: appointment.profissionalId ?? '',
+    nome: appointment.profissionalNome?.trim() || 'Sem profissional',
+    origem: appointment.provider ?? appointment.origem,
+  }))].forEach((doctor) => {
+    const key = professionalKey(doctor);
+    if (!merged.has(key)) merged.set(key, doctor);
+  });
+  return Array.from(merged.values()).sort((left, right) => left.nome.localeCompare(right.nome, 'pt-BR'));
 }
 
 function normalizeDoctorName(value: string) {

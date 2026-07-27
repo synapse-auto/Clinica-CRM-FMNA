@@ -26,13 +26,13 @@ const NO_CATALOG_CAPABILITIES: AgendaCapabilities = {
 };
 
 const profissionais: AgendaProfissional[] = [
-  { id: '30', nome: 'Dra. Renata', origem: 'CRM' },
+  { id: '30', nome: 'Dra. Renata', origem: 'DARWIN' },
 ];
 
 const existingAppointment: AgendaAgendamento = {
   idLocal: 40,
   externalId: 'ext-40',
-  provider: 'MEDWARE',
+  provider: 'DARWIN',
   pacienteId: 20,
   pacienteNome: 'Maria da Silva',
   pacienteCpfMascarado: null,
@@ -497,10 +497,10 @@ describe('AgendaClient', () => {
   it('should_filter_groups_by_medware_doctor', () => {
     const appointments = [
       appointment({
-        idLocal: 401, pacienteNome: 'Paciente Médico A', profissionalId: '101', profissionalNome: 'Médico Fictício A', data: '2026-07-15', horarioInicio: '08:15', procedimentoNome: 'Procedimento A',
+        idLocal: 401, provider: 'MEDWARE', pacienteNome: 'Paciente Médico A', profissionalId: '101', profissionalNome: 'Médico Fictício A', data: '2026-07-15', horarioInicio: '08:15', procedimentoNome: 'Procedimento A',
       }),
       appointment({
-        idLocal: 402, pacienteNome: 'Paciente Médico B', profissionalId: '102', profissionalNome: 'Médico Fictício B', data: '2026-07-15', horarioInicio: '08:15', procedimentoNome: 'Procedimento B',
+        idLocal: 402, provider: 'MEDWARE', pacienteNome: 'Paciente Médico B', profissionalId: '102', profissionalNome: 'Médico Fictício B', data: '2026-07-15', horarioInicio: '08:15', procedimentoNome: 'Procedimento B',
       }),
     ];
     render(
@@ -533,7 +533,7 @@ describe('AgendaClient', () => {
     render(
       <AgendaClient
         initialAppointments={appointments}
-        initialProfissionais={[...profissionais, { id: '31', nome: 'Dr. Paulo', origem: 'CRM' }]}
+        initialProfissionais={[...profissionais, { id: '31', nome: 'Dr. Paulo', origem: 'DARWIN' }]}
         initialCapabilities={FULL_CAPABILITIES}
         initialError={null}
         weekStart="2026-07-13"
@@ -666,8 +666,8 @@ describe('AgendaClient', () => {
       <AgendaClient
         initialAppointments={appointments}
         initialProfissionais={[
-          { id: '1', nome: 'Medico A', origem: 'CRM' },
-          { id: '2', nome: 'Medico B', origem: 'CRM' },
+          { id: '1', nome: 'Medico A', origem: 'DARWIN' },
+          { id: '2', nome: 'Medico B', origem: 'DARWIN' },
         ]}
         initialCapabilities={FULL_CAPABILITIES}
         initialError={null}
