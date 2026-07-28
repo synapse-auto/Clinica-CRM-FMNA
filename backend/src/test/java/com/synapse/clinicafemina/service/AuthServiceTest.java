@@ -140,6 +140,18 @@ class AuthServiceTest {
     }
 
     @Test
+    void should_reject_new_password_equal_to_current_password() {
+        ChangePasswordRequest request = new ChangePasswordRequest(
+                "SenhaInicial!2026",
+                "SenhaInicial!2026",
+                "SenhaInicial!2026"
+        );
+        when(passwordEncoder.matches("SenhaInicial!2026", "$2a$12$old")).thenReturn(true);
+
+        assertThrows(BadRequestException.class, () -> service.changePassword(usuario, request));
+    }
+
+    @Test
     void should_accept_six_or_more_alphanumeric_password_with_letter_and_number() {
         ChangePasswordRequest request = new ChangePasswordRequest(
                 "SenhaInicial!2026",
