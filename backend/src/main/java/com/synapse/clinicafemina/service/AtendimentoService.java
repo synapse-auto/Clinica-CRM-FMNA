@@ -11,12 +11,14 @@ import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
 import com.synapse.clinicafemina.dto.AtendimentoResumoDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.dto.WhatsappCapabilitiesDTO;
+import com.synapse.clinicafemina.dto.n8n.N8nTransferirProximoHumanoRequest;
 import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.AtendimentoTagRepository;
+import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteTagRepository;
 import com.synapse.clinicafemina.repository.TransferenciaAtendimentoRepository;
@@ -25,6 +27,7 @@ import com.synapse.clinicafemina.service.search.SmartSearchCriteria;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +54,9 @@ public class AtendimentoService {
     private static final String AI_HANDOFF_ENDED = "AI_HANDOFF_ENDED";
     private static final String HUMAN_HANDOFF_START = "HUMAN_HANDOFF_START";
     private static final String AI_HANDOFF_SUMMARY = "AI_HANDOFF_SUMMARY";
+    private static final String ORIGEM_TRANSFERENCIA_MANUAL = "MANUAL";
+    private static final String ORIGEM_TRANSFERENCIA_N8N = "N8N";
+    private static final String ORIGEM_TRANSFERENCIA_N8N_RODIZIO = "N8N_RODIZIO";
 
     public record TransferenciaHumanoResultado(
             AtendimentoDetalheDTO atendimento,
@@ -63,9 +69,16 @@ public class AtendimentoService {
             OffsetDateTime transferidoEm
     ) {}
 
+    public record TransferenciaRodizioHumanoResultado(
+            TransferenciaHumanoResultado transferencia,
+            Long novoAtendenteId,
+            int posicaoSelecionada
+    ) {}
+
     private record ResumoTransferencia(Mensagem mensagem, boolean registrado) {}
 
     private final AtendimentoRepository atendimentoRepository;
+    private final ClinicaRepository clinicaRepository;
     private final MensagemRepository mensagemRepository;
     private final UsuarioRepository usuarioRepository;
     private final TransferenciaAtendimentoRepository transferenciaRepository;
@@ -153,7 +166,8 @@ public class AtendimentoService {
         atendimento.setStatus("ATIVO");
         atendimentoRepository.save(atendimento);
         transferenciaRepository.save(criarTransferencia(
-                atendimento, antigoAtendente, novoAtendente, responsavel, request.motivo()
+                atendimento, antigoAtendente, novoAtendente, responsavel, request.motivo(),
+                ORIGEM_TRANSFERENCIA_MANUAL, null
         ));
         notificationService.notificarAtribuicao(atendimento, novoAtendente);
 
@@ -175,6 +189,65 @@ public class AtendimentoService {
             Long id,
             TransferirAtendimentoRequest request,
             Long clinicaId
+    ) {
+        return transferirPorN8n(id, request, clinicaId, ORIGEM_TRANSFERENCIA_N8N, null);
+    }
+
+    @Transactional
+    public TransferenciaRodizioHumanoResultado transferirProximoPorN8n(
+            Long id,
+            N8nTransferirProximoHumanoRequest request,
+            String idempotencyKey,
+            Long clinicaId
+    ) {
+        List<Long> atendentesIds = request.idsOrdenados();
+        String chaveIdempotencia = request.validarIdempotencyKey(idempotencyKey);
+        clinicaRepository.findByIdForUpdate(clinicaId)
+                .orElseThrow(() -> new NotFoundException("Clínica não encontrada"));
+        Optional<TransferenciaAtendimento> transferenciaExistente =
+                transferenciaRepository.findByClinicaIdAndOrigemAndIdempotencyKey(
+                        clinicaId,
+                        ORIGEM_TRANSFERENCIA_N8N_RODIZIO,
+                        chaveIdempotencia
+                );
+        if (transferenciaExistente.isPresent()) {
+            TransferenciaAtendimento existente = transferenciaExistente.get();
+            return new TransferenciaRodizioHumanoResultado(
+                    resultadoIdempotente(existente),
+                    existente.getParaUsuario().getId(),
+                    atendentesIds.indexOf(existente.getParaUsuario().getId())
+            );
+        }
+        atendentesIds.forEach(atendenteId -> buscarAtendente(atendenteId, clinicaId));
+
+        Long ultimoAtendenteId = transferenciaRepository.findDestinatariosPorOrigem(
+                        clinicaId,
+                        ORIGEM_TRANSFERENCIA_N8N_RODIZIO,
+                        atendentesIds,
+                        PageRequest.of(0, 1)
+                )
+                .stream()
+                .findFirst()
+                .orElse(null);
+        int posicaoSelecionada = proximaPosicao(atendentesIds, ultimoAtendenteId);
+        Long novoAtendenteId = atendentesIds.get(posicaoSelecionada);
+        TransferirAtendimentoRequest transferencia = request.paraTransferencia(novoAtendenteId);
+        TransferenciaHumanoResultado resultado = transferirPorN8n(
+                id,
+                transferencia,
+                clinicaId,
+                ORIGEM_TRANSFERENCIA_N8N_RODIZIO,
+                chaveIdempotencia
+        );
+        return new TransferenciaRodizioHumanoResultado(resultado, novoAtendenteId, posicaoSelecionada);
+    }
+
+    private TransferenciaHumanoResultado transferirPorN8n(
+            Long id,
+            TransferirAtendimentoRequest request,
+            Long clinicaId,
+            String origemTransferencia,
+            String idempotencyKey
     ) {
         Atendimento atendimento = atendimentoRepository.findByIdAndClinicaIdForUpdate(id, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
@@ -202,13 +275,16 @@ public class AtendimentoService {
         String motivoTransferencia = request.motivoTransferencia() != null
                 ? request.motivoTransferencia()
                 : request.motivo();
-        if (transferenciaNova) {
+        boolean registrarTransferencia = transferenciaNova || idempotencyKey != null;
+        if (registrarTransferencia) {
             transferenciaRepository.save(criarTransferencia(
                     atendimento,
                     antigoAtendente,
                     novoAtendente,
                     responsavel,
-                    sanitizarTextoCurto(motivoTransferencia)
+                    sanitizarTextoCurto(motivoTransferencia),
+                    origemTransferencia,
+                    idempotencyKey
             ));
         }
 
@@ -478,7 +554,9 @@ public class AtendimentoService {
             Usuario antigoAtendente,
             Usuario novoAtendente,
             Usuario responsavel,
-            String motivo
+            String motivo,
+            String origem,
+            String idempotencyKey
     ) {
         TransferenciaAtendimento transferencia = new TransferenciaAtendimento();
         transferencia.setAtendimento(atendimento);
@@ -486,7 +564,33 @@ public class AtendimentoService {
         transferencia.setParaUsuario(novoAtendente);
         transferencia.setTransferidoPor(responsavel);
         transferencia.setMotivo(motivo);
+        transferencia.setOrigem(origem);
+        transferencia.setIdempotencyKey(idempotencyKey);
         return transferencia;
+    }
+
+    private TransferenciaHumanoResultado resultadoIdempotente(TransferenciaAtendimento transferencia) {
+        Atendimento atendimento = transferencia.getAtendimento();
+        return new TransferenciaHumanoResultado(
+                toDetalheDTO(atendimento),
+                true,
+                true,
+                false,
+                0,
+                false,
+                0,
+                transferencia.getTransferidoEm()
+        );
+    }
+
+    private int proximaPosicao(List<Long> atendentesIds, Long ultimoAtendenteId) {
+        if (ultimoAtendenteId == null) {
+            return 0;
+        }
+        int posicaoAnterior = atendentesIds.indexOf(ultimoAtendenteId);
+        return posicaoAnterior < 0 || posicaoAnterior == atendentesIds.size() - 1
+                ? 0
+                : posicaoAnterior + 1;
     }
 
     private Map<Long, String> ultimasPrevias(List<Atendimento> atendimentos) {

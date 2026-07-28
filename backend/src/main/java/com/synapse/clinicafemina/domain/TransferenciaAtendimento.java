@@ -35,6 +35,12 @@ public class TransferenciaAtendimento {
     @Column(length = 500)
     private String motivo;
 
+    @Column(length = 30)
+    private String origem;
+
+    @Column(name = "idempotency_key", length = 120)
+    private String idempotencyKey;
+
     @Column(name = "transferido_em", nullable = false, updatable = false)
     private OffsetDateTime transferidoEm;
 

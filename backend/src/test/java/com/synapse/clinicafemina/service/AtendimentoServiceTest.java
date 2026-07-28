@@ -2,6 +2,7 @@ package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.domain.*;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
+import com.synapse.clinicafemina.dto.n8n.N8nTransferirProximoHumanoRequest;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.dto.WhatsappCapabilitiesDTO;
 import com.synapse.clinicafemina.repository.*;
@@ -37,6 +38,7 @@ import static org.mockito.Mockito.when;
 class AtendimentoServiceTest {
 
     @Mock private AtendimentoRepository atendimentoRepository;
+    @Mock private ClinicaRepository clinicaRepository;
     @Mock private MensagemRepository mensagemRepository;
     @Mock private UsuarioRepository usuarioRepository;
     @Mock private TransferenciaAtendimentoRepository transferenciaRepository;
@@ -55,6 +57,7 @@ class AtendimentoServiceTest {
     void setUp() {
         service = new AtendimentoService(
                 atendimentoRepository,
+                clinicaRepository,
                 mensagemRepository,
                 usuarioRepository,
                 transferenciaRepository,
@@ -275,6 +278,101 @@ class AtendimentoServiceTest {
         assertEquals("Atendimento #3 transferido para humano", eventos.get(1).getConteudo());
         verify(notificationService).notificarTransferenciaIa(
                 eq(atendimento), any(Mensagem.class), anyString(), eq(destinatario), any());
+    }
+
+    @Test
+    void should_select_next_attendant_in_n8n_rotation_without_using_manual_history() {
+        Recepcionista primeira = atendente(10L);
+        Recepcionista segunda = atendente(11L);
+        when(clinicaRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(clinica));
+        when(transferenciaRepository.findByClinicaIdAndOrigemAndIdempotencyKey(
+                1L, "N8N_RODIZIO", "rodizio-1"))
+                .thenReturn(Optional.empty());
+        when(usuarioRepository.findById(10L)).thenReturn(Optional.of(primeira));
+        when(usuarioRepository.findById(11L)).thenReturn(Optional.of(segunda));
+        when(transferenciaRepository.findDestinatariosPorOrigem(
+                eq(1L), eq("N8N_RODIZIO"), eq(List.of(10L, 11L)), any()))
+                .thenReturn(List.of(10L));
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L)).thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferenciaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationService.notificarTransferenciaIa(
+                eq(atendimento), isNull(), anyString(), eq(segunda), any()))
+                .thenReturn(new AtendimentoNotificationService.TransferenciaNotificacaoResultado(0, List.of()));
+
+        var result = service.transferirProximoPorN8n(
+                3L,
+                new N8nTransferirProximoHumanoRequest(List.of(10L, 11L), "Rodízio", null, null),
+                "rodizio-1",
+                1L
+        );
+
+        assertEquals(11L, result.novoAtendenteId());
+        assertEquals(1, result.posicaoSelecionada());
+        assertEquals(11L, atendimento.getAtendentePrincipal().getId());
+        org.mockito.ArgumentCaptor<TransferenciaAtendimento> captor =
+                org.mockito.ArgumentCaptor.forClass(TransferenciaAtendimento.class);
+        verify(transferenciaRepository).save(captor.capture());
+        assertEquals("N8N_RODIZIO", captor.getValue().getOrigem());
+        assertEquals("rodizio-1", captor.getValue().getIdempotencyKey());
+    }
+
+    @Test
+    void should_start_n8n_rotation_with_first_configured_attendant_when_no_history_exists() {
+        Recepcionista primeira = atendente(10L);
+        Recepcionista segunda = atendente(11L);
+        when(clinicaRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(clinica));
+        when(transferenciaRepository.findByClinicaIdAndOrigemAndIdempotencyKey(
+                1L, "N8N_RODIZIO", "rodizio-2"))
+                .thenReturn(Optional.empty());
+        when(usuarioRepository.findById(10L)).thenReturn(Optional.of(primeira));
+        when(usuarioRepository.findById(11L)).thenReturn(Optional.of(segunda));
+        when(transferenciaRepository.findDestinatariosPorOrigem(anyLong(), anyString(), anyList(), any()))
+                .thenReturn(List.of());
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L)).thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferenciaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationService.notificarTransferenciaIa(
+                eq(atendimento), isNull(), anyString(), eq(primeira), any()))
+                .thenReturn(new AtendimentoNotificationService.TransferenciaNotificacaoResultado(0, List.of()));
+
+        var result = service.transferirProximoPorN8n(
+                3L,
+                new N8nTransferirProximoHumanoRequest(List.of(10L, 11L), "Rodízio", null, null),
+                "rodizio-2",
+                1L
+        );
+
+        assertEquals(10L, result.novoAtendenteId());
+        assertEquals(0, result.posicaoSelecionada());
+    }
+
+    @Test
+    void should_return_same_attendant_when_n8n_rotation_is_retried_with_same_key() {
+        Recepcionista segunda = atendente(11L);
+        atendimento.setTratadoPorIa(false);
+        atendimento.setAtendentePrincipal(segunda);
+        TransferenciaAtendimento transferenciaAnterior = new TransferenciaAtendimento();
+        transferenciaAnterior.setAtendimento(atendimento);
+        transferenciaAnterior.setParaUsuario(segunda);
+        transferenciaAnterior.setTransferidoEm(OffsetDateTime.parse("2026-07-28T15:00:00Z"));
+        when(clinicaRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(clinica));
+        when(transferenciaRepository.findByClinicaIdAndOrigemAndIdempotencyKey(
+                1L, "N8N_RODIZIO", "rodizio-retry"))
+                .thenReturn(Optional.of(transferenciaAnterior));
+
+        var result = service.transferirProximoPorN8n(
+                3L,
+                new N8nTransferirProximoHumanoRequest(List.of(10L, 11L), "Rodízio", null, null),
+                "rodizio-retry",
+                1L
+        );
+
+        assertEquals(11L, result.novoAtendenteId());
+        assertEquals(1, result.posicaoSelecionada());
+        verify(transferenciaRepository, never()).findDestinatariosPorOrigem(anyLong(), anyString(), anyList(), any());
+        verify(atendimentoRepository, never()).save(any());
+        verify(notificationService, never()).notificarTransferenciaIa(any(), any(), anyString(), any(), any());
     }
 
     @Test
@@ -512,6 +610,15 @@ class AtendimentoServiceTest {
         assertTrue(result.tratadoPorIa());
         assertNull(result.atendentePrincipal());
         verify(atendimentoRepository).save(atendimento);
+    }
+
+    private Recepcionista atendente(Long id) {
+        Recepcionista atendente = new Recepcionista();
+        atendente.setId(id);
+        atendente.setClinica(clinica);
+        atendente.setPerfil("RECEPCIONISTA");
+        atendente.setAtivo(true);
+        return atendente;
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.synapse.clinicafemina.controller;
 
 import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
+import com.synapse.clinicafemina.dto.AtendenteOptionDTO;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
@@ -9,7 +10,9 @@ import com.synapse.clinicafemina.security.JwtService;
 import com.synapse.clinicafemina.service.AtendimentoService;
 import com.synapse.clinicafemina.service.MensagemService;
 import com.synapse.clinicafemina.service.N8nCallbackAuthorizationService;
+import com.synapse.clinicafemina.domain.Clinica;
 import java.time.OffsetDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -27,6 +30,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -190,6 +194,88 @@ class N8nAtendimentoControllerTest {
                 .andExpect(jsonPath("$.notificacoesCriadas").value(2));
 
         verify(atendimentoService).transferirPorN8n(eq(30L), any(TransferirAtendimentoRequest.class), eq(7L));
+    }
+
+    @Test
+    void should_list_transfer_attendants_with_valid_n8n_secret() throws Exception {
+        Clinica clinica = new Clinica();
+        clinica.setId(7L);
+        when(authorizationService.autorizarClinica("test-secret")).thenReturn(clinica);
+        when(atendimentoService.listarAtendentes(7L)).thenReturn(List.of(
+                new AtendenteOptionDTO(10L, "Atendente Um", "RECEPCIONISTA"),
+                new AtendenteOptionDTO(11L, "Atendente Dois", "RECEPCIONISTA")
+        ));
+
+        mockMvc.perform(get("/api/n8n/atendimentos/atendentes-transferencia")
+                        .header("X-N8N-SECRET", "test-secret"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(10))
+                .andExpect(jsonPath("$[1].id").value(11));
+    }
+
+    @Test
+    void should_transfer_to_next_human_in_rotation_with_valid_n8n_secret() throws Exception {
+        autorizar("test-secret");
+        when(atendimentoService.transferirProximoPorN8n(eq(30L), any(), eq("rodizio-1"), eq(7L)))
+                .thenReturn(new AtendimentoService.TransferenciaRodizioHumanoResultado(
+                        resultadoHumano(false, true, 2), 11L, 1
+                ));
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-proximo-humano")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .header("Idempotency-Key", "rodizio-1")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "atendentesIds": [10, 11],
+                                  "motivo": "Transferência por rodízio"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.modo").value("HUMANO"))
+                .andExpect(jsonPath("$.novoAtendenteId").value(11))
+                .andExpect(jsonPath("$.posicaoSelecionada").value(1))
+                .andExpect(jsonPath("$.modoSelecao").value("RODIZIO"));
+    }
+
+    @Test
+    void should_reject_repeated_attendants_in_n8n_rotation_without_calling_service() throws Exception {
+        autorizar("test-secret");
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-proximo-humano")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("{\"atendentesIds\":[10,10]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TRANSFER_PAYLOAD"))
+                .andExpect(jsonPath("$.details.atendentesIds").value("Não repita atendentes no rodízio."));
+
+        verify(atendimentoService, never()).transferirProximoPorN8n(any(), any(), any(), any());
+    }
+
+    @Test
+    void should_require_idempotency_key_for_n8n_rotation() throws Exception {
+        autorizar("test-secret");
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-proximo-humano")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("{\"atendentesIds\":[10,11]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TRANSFER_PAYLOAD"))
+                .andExpect(jsonPath("$.details.idempotencyKey").value("Informe o header Idempotency-Key."));
+
+        verify(atendimentoService, never()).transferirProximoPorN8n(any(), any(), any(), any());
+    }
+
+    @Test
+    void should_return_specific_error_for_invalid_n8n_rotation_json() throws Exception {
+        mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-proximo-humano")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("{\"atendentesIds\":[10,11}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_JSON"));
     }
 
     @Test

@@ -305,7 +305,7 @@ public class GlobalExceptionHandler {
     }
 
     private boolean isN8nTransferPath(WebRequest request) {
-        return path(request).matches("/api/n8n/atendimentos/[^/]+/transferir-humano");
+        return path(request).matches("/api/n8n/atendimentos/[^/]+/transferir(-proximo)?-humano");
     }
 
     private String path(WebRequest request) {

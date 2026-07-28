@@ -8,6 +8,7 @@ import com.synapse.clinicafemina.domain.Medico;
 import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
+import com.synapse.clinicafemina.dto.AtendenteOptionDTO;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
@@ -18,6 +19,7 @@ import com.synapse.clinicafemina.service.N8nCallbackAuthorizationService;
 import jakarta.persistence.EntityManager;
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -311,6 +313,20 @@ class AuthSecurityIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(30))
                 .andExpect(jsonPath("$.tratadoPorIa").value(true));
+    }
+
+    @Test
+    void should_allow_n8n_transfer_attendants_lookup_with_secret_without_jwt() throws Exception {
+        Clinica clinica = clinicaRepository.findById(clinicaId).orElseThrow();
+        when(n8nCallbackAuthorizationService.autorizarClinica("test-secret")).thenReturn(clinica);
+        when(atendimentoService.listarAtendentes(clinicaId)).thenReturn(List.of(
+                new AtendenteOptionDTO(10L, "Atendente Teste", "RECEPCIONISTA")
+        ));
+
+        mockMvc.perform(get("/api/n8n/atendimentos/atendentes-transferencia")
+                        .header("X-N8N-SECRET", "test-secret"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(10));
     }
 
     @Test
