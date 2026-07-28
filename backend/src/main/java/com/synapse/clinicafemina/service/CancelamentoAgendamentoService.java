@@ -4,9 +4,11 @@ import com.synapse.clinicafemina.domain.*;
 import com.synapse.clinicafemina.dto.cancelamento.CancelamentoAgendamentoResponse;
 import com.synapse.clinicafemina.dto.cancelamento.CancelarAgendamentoN8nRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
+import com.synapse.clinicafemina.exception.DarwinIntegrationException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.external.AgendaExternalProvider;
 import com.synapse.clinicafemina.integration.external.AgendaProviderFactory;
+import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.repository.AgendamentoRepository;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.CancelamentoAgendamentoRepository;
@@ -48,14 +50,23 @@ public class CancelamentoAgendamentoService {
         CancelamentoAgendamento cancelamento = novoRegistro(clinica, agendamento, atendimento, motivo, origem, key);
         repository.save(cancelamento);
         try {
-            AgendaExternalProvider provider = providerFactory.getProvider(clinica.getExternalProvider());
-            if (provider.supportsWriteOperations()) {
-                provider.cancelarAgendamento(clinica, agendamento.getId(), motivo);
-                concluir(cancelamento, "CANCELADO", "SINCRONIZADO", null);
+            if ("CANCELADO".equals(agendamento.getStatus())) {
+                concluir(cancelamento, "CANCELADO", "NAO_APLICAVEL", null);
+            } else if (agendamento.getExternalSource() == ExternalProviderType.DARWIN) {
+                if (!possuiIdentificadorDarwin(agendamento)) {
+                    concluir(cancelamento, "FALHA_CANCELAMENTO", "FALHA_PERMANENTE", "Agendamento Darwin sem identificador externo valido.");
+                } else {
+                    AgendaExternalProvider provider = providerFactory.getProvider(ExternalProviderType.DARWIN);
+                    provider.cancelarAgendamento(clinica, agendamento.getId(), motivo);
+                    concluir(cancelamento, "CANCELADO", "SINCRONIZADO", null);
+                }
             } else {
                 agendamentoService.cancelar(clinica, agendamento.getId(), new com.synapse.clinicafemina.dto.agendamento.AgendamentoCancelRequest(motivo));
                 concluir(cancelamento, "CANCELADO", "NAO_APLICAVEL", null);
             }
+        } catch (DarwinIntegrationException exception) {
+            String syncStatus = exception.upstreamStatus() == 404 ? "FALHA_PERMANENTE" : "FALHA_TEMPORARIA";
+            concluir(cancelamento, "FALHA_CANCELAMENTO", syncStatus, resumirErro(exception));
         } catch (RuntimeException exception) {
             concluir(cancelamento, "FALHA_CANCELAMENTO", "FALHA_TEMPORARIA", resumirErro(exception));
         }
@@ -106,6 +117,10 @@ public class CancelamentoAgendamentoService {
         CancelamentoAgendamento c = new CancelamentoAgendamento(); c.setClinica(clinica); c.setPaciente(a.getPaciente()); c.setAgendamento(a); c.setAtendimento(atendimento);
         c.setMotivo(motivo); c.setOrigem(origem); c.setExternalProvider(a.getExternalSource()); c.setExternalAgendamentoId(a.getExternalId()); c.setIdempotencyKey(key);
         c.setStatusCancelamento("COLETADO"); c.setStatusSincronizacao("PENDENTE"); c.setColetadoEm(OffsetDateTime.now()); return c;
+    }
+    private boolean possuiIdentificadorDarwin(Agendamento agendamento) {
+        return agendamento.getExternalId() != null
+                && !agendamento.getExternalId().isBlank();
     }
     private void concluir(CancelamentoAgendamento c, String status, String sync, String erro) { c.setStatusCancelamento(status); c.setStatusSincronizacao(sync); c.setMensagemErroSincronizacao(erro); }
     private String normalizarOrigem(String origem) { String value = origem == null ? "" : origem.trim().toUpperCase(); if (!ORIGENS.contains(value)) throw new BadRequestException("Origem de cancelamento invalida."); return value; }
