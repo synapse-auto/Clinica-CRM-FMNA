@@ -4,6 +4,7 @@ import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.exception.NotFoundException;
+import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.dto.atendimento.AtendimentoLembreteResponse;
 import com.synapse.clinicafemina.security.JwtService;
@@ -13,14 +14,19 @@ import com.synapse.clinicafemina.service.AtendimentoTagService;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.ConvenioReviewService;
 import com.synapse.clinicafemina.service.MensagemService;
+import com.synapse.clinicafemina.service.IniciarAtendimentoService;
+import com.synapse.clinicafemina.dto.atendimento.IniciarAtendimentoResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -40,7 +46,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(AtendimentoController.class)
+@Import(AtendimentoControllerTest.MethodSecurityTestConfig.class)
 class AtendimentoControllerTest {
+
+    @TestConfiguration
+    @EnableMethodSecurity
+    static class MethodSecurityTestConfig {
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -64,6 +76,9 @@ class AtendimentoControllerTest {
     private ClinicaConfigService clinicaConfigService;
 
     @MockBean
+    private IniciarAtendimentoService iniciarAtendimentoService;
+
+    @MockBean
     private JwtService jwtService;
 
     @MockBean
@@ -77,6 +92,113 @@ class AtendimentoControllerTest {
         clinica.setId(9L);
         clinica.setNome("Clinica Teste");
         when(clinicaConfigService.obterClinicaAtual()).thenReturn(clinica);
+    }
+
+    @Test
+    void should_allow_gestor_to_start_manual_attendance() throws Exception {
+        com.synapse.clinicafemina.domain.Gestor gestor = new com.synapse.clinicafemina.domain.Gestor();
+        gestor.setId(10L);
+        gestor.setClinica(clinica);
+        gestor.setPerfil("GESTOR");
+        gestor.setAtivo(true);
+        gestor.setNome("Gestor");
+        when(iniciarAtendimentoService.iniciar(
+                eq(clinica), eq(gestor), org.mockito.ArgumentMatchers.any()
+        )).thenReturn(new IniciarAtendimentoResponse(
+                30L, 20L, "HUMANO", false, true, false, true, null
+        ));
+
+        mockMvc.perform(post("/api/atendimentos/iniciar")
+                        .with(user(gestor))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"telefone\":\"(83) 99999-9999\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.atendimentoId").value(30))
+                .andExpect(jsonPath("$.modo").value("HUMANO"));
+    }
+
+    @Test
+    void should_allow_recepcionista_to_start_manual_attendance() throws Exception {
+        Recepcionista recepcionista = new Recepcionista();
+        recepcionista.setId(11L);
+        recepcionista.setClinica(clinica);
+        recepcionista.setPerfil("RECEPCIONISTA");
+        recepcionista.setAtivo(true);
+        recepcionista.setNome("Recepcionista");
+        when(iniciarAtendimentoService.iniciar(
+                eq(clinica), eq(recepcionista), org.mockito.ArgumentMatchers.any()
+        )).thenReturn(new IniciarAtendimentoResponse(
+                31L, 21L, "HUMANO", false, false, true, false, null
+        ));
+
+        mockMvc.perform(post("/api/atendimentos/iniciar")
+                        .with(user(recepcionista))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pacienteId\":21}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.atendimentoId").value(31));
+    }
+
+    @Test
+    void should_reject_unauthenticated_manual_attendance() throws Exception {
+        mockMvc.perform(post("/api/atendimentos/iniciar")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pacienteId\":21}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(roles = "MEDICO")
+    void should_forbid_medico_from_starting_manual_attendance() throws Exception {
+        mockMvc.perform(post("/api/atendimentos/iniciar")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"telefone\":\"5583999999999\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "GESTOR")
+    void should_reject_ambiguous_manual_attendance_request() throws Exception {
+        mockMvc.perform(post("/api/atendimentos/iniciar")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pacienteId\":20,\"telefone\":\"5583999999999\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(roles = "RECEPCIONISTA")
+    void should_reject_empty_manual_attendance_request() throws Exception {
+        mockMvc.perform(post("/api/atendimentos/iniciar")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void should_return_bad_request_for_invalid_phone() throws Exception {
+        com.synapse.clinicafemina.domain.Gestor gestor = new com.synapse.clinicafemina.domain.Gestor();
+        gestor.setId(10L);
+        gestor.setClinica(clinica);
+        gestor.setPerfil("GESTOR");
+        gestor.setAtivo(true);
+        gestor.setNome("Gestor");
+        when(iniciarAtendimentoService.iniciar(
+                eq(clinica), eq(gestor), org.mockito.ArgumentMatchers.any()
+        )).thenThrow(new BadRequestException("Telefone invalido. Informe DDD e numero."));
+
+        mockMvc.perform(post("/api/atendimentos/iniciar")
+                        .with(user(gestor))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"telefone\":\"123\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Telefone invalido. Informe DDD e numero."));
     }
 
     @Test

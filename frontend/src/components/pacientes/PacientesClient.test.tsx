@@ -5,6 +5,12 @@ import { PacientesClient } from './PacientesClient';
 import type { TagOperacional } from '@/types/operacional';
 import type { PacientePage, PacienteResumo } from '@/types/paciente';
 
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => navigation,
+}));
+
 const tags: TagOperacional[] = [
   {
     id: 3,
@@ -41,6 +47,58 @@ const paciente: PacienteResumo = {
 describe('PacientesClient', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    navigation.push.mockReset();
+  });
+
+  it('should_start_attendance_with_patient_id_and_navigate_to_the_chat', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      atendimentoId: 77,
+      pacienteId: paciente.id,
+      modo: 'HUMANO',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <PacientesClient
+        initialPage={pageWith([paciente])}
+        availableTags={tags}
+        initialError={null}
+        canManage
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Iniciar atendimento para Maria Silva' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/atendimentos/iniciar',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ pacienteId: 12 }),
+      }),
+    );
+    expect(navigation.push).toHaveBeenCalledWith('/atendimentos?atendimentoId=77');
+  });
+
+  it('should_keep_the_patient_list_open_when_starting_attendance_fails', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(
+      { message: 'Paciente não encontrado' },
+      404,
+    )));
+    render(
+      <PacientesClient
+        initialPage={pageWith([paciente])}
+        availableTags={tags}
+        initialError={null}
+        canManage
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Iniciar atendimento para Maria Silva' }));
+
+    expect(await screen.findByText('Paciente não encontrado')).toBeInTheDocument();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Iniciar atendimento para Maria Silva' })).toBeEnabled();
   });
 
   it('should_show_and_update_patient_tags', async () => {

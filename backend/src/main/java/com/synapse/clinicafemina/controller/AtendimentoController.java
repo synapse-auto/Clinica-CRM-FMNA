@@ -9,6 +9,8 @@ import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.dto.atendimento.AtendimentoLembreteRequest;
 import com.synapse.clinicafemina.dto.atendimento.AtendimentoLembreteResponse;
+import com.synapse.clinicafemina.dto.atendimento.IniciarAtendimentoRequest;
+import com.synapse.clinicafemina.dto.atendimento.IniciarAtendimentoResponse;
 import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada;
@@ -18,6 +20,7 @@ import com.synapse.clinicafemina.service.AtendimentoTagService;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.ConvenioReviewService;
 import com.synapse.clinicafemina.service.MensagemService;
+import com.synapse.clinicafemina.service.IniciarAtendimentoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -46,6 +49,7 @@ public class AtendimentoController {
     private final MensagemService mensagemService;
     private final ConvenioReviewService convenioReviewService;
     private final ClinicaConfigService clinicaConfigService;
+    private final IniciarAtendimentoService iniciarAtendimentoService;
 
     @GetMapping
     public Page<AtendimentoResumoDTO> listar(
@@ -65,6 +69,19 @@ public class AtendimentoController {
     @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public List<AtendenteOptionDTO> listarAtendentes() {
         return atendimentoService.listarAtendentes(clinicaId());
+    }
+
+    @PostMapping("/iniciar")
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
+    public IniciarAtendimentoResponse iniciar(
+            @RequestBody @Valid IniciarAtendimentoRequest request,
+            @AuthenticationPrincipal Usuario usuario
+    ) {
+        return iniciarAtendimentoService.iniciar(
+                clinicaConfigService.obterClinicaAtual(),
+                usuario,
+                request
+        );
     }
 
     @GetMapping("/{id}")

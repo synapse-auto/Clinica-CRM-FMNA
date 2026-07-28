@@ -21,6 +21,7 @@ import {
   getNotificacoes,
   getNotificacoesResumo,
   getTagsOperacionaisAtivas,
+  iniciarAtendimento,
   listAtendimentos,
   marcarAtendimentoComoLido,
   marcarNotificacoesComoLidas,
@@ -38,10 +39,12 @@ import type {
   EnviarTemplateWhatsappRequest,
   MensagemAtendimento,
   NovoAtendimentoLembrete,
+  IniciarAtendimentoResponse,
 } from '@/types/atendimento';
 import type { MensagemRapida, TagOperacional } from '@/types/operacional';
 import { ChatList } from './ChatList';
 import { ChatWindow } from './ChatWindow';
+import { IniciarAtendimentoDialog } from './IniciarAtendimentoDialog';
 import { ContactDetails } from './ContactDetails';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { isSearchableTerm, normalizeSearchText } from '@/lib/search';
@@ -58,11 +61,19 @@ type Props = {
   initialConversations: AtendimentoResumo[];
   atendentes: AtendenteOption[];
   user: AuthUser;
+  initialAtendimentoId?: number | null;
 };
 
-export function AtendimentosClient({ initialConversations, atendentes, user }: Props) {
+export function AtendimentosClient({
+  initialConversations,
+  atendentes,
+  user,
+  initialAtendimentoId = null,
+}: Props) {
   const [conversations, setConversations] = useState(initialConversations);
-  const [activeId, setActiveId] = useState<number | null>(initialConversations[0]?.id ?? null);
+  const [activeId, setActiveId] = useState<number | null>(
+    initialAtendimentoId ?? initialConversations[0]?.id ?? null,
+  );
   const [detail, setDetail] = useState<AtendimentoDetalhe | null>(null);
   const [messages, setMessages] = useState<MensagemAtendimento[]>([]);
   const [quickMessages, setQuickMessages] = useState<MensagemRapida[]>([]);
@@ -81,6 +92,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
   const [notificationCount, setNotificationCount] = useState(0);
   const [transferAlert, setTransferAlert] = useState<{ atendimentoId: number; descricao: string } | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const knownNotifications = useRef<Set<number> | null>(null);
   const activeIdRef = useRef<number | null>(activeId);
@@ -135,11 +147,7 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
       if (controller.signal.aborted || requestVersion !== listRequestVersion.current) return;
       setConversations(page.content);
       setListError(null);
-      setActiveId((current) => (
-        current && page.content.some((item) => item.id === current)
-          ? current
-          : page.content[0]?.id ?? null
-      ));
+      setActiveId((current) => current ?? page.content[0]?.id ?? null);
     } catch (cause) {
       if (controller.signal.aborted || requestVersion !== listRequestVersion.current) return;
       setListError(errorMessage(cause));
@@ -407,6 +415,43 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
     }
   }
 
+  async function handleManualStarted(
+    response: IniciarAtendimentoResponse,
+    mensagemInicial: string,
+  ) {
+    const id = response.atendimentoId;
+    activeIdRef.current = id;
+    setFilter('MEUS');
+    setType('HUMANO');
+    setSearch('');
+    setActiveId(id);
+    window.history.replaceState({}, '', `/atendimentos?atendimentoId=${id}`);
+
+    if (!mensagemInicial) return;
+    setBusy(true);
+    try {
+      const sentMessage = await enviarMensagem(id, mensagemInicial);
+      if (activeIdRef.current === id) {
+        setMessages((current) => mergeMensagem(current, sentMessage));
+        setError(sentMessage.whatsappStatus === 'FALHA'
+          ? mensagemFalhaAmigavel(
+              sentMessage.motivoFalha,
+              response.atendimento.whatsappCapabilities?.enforcesCustomerCareWindow ?? true,
+            )
+          : null);
+      }
+    } catch (cause) {
+      if (activeIdRef.current === id) {
+        if (isWhatsappTemplateRequiredError(cause)) {
+          await loadActiveConversation(id, 'revalidate');
+        }
+        setError(errorMessage(cause));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="relative flex h-full overflow-hidden bg-clinic-canvas">
       {notificationCount > 0 ? (
@@ -459,6 +504,8 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
           setType(nextType);
         }}
         onSearchChange={setSearch}
+        canStartManual={user.perfil === 'GESTOR' || user.perfil === 'RECEPCIONISTA'}
+        onStartManual={() => setStartDialogOpen(true)}
       />
       <div className="flex min-w-0 flex-1">
         <ChatWindow
@@ -542,6 +589,11 @@ export function AtendimentosClient({ initialConversations, atendentes, user }: P
           : Promise.resolve()}
         />
       </div>
+      <IniciarAtendimentoDialog
+        open={startDialogOpen}
+        onOpenChange={setStartDialogOpen}
+        onStarted={handleManualStarted}
+      />
     </div>
   );
 }

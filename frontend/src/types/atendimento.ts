@@ -11,6 +11,22 @@ export type AtendenteOption = {
   perfil: string;
 };
 
+export type IniciarAtendimentoRequest = {
+  pacienteId?: number;
+  telefone?: string;
+};
+
+export type IniciarAtendimentoResponse = {
+  atendimentoId: number;
+  pacienteId: number;
+  modo: 'HUMANO';
+  pacienteCriado: boolean;
+  atendimentoCriado: boolean;
+  atendimentoReutilizado: boolean;
+  destinatarioAlterado: boolean;
+  atendimento: AtendimentoDetalhe;
+};
+
 export type AtendimentoResumo = {
   id: number;
   status: string;

@@ -16,6 +16,7 @@ const services = vi.hoisted(() => ({
   getTagsOperacionaisAtivas: vi.fn().mockResolvedValue([]),
   getNotificacoes: vi.fn().mockResolvedValue([]),
   getNotificacoesResumo: vi.fn().mockResolvedValue(0),
+  iniciarAtendimento: vi.fn(),
 }));
 
 vi.mock('@/services/atendimentos', () => ({
@@ -30,6 +31,7 @@ vi.mock('./ChatList', () => ({
     searching?: boolean;
     onSelect: (id: number) => void;
     onSearchChange: (value: string) => void;
+    onStartManual?: () => void;
   }) => (
     <div>
       <span data-testid="selected-atendimento">{props.activeId ?? 'nenhum'}</span>
@@ -41,6 +43,9 @@ vi.mock('./ChatList', () => ({
         value={props.search}
         onChange={(event) => props.onSearchChange(event.target.value)}
       />
+      {props.onStartManual ? (
+        <button type="button" onClick={props.onStartManual}>Novo atendimento</button>
+      ) : null}
       {props.searching ? <span>Pesquisando...</span> : null}
     </div>
   ),
@@ -73,6 +78,32 @@ describe('AtendimentosClient search', () => {
   afterEach(() => {
     services.listAtendimentos.mockReset();
     vi.clearAllTimers();
+  });
+
+  it('should_open_the_query_param_attendance_even_when_it_is_not_in_the_initial_page', async () => {
+    services.getAtendimento.mockResolvedValueOnce({ id: 99 });
+    render(
+      <AtendimentosClient
+        initialConversations={[]}
+        atendentes={[]}
+        user={{
+          id: 1,
+          nome: 'Usuario Teste',
+          email: 'user@example.test',
+          perfil: 'GESTOR',
+          clinicaId: 1,
+          mustChangePassword: false,
+          podeGerenciarUsuarios: false,
+        }}
+        initialAtendimentoId={99}
+      />,
+    );
+
+    await waitFor(() => expect(services.getAtendimento).toHaveBeenCalledWith(
+      99,
+      expect.any(AbortSignal),
+    ));
+    expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('99');
   });
 
   it('should_debounce_abort_previous_request_and_ignore_late_response', async () => {

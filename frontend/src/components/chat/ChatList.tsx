@@ -1,6 +1,6 @@
 'use client';
 
-import { LoaderCircle, Search } from 'lucide-react';
+import { LoaderCircle, Plus, Search } from 'lucide-react';
 import type {
   AtendimentoFilter,
   AtendimentoResumo,
@@ -22,6 +22,8 @@ type Props = {
     type: 'TODOS' | 'IA' | 'HUMANO',
   ) => void;
   onSearchChange: (value: string) => void;
+  canStartManual?: boolean;
+  onStartManual?: () => void;
 };
 
 const filters = [
@@ -49,9 +51,21 @@ export function ChatList(props: Props) {
             <h1 className="text-[19px] font-extrabold tracking-tight text-clinic-text">Atendimentos</h1>
             <p className="mt-1 text-[11px] text-clinic-muted">Conversas reais da clínica</p>
           </div>
-          <span className="rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[10px] font-bold text-clinic-primary">
-            Ao vivo
-          </span>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <span className="rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[10px] font-bold text-clinic-primary">
+              Ao vivo
+            </span>
+            {props.canStartManual ? (
+              <button
+                type="button"
+                onClick={props.onStartManual}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-clinic-primary px-2.5 text-[10px] font-extrabold text-white hover:brightness-95"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Novo atendimento
+              </button>
+            ) : null}
+          </div>
         </div>
         <label className="relative block" aria-busy={props.searching}>
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clinic-muted" />

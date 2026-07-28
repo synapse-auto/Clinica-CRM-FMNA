@@ -33,6 +33,24 @@ const baseProps = {
 };
 
 describe('ChatList', () => {
+  it('should_show_manual_start_only_when_the_authenticated_profile_can_use_it', () => {
+    const onStartManual = vi.fn();
+    const { rerender } = render(
+      <ChatList
+        {...baseProps}
+        conversations={[]}
+        canStartManual
+        onStartManual={onStartManual}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Novo atendimento' }));
+    expect(onStartManual).toHaveBeenCalledOnce();
+
+    rerender(<ChatList {...baseProps} conversations={[]} canStartManual={false} />);
+    expect(screen.queryByRole('button', { name: 'Novo atendimento' })).not.toBeInTheDocument();
+  });
+
   const unicodeName = '𝑨𝒃𝒊𝒎𝒂𝒆𝒍 𝑴𝒐𝒖𝒓𝒂';
 
   it('should_render_real_tags_and_limit_visual_overflow', () => {

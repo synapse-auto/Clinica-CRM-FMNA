@@ -2,7 +2,9 @@
 
 import {
   Activity,
+  LoaderCircle,
   Mail,
+  MessageCircle,
   Phone,
   Plus,
   Search,
@@ -12,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import { DemoTable } from '@/components/demo/DemoTable';
 import { StatusBadge } from '@/components/demo/StatusBadge';
@@ -20,6 +23,7 @@ import {
   pesquisarPacientes,
   removerTagPaciente,
 } from '@/services/pacientes';
+import { iniciarAtendimento } from '@/services/atendimentos';
 import type { TagOperacional } from '@/types/operacional';
 import type { PacientePage, PacienteResumo } from '@/types/paciente';
 import { isSearchableTerm, matchesSearchTokens, normalizeSearchText } from '@/lib/search';
@@ -49,12 +53,14 @@ export function PacientesClient({
   const [searching, setSearching] = useState(false);
   const [retryVersion, setRetryVersion] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [startingPatientId, setStartingPatientId] = useState<number | null>(null);
   const [error, setError] = useState(initialError);
   const debouncedSearch = useDebouncedValue(patientSearch, 300);
   const normalizedSearch = normalizeSearchText(debouncedSearch);
   const searchKey = isSearchableTerm(debouncedSearch) ? normalizedSearch : '';
   const query = searchKey ? debouncedSearch.trim() : '';
   const queryRef = useRef(query);
+  const router = useRouter();
   queryRef.current = query;
   const initialRequest = useRef(true);
   const requestVersion = useRef(0);
@@ -141,6 +147,19 @@ export function PacientesClient({
     setPacientes((current) => current.map((paciente) => (
       paciente.id === patientId ? { ...paciente, tags } : paciente
     )));
+  }
+
+  async function startAttendance(patientId: number) {
+    if (startingPatientId !== null) return;
+    setStartingPatientId(patientId);
+    setError(null);
+    try {
+      const response = await iniciarAtendimento({ pacienteId: patientId });
+      router.push(`/atendimentos?atendimentoId=${response.atendimentoId}`);
+    } catch (cause) {
+      setError(errorMessage(cause));
+      setStartingPatientId(null);
+    }
   }
 
   return (
@@ -279,6 +298,26 @@ export function PacientesClient({
                 <span className="text-[9px] text-clinic-muted">
                   {item.externalSource ?? 'Manual'}
                 </span>
+              ),
+            },
+            {
+              key: 'acoes',
+              label: 'Ações',
+              className: 'min-w-[130px] w-[10%]',
+              render: (item) => (
+                <button
+                  type="button"
+                  aria-label={`Iniciar atendimento para ${item.nome}`}
+                  title="Iniciar atendimento"
+                  disabled={startingPatientId === item.id}
+                  onClick={() => void startAttendance(item.id)}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-clinic-border px-2.5 text-[9px] font-extrabold text-clinic-text hover:border-clinic-primary/40 hover:bg-clinic-hover disabled:opacity-50"
+                >
+                  {startingPatientId === item.id
+                    ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    : <MessageCircle className="h-3.5 w-3.5 text-clinic-primary" />}
+                  Iniciar
+                </button>
               ),
             },
           ]}

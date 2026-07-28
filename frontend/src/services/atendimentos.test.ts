@@ -10,6 +10,7 @@ import {
   getMensagensRapidasAtivas,
   getTagsOperacionaisAtivas,
   isWhatsappTemplateRequiredError,
+  iniciarAtendimento,
   listAtendimentos,
   removerTagAtendimento,
   revisarConvenio,
@@ -43,6 +44,30 @@ describe('atendimentos service', () => {
     expect(url).toContain('filtro=NAO_LIDOS');
     expect(url).toContain('tipo=HUMANO');
     expect(url).toContain('busca=Paciente');
+  });
+
+  it('should_start_manual_attendance_with_the_minimal_contract', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      atendimentoId: 91,
+      pacienteId: 12,
+      modo: 'HUMANO',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await iniciarAtendimento({ pacienteId: 12 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/atendimentos/iniciar',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ pacienteId: 12 }),
+        cache: 'no-store',
+      }),
+    );
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+    expect(body).not.toHaveProperty('telefone');
+    expect(body).not.toHaveProperty('clinicaId');
+    expect(body).not.toHaveProperty('atendenteId');
   });
 
   it('should_send_text_and_surface_backend_failure', async () => {

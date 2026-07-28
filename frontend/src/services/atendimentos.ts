@@ -6,6 +6,8 @@ import type {
   AtendimentoPage,
   AtendimentoResumo,
   EnviarTemplateWhatsappRequest,
+  IniciarAtendimentoRequest,
+  IniciarAtendimentoResponse,
   MensagemAtendimento,
   NovoAtendimentoLembrete,
   NotificacaoAtendimento,
@@ -29,6 +31,15 @@ export async function listAtendimentos(params: {
 
 export function getAtendimento(id: number, signal?: AbortSignal): Promise<AtendimentoDetalhe> {
   return requestJson(`/api/atendimentos/${id}`, { signal });
+}
+
+export function iniciarAtendimento(
+  request: IniciarAtendimentoRequest,
+): Promise<IniciarAtendimentoResponse> {
+  return requestJson('/api/atendimentos/iniciar', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
 }
 
 export async function getMensagens(id: number, signal?: AbortSignal): Promise<MensagemAtendimento[]> {

@@ -1,6 +1,7 @@
 package com.synapse.clinicafemina.integration;
 
 import org.springframework.stereotype.Component;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappPhoneNormalizer;
 
 import java.util.Locale;
 import java.util.Map;
@@ -56,7 +57,7 @@ public class WhatsappInboundPayloadParser {
     }
 
     public String normalizarTelefone(String telefone) {
-        return telefone.startsWith("+") ? telefone.substring(1) : telefone;
+        return WhatsappPhoneNormalizer.normalize(telefone);
     }
 
     /**
