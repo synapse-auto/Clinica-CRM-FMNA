@@ -16,6 +16,7 @@ import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
 import com.synapse.clinicafemina.service.MensagemService;
+import com.synapse.clinicafemina.service.WhatsappRecipientService;
 import com.synapse.clinicafemina.service.WhatsappWindowService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -95,7 +96,8 @@ class MensagemServiceUazapOutboundWiringTest {
     private MensagemService service(WhatsappProviderResolver resolver) {
         return new MensagemService(
                 mensagemRepository, midiaMensagemRepository, atendimentoRepository, usuarioRepository,
-                whatsappOutboundClient, rabbitTemplate, whatsappWindowService, resolver);
+                whatsappOutboundClient, rabbitTemplate, whatsappWindowService,
+                new WhatsappRecipientService(resolver, atendimentoRepository));
     }
 
     @Test
@@ -147,13 +149,15 @@ class MensagemServiceUazapOutboundWiringTest {
         WhatsappProperties properties = new WhatsappProperties(); // provider default = META
         WhatsappProviderResolver resolver = new WhatsappProviderResolver(
                 List.of(new MetaWhatsappProvider(whatsappOutboundClient)), properties);
-        when(whatsappOutboundClient.enviarTexto("5583991114004", "Ola FMNA via Meta"))
-                .thenReturn("wamid-meta-out-1");
+        when(whatsappOutboundClient.enviarTextoComResultado("5583991114004", "Ola FMNA via Meta"))
+                .thenReturn(new com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult(
+                        "wamid-meta-out-1", com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType.META
+                ));
 
         service(resolver).enviar(30L, 9L, new EnviarMensagemRequest("TEXTO", "Ola FMNA via Meta"), 99L);
 
         verify(whatsappOutboundClient).validarConfiguracao();
-        verify(whatsappOutboundClient).enviarTexto("5583991114004", "Ola FMNA via Meta");
+        verify(whatsappOutboundClient).enviarTextoComResultado("5583991114004", "Ola FMNA via Meta");
 
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
         verify(mensagemRepository, org.mockito.Mockito.atLeastOnce()).save(mensagemCaptor.capture());

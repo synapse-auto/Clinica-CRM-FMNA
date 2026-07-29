@@ -1000,10 +1000,43 @@ class WhatsappInboundMapperTest {
         assertTrue(delivered.isPresent());
         assertTrue(delivered.get().getEntregueEm() != null);
         assertTrue(result.isPresent());
-        assertEquals("READ", result.get().getWhatsappStatus());
+        assertEquals("LIDA", result.get().getWhatsappStatus());
         assertTrue(result.get().getLidaEm() != null);
+        assertTrue(result.get().getEntregueEm() != null);
         verify(mensagemRepository, times(2)).save(mensagem);
         verificarNenhumEventoN8nPublicado();
+    }
+
+    @Test
+    void should_persist_sanitized_failure_and_not_regress_read_status() {
+        Atendimento atendimento = new Atendimento();
+        atendimento.setClinica(clinica);
+        Mensagem mensagem = new Mensagem();
+        mensagem.setAtendimento(atendimento);
+        mensagem.setWhatsappMessageId("wamid-failed");
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-failed"))
+                .thenReturn(Optional.of(mensagem));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarStatusUpdate(validValuePayload("phone-ultra"), Map.of(
+                "id", "wamid-failed", "status", "failed", "timestamp", "1781455100",
+                "errors", List.of(Map.of("code", "131026", "message", "dado sensivel"))
+        ));
+        assertEquals("FALHA", mensagem.getWhatsappStatus());
+        assertEquals("Mensagem não entregue pelo WhatsApp. Código do provider: 131026.",
+                mensagem.getMotivoFalha());
+
+        mapper.processarStatusUpdate(validValuePayload("phone-ultra"), Map.of(
+                "id", "wamid-failed", "status", "read", "timestamp", "1781455200"
+        ));
+        mapper.processarStatusUpdate(validValuePayload("phone-ultra"), Map.of(
+                "id", "wamid-failed", "status", "sent", "timestamp", "1781455300"
+        ));
+
+        assertEquals("LIDA", mensagem.getWhatsappStatus());
+        assertEquals(null, mensagem.getMotivoFalha());
+        assertTrue(mensagem.getEntregueEm() != null);
     }
 
     @Test

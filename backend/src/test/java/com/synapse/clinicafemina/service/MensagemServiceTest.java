@@ -11,8 +11,10 @@ import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderResolver;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
 import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappProvider;
+import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
 import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
@@ -87,7 +89,7 @@ class MensagemServiceTest {
                 whatsappOutboundClient,
                 rabbitTemplate,
                 whatsappWindowService,
-                whatsappProviderResolver
+                new WhatsappRecipientService(whatsappProviderResolver, atendimentoRepository)
         );
 
         Clinica clinica = new Clinica();
@@ -121,8 +123,8 @@ class MensagemServiceTest {
             }
             return mensagem;
         });
-        when(whatsappOutboundClient.enviarTexto("5544999990000", "Resposta gerada pela IA"))
-                .thenReturn("wamid-ai-1");
+        when(whatsappOutboundClient.enviarTextoComResultado("5544999990000", "Resposta gerada pela IA"))
+                .thenReturn(metaResult("wamid-ai-1"));
 
         MensagemService.RespostaIaResultado resultado = service.responderIa(
                 30L,
@@ -173,7 +175,7 @@ class MensagemServiceTest {
         assertEquals(META_WAMID_LONGO, mensagemFinal.getWhatsappMessageId());
         assertEquals(enviadoEm, mensagemFinal.getDataHora());
         verify(whatsappOutboundClient, never()).validarConfiguracao();
-        verify(whatsappOutboundClient, never()).enviarTexto(any(), any());
+        verify(whatsappOutboundClient, never()).enviarTextoComResultado(any(), any());
         verify(whatsappWindowService, never()).exigirAberta(any(), any());
     }
 
@@ -213,7 +215,7 @@ class MensagemServiceTest {
         org.junit.jupiter.api.Assertions.assertTrue(resultado.duplicada());
         assertEquals(88L, resultado.mensagem().id());
         verify(mensagemRepository, never()).save(any(Mensagem.class));
-        verify(whatsappOutboundClient, never()).enviarTexto(any(), any());
+        verify(whatsappOutboundClient, never()).enviarTextoComResultado(any(), any());
     }
 
     @Test
@@ -253,7 +255,7 @@ class MensagemServiceTest {
         org.junit.jupiter.api.Assertions.assertFalse(segunda.duplicada());
         verify(mensagemRepository, never()).findByClinicaIdAndWhatsappMessageId(any(), any());
         verify(mensagemRepository, atLeastOnce()).save(any(Mensagem.class));
-        verify(whatsappOutboundClient, never()).enviarTexto(any(), any());
+        verify(whatsappOutboundClient, never()).enviarTextoComResultado(any(), any());
     }
 
     @Test
@@ -319,8 +321,8 @@ class MensagemServiceTest {
                 .thenReturn(Optional.of(remetente));
         when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(whatsappOutboundClient.enviarTexto("5544999990000", "Oi, tudo bem?"))
-                .thenReturn("wamid-1");
+        when(whatsappOutboundClient.enviarTextoComResultado("5544999990000", "Oi, tudo bem?"))
+                .thenReturn(metaResult("wamid-1"));
 
         service.enviar(
                 30L,
@@ -338,12 +340,42 @@ class MensagemServiceTest {
     }
 
     @Test
+    void should_persist_safe_meta_confirmed_recipient_after_text_acceptance() {
+        atendimento.getPaciente().setTelefoneNormalizado("5583991114004");
+        when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L)).thenReturn(Optional.of(remetente));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(whatsappOutboundClient.enviarTextoComResultado("5583991114004", "Oi"))
+                .thenReturn(new WhatsappSendResult("wamid-confirmed", WhatsappProviderType.META, "558391114004"));
+
+        service.enviar(30L, 9L, new EnviarMensagemRequest("TEXTO", "Oi"), 99L);
+
+        assertEquals("558391114004", atendimento.getWhatsappChatId());
+        verify(atendimentoRepository, org.mockito.Mockito.times(2)).save(atendimento);
+    }
+
+    @Test
+    void should_ignore_divergent_meta_confirmed_recipient() {
+        atendimento.getPaciente().setTelefoneNormalizado("5583991114004");
+        when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L)).thenReturn(Optional.of(remetente));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(whatsappOutboundClient.enviarTextoComResultado("5583991114004", "Oi"))
+                .thenReturn(new WhatsappSendResult("wamid-divergent", WhatsappProviderType.META, "5511999990000"));
+
+        service.enviar(30L, 9L, new EnviarMensagemRequest("TEXTO", "Oi"), 99L);
+
+        assertEquals(null, atendimento.getWhatsappChatId());
+        verify(atendimentoRepository, org.mockito.Mockito.times(1)).save(atendimento);
+    }
+
+    @Test
     void should_propagate_template_requirement_without_retry_when_meta_rejects_message() {
         when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L))
                 .thenReturn(Optional.of(remetente));
         when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(whatsappOutboundClient.enviarTexto("5544999990000", "Mensagem inicial"))
+        when(whatsappOutboundClient.enviarTextoComResultado("5544999990000", "Mensagem inicial"))
                 .thenThrow(new WhatsappTemplateRequiredException());
 
         org.junit.jupiter.api.Assertions.assertThrows(
@@ -371,7 +403,7 @@ class MensagemServiceTest {
         );
 
         verify(mensagemRepository, never()).save(any());
-        verify(whatsappOutboundClient, never()).enviarTexto(any(), any());
+        verify(whatsappOutboundClient, never()).enviarTextoComResultado(any(), any());
     }
 
     @Test
@@ -484,5 +516,9 @@ class MensagemServiceTest {
         org.junit.jupiter.api.Assertions.assertNotNull(result);
         assertEquals("media-123", result.getWhatsappMediaId());
         assertEquals("image/png", result.getMimeType());
+    }
+
+    private WhatsappSendResult metaResult(String wamid) {
+        return new WhatsappSendResult(wamid, WhatsappProviderType.META);
     }
 }

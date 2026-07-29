@@ -13,6 +13,10 @@ import com.synapse.clinicafemina.exception.WhatsappTemplateSendException;
 import com.synapse.clinicafemina.exception.WhatsappTemplateParametersException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderResolver;
+import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
+import com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappProvider;
+import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
@@ -61,7 +65,9 @@ class WhatsappTemplateServiceTest {
                 usuarioRepository,
                 whatsappClient,
                 new WhatsappTemplateMapper(new WhatsappTemplateParameterMapper()),
-                Clock.fixed(Instant.parse("2026-07-16T12:00:00Z"), ZoneOffset.UTC)
+                Clock.fixed(Instant.parse("2026-07-16T12:00:00Z"), ZoneOffset.UTC),
+                WhatsappProviderType.META,
+                recipientService()
         );
         Clinica clinica = new Clinica();
         clinica.setId(1L);
@@ -135,7 +141,7 @@ class WhatsappTemplateServiceTest {
 
         verify(mensagemRepository, never()).save(any(Mensagem.class));
         verify(whatsappClient, never()).configuracaoTemplatesKey();
-        verify(whatsappClient, never()).enviarTemplate(any(), any(), any(), any());
+        verify(whatsappClient, never()).enviarTemplateComResultado(any(), any(), any(), any());
     }
 
     @Test
@@ -174,7 +180,8 @@ class WhatsappTemplateServiceTest {
             if (mensagem.getId() == null) mensagem.setId(99L);
             return mensagem;
         });
-        when(whatsappClient.enviarTemplate(any(), any(), any(), any())).thenReturn("wamid-template-1");
+        when(whatsappClient.enviarTemplateComResultado(any(), any(), any(), any()))
+                .thenReturn(metaResult("wamid-template-1"));
 
         var result = service.enviar(10L, 1L, 20L, request());
 
@@ -191,16 +198,56 @@ class WhatsappTemplateServiceTest {
     }
 
     @Test
+    void should_send_template_once_to_confirmed_whatsapp_chat_id() {
+        atendimento.getPaciente().setTelefoneNormalizado("5583991114004");
+        atendimento.setWhatsappChatId("558391114004");
+        prepareApprovedTemplate();
+        when(usuarioRepository.findAtivoByIdAndClinicaId(20L, 1L)).thenReturn(Optional.of(usuario));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(whatsappClient.enviarTemplateComResultado(any(), any(), any(), any()))
+                .thenReturn(metaResult("wamid-template-chat"));
+
+        service.enviar(10L, 1L, 20L, request());
+
+        verify(whatsappClient).enviarTemplateComResultado(
+                org.mockito.ArgumentMatchers.eq("558391114004"), any(), any(), any()
+        );
+        verify(whatsappClient, never()).enviarTemplateComResultado(
+                org.mockito.ArgumentMatchers.eq("5583991114004"), any(), any(), any()
+        );
+    }
+
+    @Test
+    void should_send_template_once_to_registered_phone_without_whatsapp_chat_id() {
+        atendimento.getPaciente().setTelefoneNormalizado("5583991114004");
+        prepareApprovedTemplate();
+        when(usuarioRepository.findAtivoByIdAndClinicaId(20L, 1L)).thenReturn(Optional.of(usuario));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(whatsappClient.enviarTemplateComResultado(any(), any(), any(), any()))
+                .thenReturn(metaResult("wamid-template-phone"));
+
+        service.enviar(10L, 1L, 20L, request());
+
+        verify(whatsappClient).enviarTemplateComResultado(
+                org.mockito.ArgumentMatchers.eq("5583991114004"), any(), any(), any()
+        );
+        verify(whatsappClient, never()).enviarTemplateComResultado(
+                org.mockito.ArgumentMatchers.eq("558391114004"), any(), any(), any()
+        );
+    }
+
+    @Test
     void should_block_double_click_without_second_meta_call() {
         prepareApprovedTemplate();
         when(usuarioRepository.findAtivoByIdAndClinicaId(20L, 1L)).thenReturn(Optional.of(usuario));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(whatsappClient.enviarTemplate(any(), any(), any(), any())).thenReturn("wamid-template-1");
+        when(whatsappClient.enviarTemplateComResultado(any(), any(), any(), any()))
+                .thenReturn(metaResult("wamid-template-1"));
 
         service.enviar(10L, 1L, 20L, request());
         assertThrows(IllegalStateException.class, () -> service.enviar(10L, 1L, 20L, request()));
 
-        verify(whatsappClient, times(1)).enviarTemplate(any(), any(), any(), any());
+        verify(whatsappClient, times(1)).enviarTemplateComResultado(any(), any(), any(), any());
     }
 
     @Test
@@ -222,7 +269,7 @@ class WhatsappTemplateServiceTest {
                 ));
 
         assertThrows(BadRequestException.class, () -> service.enviar(10L, 1L, 20L, request()));
-        verify(whatsappClient, never()).enviarTemplate(any(), any(), any(), any());
+        verify(whatsappClient, never()).enviarTemplateComResultado(any(), any(), any(), any());
     }
 
     @Test
@@ -234,7 +281,7 @@ class WhatsappTemplateServiceTest {
             if (mensagem.getId() == null) mensagem.setId(99L);
             return mensagem;
         });
-        when(whatsappClient.enviarTemplate(any(), any(), any(), any()))
+        when(whatsappClient.enviarTemplateComResultado(any(), any(), any(), any()))
                 .thenThrow(new IllegalStateException("erro Meta contendo detalhe sensivel"));
 
         assertThrows(WhatsappTemplateSendException.class,
@@ -269,7 +316,7 @@ class WhatsappTemplateServiceTest {
 
         verify(mensagemRepository, never()).save(any(Mensagem.class));
         verify(atendimentoRepository, never()).save(any(Atendimento.class));
-        verify(whatsappClient, never()).enviarTemplate(any(), any(), any(), any());
+        verify(whatsappClient, never()).enviarTemplateComResultado(any(), any(), any(), any());
     }
 
     @Test
@@ -285,7 +332,7 @@ class WhatsappTemplateServiceTest {
                 10L, 1L, 20L,
                 new EnviarTemplateWhatsappRequest("confirmacao", "en_US", List.of())
         ));
-        verify(whatsappClient, never()).enviarTemplate(any(), any(), any(), any());
+        verify(whatsappClient, never()).enviarTemplateComResultado(any(), any(), any(), any());
     }
 
     private void prepareApprovedTemplate() {
@@ -305,8 +352,16 @@ class WhatsappTemplateServiceTest {
                 whatsappClient,
                 new WhatsappTemplateMapper(new WhatsappTemplateParameterMapper()),
                 Clock.fixed(Instant.parse("2026-07-16T12:00:00Z"), ZoneOffset.UTC),
-                WhatsappProviderType.UAZAP
+                WhatsappProviderType.UAZAP,
+                recipientService()
         );
+    }
+
+    private WhatsappRecipientService recipientService() {
+        WhatsappProviderResolver resolver = new WhatsappProviderResolver(
+                List.of(new MetaWhatsappProvider(whatsappClient)), new WhatsappProperties()
+        );
+        return new WhatsappRecipientService(resolver, atendimentoRepository);
     }
 
     private Map<String, Object> template(String name, String status) {
@@ -346,5 +401,9 @@ class WhatsappTemplateServiceTest {
                         "BODY", 1, null, null, "16/07/2026"
                 ))
         );
+    }
+
+    private WhatsappSendResult metaResult(String wamid) {
+        return new WhatsappSendResult(wamid, WhatsappProviderType.META);
     }
 }

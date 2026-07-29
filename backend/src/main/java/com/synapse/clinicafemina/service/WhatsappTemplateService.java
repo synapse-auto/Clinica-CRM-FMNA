@@ -12,6 +12,8 @@ import com.synapse.clinicafemina.exception.WhatsappTemplateSendException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderResolver;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
+import com.synapse.clinicafemina.integration.whatsapp.model.ResolvedWhatsappRecipient;
+import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.UsuarioRepository;
@@ -51,22 +53,11 @@ public class WhatsappTemplateService {
     private final UsuarioRepository usuarioRepository;
     private final WhatsappOutboundClient whatsappClient;
     private final WhatsappTemplateMapper templateMapper;
+    private final WhatsappRecipientService whatsappRecipientService;
     private final WhatsappProviderType providerType;
     private final Clock clock;
     private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
     private final Map<String, OffsetDateTime> recentSends = new ConcurrentHashMap<>();
-
-    public WhatsappTemplateService(
-            AtendimentoRepository atendimentoRepository,
-            MensagemRepository mensagemRepository,
-            UsuarioRepository usuarioRepository,
-            WhatsappOutboundClient whatsappClient,
-            WhatsappTemplateMapper templateMapper
-    ) {
-        this(atendimentoRepository, mensagemRepository, usuarioRepository,
-                whatsappClient, templateMapper, Clock.systemUTC(),
-                WhatsappProviderType.META);
-    }
 
     @Autowired
     public WhatsappTemplateService(
@@ -75,22 +66,12 @@ public class WhatsappTemplateService {
             UsuarioRepository usuarioRepository,
             WhatsappOutboundClient whatsappClient,
             WhatsappTemplateMapper templateMapper,
-            WhatsappProviderResolver providerResolver
+            WhatsappProviderResolver providerResolver,
+            WhatsappRecipientService whatsappRecipientService
     ) {
         this(atendimentoRepository, mensagemRepository, usuarioRepository,
-                whatsappClient, templateMapper, Clock.systemUTC(), providerResolver.resolve().getType());
-    }
-
-    WhatsappTemplateService(
-            AtendimentoRepository atendimentoRepository,
-            MensagemRepository mensagemRepository,
-            UsuarioRepository usuarioRepository,
-            WhatsappOutboundClient whatsappClient,
-            WhatsappTemplateMapper templateMapper,
-            Clock clock
-    ) {
-        this(atendimentoRepository, mensagemRepository, usuarioRepository,
-                whatsappClient, templateMapper, clock, WhatsappProviderType.META);
+                whatsappClient, templateMapper, Clock.systemUTC(), providerResolver.resolve().getType(),
+                whatsappRecipientService);
     }
 
     WhatsappTemplateService(
@@ -100,13 +81,15 @@ public class WhatsappTemplateService {
             WhatsappOutboundClient whatsappClient,
             WhatsappTemplateMapper templateMapper,
             Clock clock,
-            WhatsappProviderType providerType
+            WhatsappProviderType providerType,
+            WhatsappRecipientService whatsappRecipientService
     ) {
         this.atendimentoRepository = atendimentoRepository;
         this.mensagemRepository = mensagemRepository;
         this.usuarioRepository = usuarioRepository;
         this.whatsappClient = whatsappClient;
         this.templateMapper = templateMapper;
+        this.whatsappRecipientService = whatsappRecipientService;
         this.providerType = providerType;
         this.clock = clock;
     }
@@ -147,14 +130,20 @@ public class WhatsappTemplateService {
             mensagem = mensagemRepository.save(mensagem);
             atendimento.setUltimaMensagemEm(mensagem.getDataHora());
             atendimentoRepository.save(atendimento);
-            String wamid = whatsappClient.enviarTemplate(
-                    atendimento.getPaciente().getTelefoneNormalizado(),
+            ResolvedWhatsappRecipient recipient = whatsappRecipientService.resolve(atendimento);
+            WhatsappSendResult result = whatsappClient.enviarTemplateComResultado(
+                    recipient.recipient(),
                     definition.dto().nome(),
                     definition.dto().idioma(),
                     prepared.metaComponents()
             );
-            mensagem.setWhatsappMessageId(wamid);
+            mensagem.setWhatsappMessageId(result.externalMessageId());
             mensagem.setWhatsappStatus("ENVIADA");
+            whatsappRecipientService.persistConfirmedRecipient(atendimento, result);
+            log.info("Envio WhatsApp aceito. clinicaId={} atendimentoId={} provider={} tipo=TEMPLATE "
+                            + "origemDestinatario={} finalTelefone={} externalId={}",
+                    clinicaId, atendimentoId, result.provider(), recipient.source(),
+                    maskPhone(recipient.recipient()), maskId(result.externalMessageId()));
             return toDTO(mensagemRepository.save(mensagem));
         } catch (Exception exception) {
             recentSends.remove(fingerprint);
@@ -169,6 +158,14 @@ public class WhatsappTemplateService {
 
     public void invalidarCache() {
         cache.clear();
+    }
+
+    private String maskPhone(String phone) {
+        return phone == null || phone.length() < 4 ? "****" : "******" + phone.substring(phone.length() - 4);
+    }
+
+    private String maskId(String id) {
+        return id == null || id.length() < 4 ? "****" : "****" + id.substring(id.length() - 4);
     }
 
     private List<WhatsappTemplateMapper.TemplateDefinition> definitions() {

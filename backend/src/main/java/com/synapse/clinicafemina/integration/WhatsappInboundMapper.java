@@ -223,23 +223,73 @@ public class WhatsappInboundMapper {
         if (clinica.isEmpty()) return Optional.empty();
  
         String whatsappMessageId = String.valueOf(status.get("id"));
-        String novoStatus = String.valueOf(status.get("status")).toUpperCase();
+        String novoStatus = normalizarStatus(String.valueOf(status.get("status")));
         OffsetDateTime dataHora = parseTimestamp(String.valueOf(status.get("timestamp")));
         return mensagemRepository.findByClinicaIdAndWhatsappMessageId(
                 clinica.get().getId(), whatsappMessageId
         ).map(mensagem -> {
-            mensagem.setWhatsappStatus(novoStatus);
-            if ("DELIVERED".equals(novoStatus) || "ENTREGUE".equals(novoStatus)) {
-                mensagem.setEntregueEm(dataHora);
+            if (!deveAtualizarStatus(mensagem.getWhatsappStatus(), novoStatus)) {
+                return mensagem;
             }
-            if ("READ".equals(novoStatus) || "LIDA".equals(novoStatus)) {
+            mensagem.setWhatsappStatus(novoStatus);
+            if ("ENTREGUE".equals(novoStatus)) {
+                mensagem.setEntregueEm(dataHora);
+                mensagem.setMotivoFalha(null);
+            }
+            if ("LIDA".equals(novoStatus)) {
+                if (mensagem.getEntregueEm() == null) {
+                    mensagem.setEntregueEm(dataHora);
+                }
                 mensagem.setLidaEm(dataHora);
+                mensagem.setMotivoFalha(null);
+            }
+            if ("FALHA".equals(novoStatus)) {
+                mensagem.setMotivoFalha(motivoFalhaStatus(status));
             }
             Mensagem salva = mensagemRepository.save(mensagem);
             log.info("Status da mensagem atualizado: id={}, whatsappMessageId={}, novoStatus={}",
                     salva.getId(), maskId(whatsappMessageId), novoStatus);
             return salva;
         });
+    }
+
+    private String normalizarStatus(String rawStatus) {
+        return switch (rawStatus == null ? "" : rawStatus.trim().toUpperCase()) {
+            case "DELIVERED", "ENTREGUE" -> "ENTREGUE";
+            case "READ", "LIDA" -> "LIDA";
+            case "FAILED", "FALHA" -> "FALHA";
+            case "SENT", "ENVIADA" -> "ENVIADA";
+            case "PENDING", "PENDENTE" -> "PENDENTE";
+            default -> "PENDENTE";
+        };
+    }
+
+    private boolean deveAtualizarStatus(String currentStatus, String nextStatus) {
+        String current = normalizarStatus(currentStatus);
+        if ("LIDA".equals(current)) return "LIDA".equals(nextStatus);
+        if ("ENTREGUE".equals(current)) return !"PENDENTE".equals(nextStatus) && !"ENVIADA".equals(nextStatus);
+        if ("FALHA".equals(current)) return "ENTREGUE".equals(nextStatus) || "LIDA".equals(nextStatus);
+        return true;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String motivoFalhaStatus(Map<String, Object> status) {
+        Object errors = status.get("errors");
+        if (errors instanceof List<?> list && !list.isEmpty() && list.getFirst() instanceof Map<?, ?> error) {
+            return motivoFalhaPorCodigo(error.get("code"));
+        }
+        if (status.get("error") instanceof Map<?, ?> error) {
+            return motivoFalhaPorCodigo(error.get("code"));
+        }
+        return "Mensagem não entregue pelo WhatsApp.";
+    }
+
+    private String motivoFalhaPorCodigo(Object rawCode) {
+        String code = rawCode == null ? "" : String.valueOf(rawCode).trim();
+        if (code.matches("[A-Za-z0-9_-]{1,32}")) {
+            return "Mensagem não entregue pelo WhatsApp. Código do provider: " + code + ".";
+        }
+        return "Mensagem não entregue pelo WhatsApp.";
     }
  
     @SuppressWarnings("unchecked")

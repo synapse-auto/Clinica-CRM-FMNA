@@ -28,6 +28,17 @@ public interface WhatsappProvider {
             String registeredPhone,
             Set<String> safeAliases
     ) {
+        if (confirmedChatId != null && !confirmedChatId.isBlank()) {
+            String normalizedChatId = safeAliases.contains(confirmedChatId)
+                    ? confirmedChatId
+                    : WhatsappPhoneNormalizer.normalize(confirmedChatId);
+            if (!safeAliases.contains(normalizedChatId)) {
+                throw new WhatsappRecipientResolutionException(
+                        "Identidade WhatsApp confirmada não pertence ao paciente."
+                );
+            }
+            return new WhatsappRecipientResolution(normalizedChatId, true, "WHATSAPP_CHAT_ID");
+        }
         String normalized = safeAliases.contains(registeredPhone)
                 ? registeredPhone
                 : WhatsappPhoneNormalizer.normalize(registeredPhone);

@@ -35,8 +35,7 @@ public class MetaWhatsappProvider implements WhatsappProvider {
     public WhatsappSendResult sendText(String toE164, String body) {
         // Mesma ordem de chamadas que o consumer fazia antes da centralização: validar, depois enviar.
         metaClient.validarConfiguracao();
-        String wamid = metaClient.enviarTexto(toE164, body);
-        return new WhatsappSendResult(wamid, WhatsappProviderType.META);
+        return metaClient.enviarTextoComResultado(toE164, body);
     }
 
     @Override

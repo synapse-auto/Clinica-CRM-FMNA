@@ -2,6 +2,8 @@ package com.synapse.clinicafemina.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
+import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
@@ -108,6 +110,15 @@ public class WhatsappOutboundClient {
             String idioma,
             List<Map<String, Object>> componentes
     ) {
+        return enviarTemplateComResultado(telefoneE164, nome, idioma, componentes).externalMessageId();
+    }
+
+    public WhatsappSendResult enviarTemplateComResultado(
+            String telefoneE164,
+            String nome,
+            String idioma,
+            List<Map<String, Object>> componentes
+    ) {
         validarConfiguracaoTemplates();
         Map<String, Object> template = new LinkedHashMap<>();
         template.put("name", nome);
@@ -131,7 +142,7 @@ public class WhatsappOutboundClient {
                     .body(body)
                     .retrieve()
                     .body(Map.class);
-            return extrairMensagemId(response);
+            return extrairResultadoEnvio(response);
         } catch (RestClientResponseException exception) {
             logMetaError("envio de template", exception);
             throw new IllegalStateException("Nao foi possivel enviar o template pela Meta", exception);
@@ -180,6 +191,23 @@ public class WhatsappOutboundClient {
         return id;
     }
 
+    private WhatsappSendResult extrairResultadoEnvio(Map<String, Object> response) {
+        return new WhatsappSendResult(
+                extrairMensagemId(response),
+                WhatsappProviderType.META,
+                extrairDestinatarioConfirmado(response)
+        );
+    }
+
+    private String extrairDestinatarioConfirmado(Map<String, Object> response) {
+        if (!(response.get("contacts") instanceof List<?> contacts) || contacts.isEmpty()
+                || !(contacts.getFirst() instanceof Map<?, ?> contact)) {
+            return null;
+        }
+        String waId = Objects.toString(contact.get("wa_id"), "").trim();
+        return waId.isBlank() ? null : waId;
+    }
+
     public record TemplatePage(List<Map<String, Object>> templates, String after) {
         public TemplatePage {
             templates = templates == null ? List.of() : List.copyOf(templates);
@@ -193,9 +221,13 @@ public class WhatsappOutboundClient {
     /**
      * Envia uma mensagem de texto simples e retorna o {@code wamid} (ID da Meta).
      */
-    @Retry(name = "whatsapp-send")
-    @CircuitBreaker(name = "whatsapp-send", fallbackMethod = "enviarTextoFallback")
     public String enviarTexto(String telefoneE164, String corpo) {
+        return enviarTextoComResultado(telefoneE164, corpo).externalMessageId();
+    }
+
+    @Retry(name = "whatsapp-send")
+    @CircuitBreaker(name = "whatsapp-send", fallbackMethod = "enviarTextoComResultadoFallback")
+    public WhatsappSendResult enviarTextoComResultado(String telefoneE164, String corpo) {
         String url = graphApiUrl + "/" + phoneNumberId + "/messages";
  
         Map<String, Object> body = Map.of(
@@ -217,15 +249,7 @@ public class WhatsappOutboundClient {
                     .retrieve()
                     .body(Map.class);
  
-            if (response == null || !response.containsKey("messages")) {
-                throw new IllegalStateException("Resposta inesperada da Meta API");
-            }
- 
-            @SuppressWarnings("unchecked")
-            java.util.List<Map<String, String>> messages =
-                    (java.util.List<Map<String, String>>) response.get("messages");
- 
-            return messages.getFirst().get("id");
+            return extrairResultadoEnvio(response);
  
         } catch (RestClientResponseException e) {
             handleMetaSendError("mensagem", e);
@@ -345,6 +369,16 @@ public class WhatsappOutboundClient {
         }
         log.error("Circuit breaker ativado para envio WhatsApp. tipoErro={}", t.getClass().getSimpleName());
         throw new RuntimeException("WhatsApp indisponivel (circuit breaker aberto)", t);
+    }
+
+    @SuppressWarnings("unused")
+    public WhatsappSendResult enviarTextoComResultadoFallback(
+            String telefoneE164,
+            String corpo,
+            Throwable throwable
+    ) {
+        enviarTextoFallback(telefoneE164, corpo, throwable);
+        throw new IllegalStateException("Fallback de envio nao retornou erro");
     }
 
     public record MidiaBaixada(byte[] bytes, String mimeType) {}

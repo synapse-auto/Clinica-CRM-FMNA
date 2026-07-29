@@ -426,11 +426,10 @@ export function AtendimentosClient({
   ) {
     const id = response.atendimentoId;
     activeIdRef.current = id;
-    setFilter('MEUS');
-    setType('HUMANO');
-    setSearch('');
     setActiveId(id);
     window.history.replaceState({}, '', `/atendimentos?atendimentoId=${id}`);
+    void loadActiveConversation(id, 'select');
+    void refreshList();
 
     if (!mensagemInicial) return;
     setBusy(true);

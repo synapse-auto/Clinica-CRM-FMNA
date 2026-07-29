@@ -28,6 +28,9 @@ vi.mock('@/services/atendimentos', () => ({
 vi.mock('./ChatList', () => ({
   ChatList: (props: {
     activeId: number | null;
+    conversations: { id: number }[];
+    filter: string;
+    type: string;
     search: string;
     searching?: boolean;
     onSelect: (id: number) => void;
@@ -36,6 +39,8 @@ vi.mock('./ChatList', () => ({
   }) => (
     <div>
       <span data-testid="selected-atendimento">{props.activeId ?? 'nenhum'}</span>
+      <span data-testid="current-filter">{props.filter}/{props.type}</span>
+      <span data-testid="conversation-ids">{props.conversations.map((item) => item.id).join(',')}</span>
       <button type="button" onClick={() => props.onSelect(7)}>Selecionar atendimento local</button>
       <button type="button" onClick={() => props.onSelect(8)}>Selecionar B</button>
       <button type="button" onClick={() => props.onSelect(9)}>Selecionar C</button>
@@ -419,6 +424,36 @@ describe('AtendimentosClient troca de conversa (latência)', () => {
     await user.click(screen.getByRole('button', { name: 'Reenviar rascunho' }));
     await waitFor(() => expect(services.enviarMensagem).toHaveBeenCalledTimes(2));
     expect(services.iniciarAtendimento).toHaveBeenCalledTimes(1);
+  });
+
+  it('should_preserve_list_context_and_reconcile_new_manual_attendance_immediately', async () => {
+    services.iniciarAtendimento.mockResolvedValue({
+      atendimentoId: 44,
+      pacienteId: 20,
+      modo: 'HUMANO',
+      atendimento: { id: 44, whatsappCapabilities: {} },
+    });
+    services.listAtendimentos.mockResolvedValue({
+      content: [{ id: 7 }, { id: 8 }, { id: 44 }],
+      totalElements: 3,
+    });
+    services.getAtendimento.mockResolvedValue({ id: 44 });
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7 }, { id: 8 }]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Novo atendimento' }));
+    await user.type(screen.getByRole('textbox', { name: 'Nome do contato' }), 'Maria Teste');
+    await user.type(screen.getByRole('textbox', { name: 'Telefone' }), '83999999999');
+    await user.click(screen.getByRole('button', { name: 'Iniciar atendimento' }));
+
+    await waitFor(() => expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('44'));
+    await waitFor(() => expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('44'));
+    expect(screen.getByTestId('current-filter')).toHaveTextContent('TODOS/TODOS');
+    expect(screen.getByTestId('conversation-ids')).toHaveTextContent('7,8,44');
+    expect(services.listAtendimentos).toHaveBeenCalledWith(
+      { filtro: 'TODOS', tipo: 'TODOS', busca: '' }, expect.any(AbortSignal),
+    );
+    expect(window.location.search).toBe('?atendimentoId=44');
   });
 
   it('should_refresh_the_open_chat_and_show_transfer_notice_when_a_new_notification_arrives', async () => {

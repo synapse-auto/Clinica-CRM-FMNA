@@ -85,6 +85,11 @@ Read [.specify/memory/constitution.md](./.specify/memory/constitution.md) before
 Ao criar ou alterar qualquer endpoint `/api/n8n/**`, siga obrigatoriamente
 [docs/integracoes/N8N_ENDPOINT_CHECKLIST.md](./docs/integracoes/N8N_ENDPOINT_CHECKLIST.md).
 
+## Envio WhatsApp
+
+Ao criar ou alterar envio WhatsApp, consultar obrigatoriamente
+[docs/integracoes/WHATSAPP_OUTBOUND.md](./docs/integracoes/WHATSAPP_OUTBOUND.md).
+
 ## What This Feature Does NOT Include
 
 - Mobile-first responsive UI (PT01 — backlog).

@@ -9,8 +9,17 @@ import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
  *                          (Meta: {@code wamid}; UAZAP: {@code messageId}). Persistido em
  *                          {@code mensagem.whatsapp_message_id} (UNIQUE) para idempotência.
  * @param provider          provider que efetivamente realizou o envio.
+ * @param confirmedRecipient destinatario confirmado pelo provider, quando a resposta o informar.
  */
-public record WhatsappSendResult(String externalMessageId, WhatsappProviderType provider) {
+public record WhatsappSendResult(
+        String externalMessageId,
+        WhatsappProviderType provider,
+        String confirmedRecipient
+) {
+
+    public WhatsappSendResult(String externalMessageId, WhatsappProviderType provider) {
+        this(externalMessageId, provider, null);
+    }
 
     public WhatsappSendResult {
         if (externalMessageId == null || externalMessageId.isBlank()) {
