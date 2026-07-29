@@ -2,6 +2,7 @@ package com.synapse.clinicafemina.repository;
 
 import com.synapse.clinicafemina.domain.Mensagem;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -39,12 +40,25 @@ public interface MensagemRepository extends JpaRepository<Mensagem, Long> {
             WHERE m.atendimento.id = :atendimentoId
               AND m.atendimento.clinica.id = :clinicaId
               AND m.tipoMedia = 'AI_HANDOFF_SUMMARY'
+              AND m.dataHora >= :inicioCiclo
             ORDER BY m.dataHora DESC
             """)
-    Optional<Mensagem> findLatestAiHandoffSummary(
+    List<Mensagem> findAiHandoffSummariesSince(
             @Param("atendimentoId") Long atendimentoId,
-            @Param("clinicaId") Long clinicaId
+            @Param("clinicaId") Long clinicaId,
+            @Param("inicioCiclo") OffsetDateTime inicioCiclo,
+            Pageable pageable
     );
+
+    default Optional<Mensagem> findLatestAiHandoffSummarySince(
+            Long atendimentoId,
+            Long clinicaId,
+            OffsetDateTime inicioCiclo
+    ) {
+        return findAiHandoffSummariesSince(atendimentoId, clinicaId, inicioCiclo, PageRequest.of(0, 1))
+                .stream()
+                .findFirst();
+    }
 
     @Query("""
             SELECT COUNT(m) > 0 FROM Mensagem m

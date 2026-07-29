@@ -241,7 +241,8 @@ class AtendimentoServiceTest {
                 .thenReturn(Optional.of(destinatario));
         when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(transferenciaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mensagemRepository.findLatestAiHandoffSummary(3L, 1L)).thenReturn(Optional.empty());
+        when(mensagemRepository.findLatestAiHandoffSummarySince(eq(3L), eq(1L), any()))
+                .thenReturn(Optional.empty());
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
             Mensagem mensagem = invocation.getArgument(0);
             mensagem.setId(88L);
@@ -279,6 +280,73 @@ class AtendimentoServiceTest {
         assertEquals("Atendimento #3 transferido para humano", eventos.get(1).getConteudo());
         verify(notificationService).notificarTransferenciaIa(
                 eq(atendimento), any(Mensagem.class), anyString(), eq(destinatario), any());
+    }
+
+    @Test
+    void should_register_a_new_ai_summary_after_returning_to_ai_for_a_second_handoff() {
+        Recepcionista destinatario = atendente(10L);
+        List<Mensagem> resumosPersistidos = new java.util.ArrayList<>();
+
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L))
+                .thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.findByIdAndClinicaId(3L, 1L))
+                .thenReturn(Optional.of(atendimento));
+        when(usuarioRepository.findById(10L)).thenReturn(Optional.of(destinatario));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferenciaRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.existsSystemEvent(3L, 1L, "AI_HANDOFF_ENDED")).thenReturn(true);
+        when(mensagemRepository.existsSystemEvent(3L, 1L, "HUMAN_HANDOFF_START")).thenReturn(true);
+        when(mensagemRepository.findLatestAiHandoffSummarySince(eq(3L), eq(1L), any()))
+                .thenAnswer(invocation -> resumosPersistidos.stream()
+                        .filter(mensagem -> !mensagem.getDataHora().isBefore(invocation.getArgument(2)))
+                        .max(java.util.Comparator.comparing(Mensagem::getDataHora)));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            if ("AI_HANDOFF_SUMMARY".equals(mensagem.getTipoMedia())) {
+                mensagem.setId(80L + resumosPersistidos.size());
+                resumosPersistidos.add(mensagem);
+            }
+            return mensagem;
+        });
+        when(notificationService.notificarTransferenciaIa(
+                eq(atendimento), any(Mensagem.class), anyString(), eq(destinatario), any()))
+                .thenReturn(new AtendimentoNotificationService.TransferenciaNotificacaoResultado(0, List.of()));
+
+        service.transferirPorN8n(
+                3L,
+                new TransferirAtendimentoRequest(10L, "Primeiro handoff", "Resumo do primeiro ciclo", null),
+                1L
+        );
+        service.ativarModoIa(3L, 1L);
+        var segundoHandoff = service.transferirPorN8n(
+                3L,
+                new TransferirAtendimentoRequest(10L, "Segundo handoff", "Resumo do segundo ciclo", null),
+                1L
+        );
+        var repeticaoDoSegundoHandoff = service.transferirPorN8n(
+                3L,
+                new TransferirAtendimentoRequest(10L, "Segundo handoff", "Resumo do segundo ciclo", null),
+                1L
+        );
+
+        List<String> resumos = org.mockito.Mockito.mockingDetails(mensagemRepository)
+                .getInvocations().stream()
+                .filter(invocation -> invocation.getMethod().getName().equals("save"))
+                .map(invocation -> (Mensagem) invocation.getArgument(0))
+                .filter(mensagem -> "AI_HANDOFF_SUMMARY".equals(mensagem.getTipoMedia()))
+                .map(Mensagem::getConteudo)
+                .toList();
+        assertTrue(segundoHandoff.resumoRegistrado());
+        assertFalse(repeticaoDoSegundoHandoff.resumoRegistrado());
+        assertEquals(List.of("Resumo do primeiro ciclo", "Resumo do segundo ciclo"), resumos);
+        org.mockito.ArgumentCaptor<Mensagem> resumoCaptor =
+                org.mockito.ArgumentCaptor.forClass(Mensagem.class);
+        verify(notificationService, times(3)).notificarTransferenciaIa(
+                eq(atendimento), resumoCaptor.capture(), anyString(), eq(destinatario), any());
+        assertEquals(
+                List.of("Resumo do primeiro ciclo", "Resumo do segundo ciclo", "Resumo do segundo ciclo"),
+                resumoCaptor.getAllValues().stream().map(Mensagem::getConteudo).toList()
+        );
     }
 
     @Test

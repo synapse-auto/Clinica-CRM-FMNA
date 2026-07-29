@@ -88,9 +88,15 @@ public class AtendimentoNotificationService {
         int criadas = 0;
         List<Long> destinatariosCriados = new ArrayList<>();
         for (Usuario destinatario : destinatarios) {
-            boolean existente = repository.existsByUsuarioIdAndAtendimentoIdAndTipoDesde(
+            boolean existenteNoCiclo = repository.existsByUsuarioIdAndAtendimentoIdAndTipoDesde(
                     destinatario.getId(), atendimento.getId(), TRANSFERENCIA_IA, inicioCiclo
             );
+            boolean existentePelaChaveDoIndice = resumo != null
+                    && resumo.getId() != null
+                    && repository.existsByUsuarioIdAndMensagemIdAndTipo(
+                            destinatario.getId(), resumo.getId(), TRANSFERENCIA_IA
+                    );
+            boolean existente = existenteNoCiclo || existentePelaChaveDoIndice;
             if (!existente) {
                 repository.save(novaNotificacao(
                         destinatario,

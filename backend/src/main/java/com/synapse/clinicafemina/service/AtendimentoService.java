@@ -294,6 +294,7 @@ public class AtendimentoService {
         ResumoTransferencia resumo = registrarResumoTransferencia(
                 atendimento,
                 request.resumoTransferencia(),
+                transferidoEm,
                 transferidoEm.plusNanos(2)
         );
         AtendimentoNotificationService.TransferenciaNotificacaoResultado notificacoes = notificationService.notificarTransferenciaIa(
@@ -493,6 +494,7 @@ public class AtendimentoService {
     private ResumoTransferencia registrarResumoTransferencia(
             Atendimento atendimento,
             String resumo,
+            OffsetDateTime inicioCiclo,
             OffsetDateTime dataHora
     ) {
         if (resumo == null || resumo.isBlank()) {
@@ -500,7 +502,11 @@ public class AtendimentoService {
         }
         Long atendimentoId = atendimento.getId();
         Long clinicaId = atendimento.getClinica().getId();
-        Optional<Mensagem> existente = mensagemRepository.findLatestAiHandoffSummary(atendimentoId, clinicaId);
+        Optional<Mensagem> existente = mensagemRepository.findLatestAiHandoffSummarySince(
+                atendimentoId,
+                clinicaId,
+                inicioCiclo
+        );
         if (existente.isPresent()) {
             return new ResumoTransferencia(existente.get(), false);
         }

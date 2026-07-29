@@ -18,6 +18,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -50,6 +51,8 @@ class AtendimentoNotificationServiceTest {
         when(repository.existsByUsuarioIdAndAtendimentoIdAndTipoDesde(
                 eq(10L), eq(30L), eq("TRANSFERENCIA_IA"), any()))
                 .thenReturn(false);
+        when(repository.existsByUsuarioIdAndMensagemIdAndTipo(10L, 88L, "TRANSFERENCIA_IA"))
+                .thenReturn(false);
 
         AtendimentoNotificationService service = new AtendimentoNotificationService(repository, usuarioRepository);
 
@@ -58,6 +61,83 @@ class AtendimentoNotificationServiceTest {
         assertEquals(1, created);
         verify(usuarioRepository).findRecepcionistasAtivosByClinicaId(1L);
         verify(repository).save(any());
+    }
+
+    @Test
+    void should_not_create_transfer_notification_when_it_already_exists_in_the_same_cycle() {
+        Clinica clinica = new Clinica();
+        clinica.setId(1L);
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        Recepcionista recepcionista = new Recepcionista();
+        recepcionista.setId(10L);
+        recepcionista.setClinica(clinica);
+        Mensagem resumo = new Mensagem();
+        resumo.setId(88L);
+        resumo.setAtendimento(atendimento);
+
+        when(usuarioRepository.findRecepcionistasAtivosByClinicaId(1L)).thenReturn(List.of(recepcionista));
+        when(repository.existsByUsuarioIdAndAtendimentoIdAndTipoDesde(
+                eq(10L), eq(30L), eq("TRANSFERENCIA_IA"), any()))
+                .thenReturn(true);
+        when(repository.existsByUsuarioIdAndMensagemIdAndTipo(10L, 88L, "TRANSFERENCIA_IA"))
+                .thenReturn(false);
+
+        AtendimentoNotificationService service = new AtendimentoNotificationService(repository, usuarioRepository);
+
+        assertEquals(0, service.notificarTransferenciaIa(atendimento, resumo));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void should_not_create_transfer_notification_when_its_unique_message_key_already_exists() {
+        Clinica clinica = new Clinica();
+        clinica.setId(1L);
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        Recepcionista recepcionista = new Recepcionista();
+        recepcionista.setId(10L);
+        recepcionista.setClinica(clinica);
+        Mensagem resumo = new Mensagem();
+        resumo.setId(88L);
+        resumo.setAtendimento(atendimento);
+
+        when(usuarioRepository.findRecepcionistasAtivosByClinicaId(1L)).thenReturn(List.of(recepcionista));
+        when(repository.existsByUsuarioIdAndAtendimentoIdAndTipoDesde(
+                eq(10L), eq(30L), eq("TRANSFERENCIA_IA"), any()))
+                .thenReturn(false);
+        when(repository.existsByUsuarioIdAndMensagemIdAndTipo(10L, 88L, "TRANSFERENCIA_IA"))
+                .thenReturn(true);
+
+        AtendimentoNotificationService service = new AtendimentoNotificationService(repository, usuarioRepository);
+
+        assertEquals(0, service.notificarTransferenciaIa(atendimento, resumo));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void should_create_transfer_notification_without_querying_message_key_when_there_is_no_summary() {
+        Clinica clinica = new Clinica();
+        clinica.setId(1L);
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        Recepcionista recepcionista = new Recepcionista();
+        recepcionista.setId(10L);
+        recepcionista.setClinica(clinica);
+
+        when(usuarioRepository.findRecepcionistasAtivosByClinicaId(1L)).thenReturn(List.of(recepcionista));
+        when(repository.existsByUsuarioIdAndAtendimentoIdAndTipoDesde(
+                eq(10L), eq(30L), eq("TRANSFERENCIA_IA"), any()))
+                .thenReturn(false);
+
+        AtendimentoNotificationService service = new AtendimentoNotificationService(repository, usuarioRepository);
+
+        assertEquals(1, service.notificarTransferenciaIa(atendimento, null));
+        verify(repository).save(any());
+        verify(repository, never()).existsByUsuarioIdAndMensagemIdAndTipo(any(), any(), any());
     }
 
     @Test
