@@ -52,7 +52,9 @@ class WhatsappInboundIdempotencyTest {
                 java.util.List.of(new com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappMediaDownloader(
                         whatsappOutboundClient, new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties())),
                 mock(org.springframework.context.ApplicationEventPublisher.class),
-                new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties());
+                new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties(),
+                new com.synapse.clinicafemina.service.WhatsappPhoneIdentityService(
+                        pacienteRepository, atendimentoRepository, mensagemRepository));
     }
 
     @Test

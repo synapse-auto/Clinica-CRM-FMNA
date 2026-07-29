@@ -108,6 +108,30 @@ public interface MensagemRepository extends JpaRepository<Mensagem, Long> {
     @Query("""
             SELECT COUNT(m) FROM Mensagem m
             WHERE m.atendimento.clinica.id = :clinicaId
+              AND m.atendimento.paciente.id = :pacienteId
+              AND m.direcao = :direcao
+            """)
+    long countByPacienteAndDirecao(
+            @Param("clinicaId") Long clinicaId,
+            @Param("pacienteId") Long pacienteId,
+            @Param("direcao") String direcao
+    );
+
+    @Query("""
+            SELECT COUNT(m) FROM Mensagem m
+            WHERE m.atendimento.clinica.id = :clinicaId
+              AND m.atendimento.id = :atendimentoId
+              AND m.direcao = :direcao
+            """)
+    long countByAtendimentoAndDirecao(
+            @Param("clinicaId") Long clinicaId,
+            @Param("atendimentoId") Long atendimentoId,
+            @Param("direcao") String direcao
+    );
+
+    @Query("""
+            SELECT COUNT(m) FROM Mensagem m
+            WHERE m.atendimento.clinica.id = :clinicaId
               AND m.dataHora >= :inicio
               AND m.dataHora < :fim
             """)

@@ -1,7 +1,10 @@
 package com.synapse.clinicafemina.integration.whatsapp;
 
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappMessageType;
+import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappRecipientResolution;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
+
+import java.util.Set;
 
 /**
  * Abstração de envio de mensagens de WhatsApp, independente do provider concreto.
@@ -15,6 +18,21 @@ public interface WhatsappProvider {
 
     /** Identifica qual provider esta implementação atende. */
     WhatsappProviderType getType();
+
+    /**
+     * Resolve o destinatário antes do envio. A implementação Meta preserva o E.164 cadastral;
+     * adapters que exigem identidade confirmada podem sobrescrever este método.
+     */
+    default WhatsappRecipientResolution resolveRecipient(
+            String confirmedChatId,
+            String registeredPhone,
+            Set<String> safeAliases
+    ) {
+        String normalized = safeAliases.contains(registeredPhone)
+                ? registeredPhone
+                : WhatsappPhoneNormalizer.normalize(registeredPhone);
+        return new WhatsappRecipientResolution(normalized, false, "TELEFONE_CADASTRAL");
+    }
 
     /**
      * Envia uma mensagem de texto simples.

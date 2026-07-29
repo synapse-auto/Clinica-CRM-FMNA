@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useEffect, useState } from 'react';
 
 const services = vi.hoisted(() => ({
   listAtendimentos: vi.fn(),
@@ -51,13 +52,46 @@ vi.mock('./ChatList', () => ({
   ),
 }));
 vi.mock('./ChatWindow', () => ({
-  ChatWindow: (props: { detail: { id?: number } | null; loading?: boolean }) => (
-    <div data-testid="mock-chat-scroll">
+  ChatWindow: (props: {
+    detail: { id?: number } | null;
+    loading?: boolean;
+    initialDraft?: string;
+    onDraftChange?: (content: string) => void;
+    onSend?: (content: string) => Promise<void>;
+  }) => {
+    const [draft, setDraft] = useState(props.initialDraft ?? '');
+    useEffect(() => setDraft(props.initialDraft ?? ''), [props.initialDraft]);
+    return (
+      <div data-testid="mock-chat-scroll">
       <span data-testid="chat-detail-id">{props.detail?.id ?? 'none'}</span>
       <span data-testid="chat-loading">{props.loading ? 'loading' : 'idle'}</span>
-      <textarea aria-label="Rascunho do chat" />
+      <textarea
+        aria-label="Rascunho do chat"
+        value={draft}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          props.onDraftChange?.(event.target.value);
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => {
+          const sending = props.onSend?.(draft);
+          if (sending) {
+            void sending
+              .then(() => {
+                setDraft('');
+                props.onDraftChange?.('');
+              })
+              .catch(() => undefined);
+          }
+        }}
+      >
+        Reenviar rascunho
+      </button>
     </div>
-  ),
+    );
+  },
 }));
 vi.mock('./ContactDetails', () => ({
   ContactDetails: ({ onClose }: { onClose: () => void }) => (
@@ -242,6 +276,7 @@ describe('AtendimentosClient troca de conversa (latência)', () => {
     services.marcarAtendimentoComoLido.mockResolvedValue(undefined);
     services.enviarMensagem.mockClear();
     services.enviarWhatsappTemplate.mockClear();
+    services.iniciarAtendimento.mockReset();
   });
 
   afterEach(() => {
@@ -335,6 +370,55 @@ describe('AtendimentosClient troca de conversa (latência)', () => {
     // Nenhum envio ao WhatsApp/Meta ao apenas selecionar uma conversa.
     expect(services.enviarMensagem).not.toHaveBeenCalled();
     expect(services.enviarWhatsappTemplate).not.toHaveBeenCalled();
+  });
+
+  it('should_keep_failed_initial_message_as_draft_and_retry_without_starting_again', async () => {
+    services.iniciarAtendimento.mockResolvedValue({
+      atendimentoId: 44,
+      pacienteId: 20,
+      modo: 'HUMANO',
+      atendimento: {
+        id: 44,
+        whatsappCapabilities: {
+          provider: 'UAZAP',
+          enforcesCustomerCareWindow: false,
+          supportsMessageTemplates: false,
+        },
+      },
+    });
+    services.enviarMensagem
+      .mockResolvedValueOnce({
+        id: 70,
+        whatsappStatus: 'FALHA',
+        motivoFalha: 'Número indisponível',
+      })
+      .mockResolvedValueOnce({
+        id: 71,
+        whatsappStatus: 'ENVIADA',
+        motivoFalha: null,
+      });
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Novo atendimento' }));
+    await user.type(screen.getByRole('textbox', { name: 'Nome do contato' }), 'Maria Teste');
+    await user.type(screen.getByRole('textbox', { name: 'Telefone' }), '83999999999');
+    await user.type(
+      screen.getByRole('textbox', { name: /Primeira mensagem/ }),
+      'Mensagem inicial preservada',
+    );
+    await user.click(screen.getByRole('button', { name: 'Iniciar atendimento' }));
+
+    await waitFor(() => expect(services.enviarMensagem).toHaveBeenCalledWith(
+      44,
+      'Mensagem inicial preservada',
+    ));
+    expect(screen.getByRole('textbox', { name: 'Rascunho do chat' }))
+      .toHaveValue('Mensagem inicial preservada');
+
+    await user.click(screen.getByRole('button', { name: 'Reenviar rascunho' }));
+    await waitFor(() => expect(services.enviarMensagem).toHaveBeenCalledTimes(2));
+    expect(services.iniciarAtendimento).toHaveBeenCalledTimes(1);
   });
 
   it('should_refresh_the_open_chat_and_show_transfer_notice_when_a_new_notification_arrives', async () => {

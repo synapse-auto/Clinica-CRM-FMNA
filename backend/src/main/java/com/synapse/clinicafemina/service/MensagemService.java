@@ -12,7 +12,11 @@ import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappPhoneNormalizer;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProvider;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderResolver;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappRecipientResolutionException;
+import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappRecipientResolution;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
@@ -81,8 +85,9 @@ public class MensagemService {
         atualizarUltimaMensagem(atendimento, mensagem);
 
         try {
-            WhatsappSendResult resultado = whatsappProviderResolver.resolve().sendText(
-                    atendimento.getPaciente().getTelefoneNormalizado(), request.conteudo()
+            ResolvedRecipient recipient = resolveRecipient(atendimento);
+            WhatsappSendResult resultado = recipient.provider().sendText(
+                    recipient.resolution().recipient(), request.conteudo()
             );
             mensagem.setWhatsappMessageId(resultado.externalMessageId());
             mensagem.setWhatsappStatus("ENVIADA");
@@ -132,8 +137,9 @@ public class MensagemService {
         }
 
         try {
-            WhatsappSendResult resultado = whatsappProviderResolver.resolve().sendText(
-                    atendimento.getPaciente().getTelefoneNormalizado(), conteudo
+            ResolvedRecipient recipient = resolveRecipient(atendimento);
+            WhatsappSendResult resultado = recipient.provider().sendText(
+                    recipient.resolution().recipient(), conteudo
             );
             mensagem.setWhatsappMessageId(resultado.externalMessageId());
             mensagem.setWhatsappStatus("ENVIADA");
@@ -370,6 +376,32 @@ public class MensagemService {
         atendimentoRepository.save(atendimento);
     }
 
+    private ResolvedRecipient resolveRecipient(Atendimento atendimento) {
+        WhatsappProvider provider = whatsappProviderResolver.resolve();
+        String registeredPhone = atendimento.getPaciente().getTelefoneNormalizado();
+        WhatsappRecipientResolution resolution = provider.resolveRecipient(
+                atendimento.getWhatsappChatId(),
+                registeredPhone,
+                WhatsappPhoneNormalizer.safeAliases(registeredPhone)
+        );
+        if (resolution.providerConfirmed()
+                && !resolution.recipient().equals(atendimento.getWhatsappChatId())) {
+            atendimento.setWhatsappChatId(resolution.recipient());
+            atendimentoRepository.save(atendimento);
+        }
+        log.info(
+                "Identidade WhatsApp resolvida. clinicaId={} pacienteId={} atendimentoId={} "
+                        + "origemResolucao={} provider={} finalTelefone={}",
+                atendimento.getClinica().getId(),
+                atendimento.getPaciente().getId(),
+                atendimento.getId(),
+                resolution.source(),
+                provider.getType(),
+                maskPhone(resolution.recipient())
+        );
+        return new ResolvedRecipient(provider, resolution);
+    }
+
     private void registrarFalha(Mensagem mensagem, Exception exception, boolean midia) {
         WhatsappTemplateRequiredException templateRequired = findTemplateRequired(exception);
         if (templateRequired != null) {
@@ -397,10 +429,27 @@ public class MensagemService {
 
     private String motivoFalha(Throwable exception) {
         WhatsappTemplateRequiredException templateRequired = findTemplateRequired(exception);
+        WhatsappRecipientResolutionException recipientFailure = findCause(
+                exception, WhatsappRecipientResolutionException.class
+        );
+        if (recipientFailure != null) {
+            return recipientFailure.getMessage();
+        }
         if (templateRequired != null) {
             return templateRequired.getMessage();
         }
         return "WhatsApp/Meta indisponível ou não configurado";
+    }
+
+    private <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return type.cast(current);
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     private WhatsappTemplateRequiredException findTemplateRequired(Throwable throwable) {
@@ -423,6 +472,15 @@ public class MensagemService {
             return "****";
         }
         return "****" + trimmed.substring(trimmed.length() - 4);
+    }
+
+    private String maskPhone(String phone) {
+        if (phone == null || phone.isBlank()) {
+            return "vazio";
+        }
+        return phone.length() <= 4
+                ? "****"
+                : "******" + phone.substring(phone.length() - 4);
     }
 
     private void validarArquivo(MultipartFile arquivo) {
@@ -488,5 +546,11 @@ public class MensagemService {
                 mensagem.getTemplateNome(),
                 mensagem.getTemplateIdioma()
         );
+    }
+
+    private record ResolvedRecipient(
+            WhatsappProvider provider,
+            WhatsappRecipientResolution resolution
+    ) {
     }
 }

@@ -34,6 +34,8 @@ type Props = {
   quickMessages: MensagemRapida[];
   busy: boolean;
   error: string | null;
+  initialDraft?: string;
+  onDraftChange?: (content: string) => void;
   onSend: (content: string) => Promise<void>;
   onAttach: (file: File) => Promise<void>;
   onSendTemplate?: (request: EnviarTemplateWhatsappRequest) => Promise<void>;
@@ -45,7 +47,19 @@ const NEAR_BOTTOM_THRESHOLD = 96;
 // mensagens, aviso de janela, seletor rápido e composer para manter alinhamento vertical.
 const CHAT_CONTENT_WIDTH = 'mx-auto w-full max-w-[1600px]';
 
-export function ChatWindow({ detail, loading = false, messages, quickMessages, busy, error, onSend, onAttach, onSendTemplate }: Props) {
+export function ChatWindow({
+  detail,
+  loading = false,
+  messages,
+  quickMessages,
+  busy,
+  error,
+  initialDraft = '',
+  onDraftChange,
+  onSend,
+  onAttach,
+  onSendTemplate,
+}: Props) {
   const [content, setContent] = useState('');
   const [quickOpen, setQuickOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -163,13 +177,17 @@ export function ChatWindow({ detail, loading = false, messages, quickMessages, b
   }, [scrollToLastMessage]);
 
   useEffect(() => {
-    setContent('');
+    setContent(initialDraft);
     setAddMenuOpen(false);
     setTemplatesOpen(false);
     closeQuickMessages();
   // O ID é a fronteira entre conversas; não carregamos estado sensível para outro paciente.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail?.id]);
+
+  useEffect(() => {
+    setContent(initialDraft);
+  }, [initialDraft]);
 
   useEffect(() => {
     const input = composer.current;
@@ -206,6 +224,7 @@ export function ChatWindow({ detail, loading = false, messages, quickMessages, b
 
   function selectQuickMessage(message: MensagemRapida) {
     setContent(message.conteudo);
+    onDraftChange?.(message.conteudo);
     closeQuickMessages({ focus: true });
   }
 
@@ -240,6 +259,7 @@ export function ChatWindow({ detail, loading = false, messages, quickMessages, b
     try {
       await onSend(value);
       setContent('');
+      onDraftChange?.('');
     } catch {
       // O texto permanece para correção ou envio posterior por decisão do usuário.
     }
@@ -491,7 +511,10 @@ export function ChatWindow({ detail, loading = false, messages, quickMessages, b
                 ref={composer}
                 value={content}
                 disabled={!detail || busy}
-                onChange={(event) => setContent(event.target.value)}
+                onChange={(event) => {
+                  setContent(event.target.value);
+                  onDraftChange?.(event.target.value);
+                }}
                 onKeyDown={handleComposerKeyDown}
                 placeholder="Digite uma mensagem..."
                 rows={1}

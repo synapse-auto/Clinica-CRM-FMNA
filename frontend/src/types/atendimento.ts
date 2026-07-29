@@ -14,6 +14,7 @@ export type AtendenteOption = {
 export type IniciarAtendimentoRequest = {
   pacienteId?: number;
   telefone?: string;
+  nome?: string;
 };
 
 export type IniciarAtendimentoResponse = {

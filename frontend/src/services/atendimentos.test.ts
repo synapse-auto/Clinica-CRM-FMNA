@@ -70,6 +70,30 @@ describe('atendimentos service', () => {
     expect(body).not.toHaveProperty('atendenteId');
   });
 
+  it('should_start_manual_attendance_by_phone_with_name_without_context_ids', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      atendimentoId: 91,
+      pacienteId: 12,
+      modo: 'HUMANO',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await iniciarAtendimento({
+      nome: 'Maria Ávila',
+      telefone: '(83) 99999-9999',
+    });
+
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+    expect(body).toEqual({
+      nome: 'Maria Ávila',
+      telefone: '(83) 99999-9999',
+    });
+    expect(body).not.toHaveProperty('clinicaId');
+    expect(body).not.toHaveProperty('usuarioId');
+    expect(body).not.toHaveProperty('atendenteId');
+    expect(body).not.toHaveProperty('provider');
+  });
+
   it('should_send_text_and_surface_backend_failure', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(
       { message: 'WhatsApp/Meta não configurado' },

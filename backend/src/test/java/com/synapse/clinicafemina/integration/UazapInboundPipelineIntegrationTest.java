@@ -105,7 +105,9 @@ class UazapInboundPipelineIntegrationTest {
                         new com.synapse.clinicafemina.integration.whatsapp.uazap.UazapWhatsappMediaDownloader(
                                 whatsappProperties)),
                 eventPublisher,
-                whatsappProperties);
+                whatsappProperties,
+                new com.synapse.clinicafemina.service.WhatsappPhoneIdentityService(
+                        pacienteRepository, atendimentoRepository, mensagemRepository));
         listener = new WhatsappInboundListener(mapper, new ObjectMapper(), broadcastService);
         lenient().when(horarioIaService.avaliar(any(Clinica.class)))
                 .thenReturn(new HorarioIaService.HorarioIaStatus(true, HorarioIaService.DENTRO_HORARIO));

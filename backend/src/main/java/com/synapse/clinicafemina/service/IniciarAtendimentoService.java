@@ -9,7 +9,6 @@ import com.synapse.clinicafemina.dto.atendimento.IniciarAtendimentoRequest;
 import com.synapse.clinicafemina.dto.atendimento.IniciarAtendimentoResponse;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
-import com.synapse.clinicafemina.integration.whatsapp.WhatsappPhoneNormalizer;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
@@ -32,14 +31,14 @@ import java.util.Set;
 public class IniciarAtendimentoService {
 
     private static final Set<String> PERFIS_AUTORIZADOS = Set.of("GESTOR", "RECEPCIONISTA");
-    private static final String NOME_PROVISORIO = "Contato WhatsApp";
-
     private final ClinicaRepository clinicaRepository;
     private final PacienteRepository pacienteRepository;
     private final AtendimentoRepository atendimentoRepository;
     private final TransferenciaAtendimentoRepository transferenciaRepository;
     private final AtendimentoService atendimentoService;
     private final RealtimeBroadcastService broadcastService;
+    private final WhatsappPhoneIdentityService phoneIdentityService;
+    private final WhatsappContactNameService contactNameService;
 
     @Transactional
     public IniciarAtendimentoResponse iniciar(
@@ -54,6 +53,15 @@ public class IniciarAtendimentoService {
         ResultadoAtendimento resultado = resolverAtendimento(
                 clinica, pacienteResolvido.paciente(), usuario
         );
+        if (!pacienteResolvido.criado()) {
+            String requestedPhone = request.telefone() != null
+                    ? request.telefone()
+                    : pacienteResolvido.paciente().getTelefoneNormalizado();
+            phoneIdentityService.applyHistoricalInboundChatId(
+                    resultado.atendimento(),
+                    phoneIdentityService.identify(requestedPhone)
+            );
+        }
         atualizarPaciente(pacienteResolvido.paciente(), resultado.atendimento(), usuario);
 
         log.info(
@@ -86,33 +94,66 @@ public class IniciarAtendimentoService {
                     )
                     .filter(item -> item.getDeletadoEm() == null)
                     .orElseThrow(() -> new NotFoundException("Paciente nao encontrado"));
-            WhatsappPhoneNormalizer.normalize(paciente.getTelefoneNormalizado());
+            phoneIdentityService.identify(paciente.getTelefoneNormalizado());
             return new PacienteResolvido(paciente, false);
         }
-        String telefone = WhatsappPhoneNormalizer.normalize(request.telefone());
-        Optional<Paciente> existente = pacienteRepository.findByClinicaIdAndTelefoneNormalizado(
-                clinica.getId(), telefone
-        );
-        if (existente.isPresent()) {
-            if (existente.get().getDeletadoEm() != null) {
-                throw new IllegalStateException(
-                        "Nao foi possivel iniciar o atendimento para este contato."
-                );
-            }
-            return new PacienteResolvido(existente.get(), false);
+        WhatsappPhoneIdentityService.PhoneIdentity identity =
+                phoneIdentityService.identify(request.telefone());
+        String nome = contactNameService.sanitizeRequired(request.nome(), identity.normalized());
+        var existing = phoneIdentityService.resolvePatient(clinica.getId(), identity);
+        if (existing.isPresent()) {
+            Paciente patient = existing.get().patient();
+            updatePlaceholderName(patient, nome);
+            log.info(
+                    "Paciente WhatsApp reutilizado. clinicaId={} pacienteId={} origemResolucao={} "
+                            + "aliases={}",
+                    clinica.getId(), patient.getId(), existing.get().origin(),
+                    maskedAliases(identity.aliases())
+            );
+            return new PacienteResolvido(patient, false);
         }
+        pacienteRepository.findByClinicaIdAndTelefoneNormalizado(
+                clinica.getId(), identity.normalized()
+        ).filter(patient -> patient.getDeletadoEm() != null).ifPresent(patient -> {
+            throw new IllegalStateException(
+                    "Nao foi possivel iniciar o atendimento para este contato."
+            );
+        });
         Paciente paciente = new Paciente();
         paciente.setClinica(clinica);
-        paciente.setNome(NOME_PROVISORIO);
-        paciente.setNomeBusca(NOME_PROVISORIO.toUpperCase());
-        paciente.setTelefone("+" + telefone);
-        paciente.setTelefoneNormalizado(telefone);
+        paciente.setNome(nome);
+        paciente.setNomeBusca(contactNameService.toSearchName(nome));
+        paciente.setTelefone("+" + identity.normalized());
+        paciente.setTelefoneNormalizado(identity.normalized());
         paciente.setExternalSource(ExternalProviderType.WHATSAPP);
-        paciente.setExternalId(telefone);
+        paciente.setExternalId(identity.normalized());
         paciente.setStatus("EM_ATENDIMENTO");
         paciente.setCriadoPor(usuario);
         paciente.setAtualizadoPor(usuario);
         return new PacienteResolvido(pacienteRepository.save(paciente), true);
+    }
+
+    private void updatePlaceholderName(Paciente patient, String suppliedName) {
+        if (patient.getExternalSource() == ExternalProviderType.MEDWARE
+                || patient.getExternalSource() == ExternalProviderType.DARWIN
+                || !contactNameService.isPlaceholder(
+                        patient.getNome(), patient.getTelefoneNormalizado()
+                )) {
+            return;
+        }
+        patient.setNome(suppliedName);
+        patient.setNomeBusca(contactNameService.toSearchName(suppliedName));
+        pacienteRepository.save(patient);
+    }
+
+    private java.util.List<String> maskedAliases(Set<String> aliases) {
+        return aliases.stream().map(this::maskPhone).toList();
+    }
+
+    private String maskPhone(String phone) {
+        return phone == null || phone.length() < 4
+                ? "****"
+                : "******" + phone.substring(phone.length() - 4);
     }
 
     private ResultadoAtendimento resolverAtendimento(

@@ -93,7 +93,9 @@ class WhatsappInboundUazapN8nDeliveryTest {
                                 whatsappOutboundClient, whatsappProperties),
                         new com.synapse.clinicafemina.integration.whatsapp.uazap.UazapWhatsappMediaDownloader(
                                 whatsappProperties)),
-                eventPublisher, whatsappProperties);
+                eventPublisher, whatsappProperties,
+                new com.synapse.clinicafemina.service.WhatsappPhoneIdentityService(
+                        pacienteRepository, atendimentoRepository, mensagemRepository));
 
         clinica = new Clinica();
         clinica.setId(5L);

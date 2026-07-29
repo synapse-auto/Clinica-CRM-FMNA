@@ -73,12 +73,13 @@ class MensagemServiceUazapOutboundWiringTest {
         Paciente paciente = new Paciente();
         paciente.setId(20L);
         paciente.setClinica(clinica);
-        paciente.setTelefoneNormalizado("5543988887777");
+        paciente.setTelefoneNormalizado("5583991114004");
 
         atendimento = new Atendimento();
         atendimento.setId(30L);
         atendimento.setClinica(clinica);
         atendimento.setPaciente(paciente);
+        atendimento.setWhatsappChatId("558391114004");
         atendimento.setStatus("ATIVO");
         atendimento.setTratadoPorIa(true);
 
@@ -120,7 +121,7 @@ class MensagemServiceUazapOutboundWiringTest {
         server.expect(requestTo("https://uazap.test/user/v2/inst-fmna/messages"))
                 .andExpect(method(org.springframework.http.HttpMethod.POST))
                 .andExpect(header("Authorization", "Bearer secret-token"))
-                .andExpect(jsonPath("$.to").value("5543988887777"))
+                .andExpect(jsonPath("$.to").value("558391114004"))
                 .andExpect(jsonPath("$.type").value("text"))
                 .andExpect(jsonPath("$.text.body").value("Ola FMNA via UAZAP"))
                 .andRespond(withSuccess(
@@ -146,16 +147,47 @@ class MensagemServiceUazapOutboundWiringTest {
         WhatsappProperties properties = new WhatsappProperties(); // provider default = META
         WhatsappProviderResolver resolver = new WhatsappProviderResolver(
                 List.of(new MetaWhatsappProvider(whatsappOutboundClient)), properties);
-        when(whatsappOutboundClient.enviarTexto("5543988887777", "Ola FMNA via Meta"))
+        when(whatsappOutboundClient.enviarTexto("5583991114004", "Ola FMNA via Meta"))
                 .thenReturn("wamid-meta-out-1");
 
         service(resolver).enviar(30L, 9L, new EnviarMensagemRequest("TEXTO", "Ola FMNA via Meta"), 99L);
 
         verify(whatsappOutboundClient).validarConfiguracao();
-        verify(whatsappOutboundClient).enviarTexto("5543988887777", "Ola FMNA via Meta");
+        verify(whatsappOutboundClient).enviarTexto("5583991114004", "Ola FMNA via Meta");
 
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
         verify(mensagemRepository, org.mockito.Mockito.atLeastOnce()).save(mensagemCaptor.capture());
         assertEquals("wamid-meta-out-1", mensagemCaptor.getAllValues().getLast().getWhatsappMessageId());
+    }
+
+    @Test
+    void uazapProvider_should_send_new_mobile_contact_to_its_registered_phone_once() {
+        atendimento.setWhatsappChatId(null);
+        atendimento.getPaciente().setTelefoneNormalizado("5583991114004");
+        WhatsappProperties properties = new WhatsappProperties();
+        properties.setProvider("UAZAP");
+        UazapClient uazapClient = org.mockito.Mockito.mock(UazapClient.class);
+        WhatsappProviderResolver resolver = new WhatsappProviderResolver(
+                List.of(new UazapWhatsappProvider(uazapClient)),
+                properties
+        );
+
+        when(uazapClient.sendText("5583991114004", "Mensagem inicial"))
+                .thenReturn(new com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult(
+                        "UZ-OUT-NEW", com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType.UAZAP
+                ));
+        service(resolver).enviar(
+                30L,
+                9L,
+                new EnviarMensagemRequest("TEXTO", "Mensagem inicial"),
+                99L
+        );
+
+        verify(uazapClient).sendText("5583991114004", "Mensagem inicial");
+        verify(uazapClient, org.mockito.Mockito.never()).sendText("558391114004", "Mensagem inicial");
+        ArgumentCaptor<Mensagem> captor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
+        Mensagem persisted = captor.getAllValues().getLast();
+        assertEquals("ENVIADA", persisted.getWhatsappStatus());
     }
 }

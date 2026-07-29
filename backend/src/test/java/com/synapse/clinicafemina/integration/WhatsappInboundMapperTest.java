@@ -40,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
@@ -110,7 +111,9 @@ class WhatsappInboundMapperTest {
                 List.of(new com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappMediaDownloader(
                         whatsappOutboundClient, new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties())),
                 eventPublisher,
-                new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties()
+                new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties(),
+                new com.synapse.clinicafemina.service.WhatsappPhoneIdentityService(
+                        pacienteRepository, atendimentoRepository, mensagemRepository)
         );
 
         clinica = new Clinica();
@@ -339,6 +342,64 @@ class WhatsappInboundMapperTest {
         verify(mensagemRepository).save(any(Mensagem.class));
         verificarNenhumEventoN8nPublicado();
         verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
+    }
+
+    @Test
+    void should_route_legacy_inbound_alias_to_existing_manual_human_attendance() {
+        Paciente patient = new Paciente();
+        patient.setId(20L);
+        patient.setClinica(clinica);
+        patient.setNome("Marcondss");
+        patient.setNomeBusca("MARCONDSS");
+        patient.setTelefoneNormalizado("5583991114004");
+
+        Atendimento attendance = new Atendimento();
+        attendance.setId(30L);
+        attendance.setClinica(clinica);
+        attendance.setPaciente(patient);
+        attendance.setStatus("ATIVO");
+        attendance.setNaoLidas(0);
+        attendance.setTratadoPorIa(false);
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra"))
+                .thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-alias"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(2L), any()))
+                .thenReturn(List.of(patient));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(attendance));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.save(any())).thenAnswer(invocation -> {
+            Mensagem message = invocation.getArgument(0);
+            message.setId(40L);
+            return message;
+        });
+
+        mapper.processarMensagemTexto(Map.of(
+                "metadata", Map.of("phone_number_id", "phone-ultra"),
+                "contacts", List.of(Map.of(
+                        "wa_id", "558391114004",
+                        "profile", Map.of("name", "Marcondss")
+                )),
+                "messages", List.of(Map.of(
+                        "id", "wamid-alias",
+                        "from", "558391114004",
+                        "timestamp", "1781455200",
+                        "type", "text",
+                        "text", Map.of("body", "Resposta")
+                ))
+        ));
+
+        assertEquals("558391114004", attendance.getWhatsappChatId());
+        assertFalse(attendance.getTratadoPorIa());
+        verify(atendimentoRepository).findAtivo(2L, 20L);
+        verify(mensagemRepository).save(argThat(message ->
+                message.getAtendimento() == attendance
+                        && "ENTRADA".equals(message.getDirecao())
+        ));
+        verify(pacienteRepository, never()).save(argThat(candidate -> candidate.getId() == null));
+        verificarNenhumEventoN8nPublicado();
     }
 
     @Test
@@ -922,15 +983,26 @@ class WhatsappInboundMapperTest {
         when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-1")).thenReturn(Optional.of(mensagem));
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
+        Optional<Mensagem> delivered = mapper.processarStatusUpdate(
+                validValuePayload("phone-ultra"),
+                Map.of(
+                        "id", "wamid-1",
+                        "status", "delivered",
+                        "timestamp", "1781455100"
+                )
+        );
         Optional<Mensagem> result = mapper.processarStatusUpdate(validValuePayload("phone-ultra"), Map.of(
                 "id", "wamid-1",
                 "status", "read",
                 "timestamp", "1781455200"
         ));
 
+        assertTrue(delivered.isPresent());
+        assertTrue(delivered.get().getEntregueEm() != null);
         assertTrue(result.isPresent());
         assertEquals("READ", result.get().getWhatsappStatus());
-        verify(mensagemRepository).save(mensagem);
+        assertTrue(result.get().getLidaEm() != null);
+        verify(mensagemRepository, times(2)).save(mensagem);
         verificarNenhumEventoN8nPublicado();
     }
 

@@ -93,7 +93,9 @@ class WhatsappInboundMapperUazapPictureEventTest {
                 environment, whatsappOutboundClient,
                 List.of(new com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappMediaDownloader(
                         whatsappOutboundClient, whatsappProperties)),
-                eventPublisher, whatsappProperties);
+                eventPublisher, whatsappProperties,
+                new com.synapse.clinicafemina.service.WhatsappPhoneIdentityService(
+                        pacienteRepository, atendimentoRepository, mensagemRepository));
     }
 
     private Map<String, Object> payload() {

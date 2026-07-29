@@ -37,6 +37,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -112,7 +113,9 @@ class AtendimentoControllerTest {
                         .with(user(gestor))
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"telefone\":\"(83) 99999-9999\"}"))
+                        .content("""
+                                {"nome":"Maria Teste","telefone":"(83) 99999-9999"}
+                                """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.atendimentoId").value(30))
                 .andExpect(jsonPath("$.modo").value("HUMANO"));
@@ -156,7 +159,9 @@ class AtendimentoControllerTest {
         mockMvc.perform(post("/api/atendimentos/iniciar")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"telefone\":\"5583999999999\"}"))
+                        .content("""
+                                {"nome":"Maria Teste","telefone":"5583999999999"}
+                                """))
                 .andExpect(status().isForbidden());
     }
 
@@ -196,9 +201,21 @@ class AtendimentoControllerTest {
                         .with(user(gestor))
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"telefone\":\"123\"}"))
+                        .content("{\"nome\":\"Maria Teste\",\"telefone\":\"123\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Telefone invalido. Informe DDD e numero."));
+    }
+
+    @Test
+    @WithMockUser(roles = "GESTOR")
+    void should_reject_phone_manual_attendance_without_name() throws Exception {
+        mockMvc.perform(post("/api/atendimentos/iniciar")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"telefone\":\"5583999999999\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(iniciarAtendimentoService);
     }
 
     @Test

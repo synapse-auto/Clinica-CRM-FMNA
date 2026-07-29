@@ -12,6 +12,7 @@ import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.ClinicaRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
+import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.TransferenciaAtendimentoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -35,6 +37,9 @@ class IniciarAtendimentoServiceTest {
     @Mock TransferenciaAtendimentoRepository transferenciaRepository;
     @Mock AtendimentoService atendimentoService;
     @Mock RealtimeBroadcastService broadcastService;
+    @Mock MensagemRepository mensagemRepository;
+    private WhatsappPhoneIdentityService phoneIdentityService;
+    private final WhatsappContactNameService contactNameService = new WhatsappContactNameService();
 
     private IniciarAtendimentoService service;
     private Clinica clinica;
@@ -42,9 +47,13 @@ class IniciarAtendimentoServiceTest {
 
     @BeforeEach
     void setUp() {
+        phoneIdentityService = new WhatsappPhoneIdentityService(
+                pacienteRepository, atendimentoRepository, mensagemRepository
+        );
         service = new IniciarAtendimentoService(
                 clinicaRepository, pacienteRepository, atendimentoRepository,
-                transferenciaRepository, atendimentoService, broadcastService
+                transferenciaRepository, atendimentoService, broadcastService,
+                phoneIdentityService, contactNameService
         );
         clinica = new Clinica();
         clinica.setId(1L);
@@ -70,12 +79,14 @@ class IniciarAtendimentoServiceTest {
 
     @Test
     void should_create_provisional_patient_and_human_attendance_when_phone_is_new() {
-        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(1L, "5583999999999"))
-                .thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any()))
+                .thenReturn(List.of());
         when(atendimentoRepository.findAtivo(1L, 20L)).thenReturn(Optional.empty());
 
         var result = service.iniciar(
-                clinica, gestor, new IniciarAtendimentoRequest(null, "(83) 99999-9999")
+                clinica, gestor, new IniciarAtendimentoRequest(
+                        null, "(83) 99999-9999", "Contato Teste"
+                )
         );
 
         assertTrue(result.pacienteCriado());
@@ -84,6 +95,7 @@ class IniciarAtendimentoServiceTest {
         verify(pacienteRepository, atLeastOnce()).save(argThat(paciente ->
                 paciente.getExternalSource() == ExternalProviderType.WHATSAPP
                         && "5583999999999".equals(paciente.getTelefoneNormalizado())
+                        && "Contato Teste".equals(paciente.getNome())
                         && paciente.getAtendentePrincipal() == gestor
         ));
         verify(atendimentoRepository).save(argThat(atendimento ->
@@ -99,12 +111,14 @@ class IniciarAtendimentoServiceTest {
         Paciente paciente = paciente(20L, ExternalProviderType.MEDWARE);
         paciente.setAtendentePrincipal(gestor);
         Atendimento atendimento = atendimento(paciente, gestor, false);
-        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(1L, "5583999999999"))
-                .thenReturn(Optional.of(paciente));
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any()))
+                .thenReturn(List.of(paciente));
         when(atendimentoRepository.findAtivo(1L, 20L)).thenReturn(Optional.of(atendimento));
 
         var result = service.iniciar(
-                clinica, gestor, new IniciarAtendimentoRequest(null, "5583999999999")
+                clinica, gestor, new IniciarAtendimentoRequest(
+                        null, "5583999999999", "Contato Teste"
+                )
         );
 
         assertFalse(result.pacienteCriado());
@@ -123,7 +137,7 @@ class IniciarAtendimentoServiceTest {
         when(atendimentoRepository.findAtivo(1L, 20L)).thenReturn(Optional.of(atendimento));
 
         var result = service.iniciar(
-                clinica, gestor, new IniciarAtendimentoRequest(20L, null)
+                clinica, gestor, new IniciarAtendimentoRequest(20L, null, null)
         );
 
         assertFalse(result.atendimentoCriado());
@@ -150,7 +164,7 @@ class IniciarAtendimentoServiceTest {
         when(atendimentoRepository.findAtivo(1L, 20L)).thenReturn(Optional.of(atendimento));
 
         var result = service.iniciar(
-                clinica, gestor, new IniciarAtendimentoRequest(20L, null)
+                clinica, gestor, new IniciarAtendimentoRequest(20L, null, null)
         );
 
         assertTrue(result.destinatarioAlterado());
@@ -161,25 +175,25 @@ class IniciarAtendimentoServiceTest {
                         && transferencia.getParaUsuario() == gestor
         ));
 
-        service.iniciar(clinica, gestor, new IniciarAtendimentoRequest(20L, null));
+        service.iniciar(clinica, gestor, new IniciarAtendimentoRequest(20L, null, null));
         verify(transferenciaRepository, times(1)).save(any());
     }
 
     @Test
     void should_keep_same_phone_isolated_by_clinic() {
-        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(1L, "5583999999999"))
-                .thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any()))
+                .thenReturn(List.of());
         when(atendimentoRepository.findAtivo(1L, 20L)).thenReturn(Optional.empty());
 
         service.iniciar(
-                clinica, gestor, new IniciarAtendimentoRequest(null, "5583999999999")
+                clinica, gestor, new IniciarAtendimentoRequest(
+                        null, "5583999999999", "Contato Teste"
+                )
         );
 
-        verify(pacienteRepository).findByClinicaIdAndTelefoneNormalizado(
-                1L, "5583999999999"
-        );
-        verify(pacienteRepository, never()).findByClinicaIdAndTelefoneNormalizado(
-                eq(2L), anyString()
+        verify(pacienteRepository).findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any());
+        verify(pacienteRepository, never()).findByClinicaIdAndTelefoneNormalizadoIn(
+                eq(2L), any()
         );
     }
 
@@ -188,7 +202,7 @@ class IniciarAtendimentoServiceTest {
         gestor.setAtivo(false);
 
         assertThrows(NotFoundException.class, () -> service.iniciar(
-                clinica, gestor, new IniciarAtendimentoRequest(20L, null)
+                clinica, gestor, new IniciarAtendimentoRequest(20L, null, null)
         ));
         verifyNoInteractions(atendimentoRepository);
     }
@@ -198,7 +212,7 @@ class IniciarAtendimentoServiceTest {
         when(pacienteRepository.findByIdAndClinicaId(99L, 1L)).thenReturn(Optional.empty());
 
         assertThrows(NotFoundException.class, () -> service.iniciar(
-                clinica, gestor, new IniciarAtendimentoRequest(99L, null)
+                clinica, gestor, new IniciarAtendimentoRequest(99L, null, null)
         ));
         verifyNoInteractions(atendimentoRepository);
     }
@@ -207,11 +221,16 @@ class IniciarAtendimentoServiceTest {
     void should_reject_soft_deleted_patient_without_creating_duplicate() {
         Paciente paciente = paciente(20L, ExternalProviderType.WHATSAPP);
         paciente.setDeletadoEm(OffsetDateTime.now());
-        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(1L, "5583999999999"))
-                .thenReturn(Optional.of(paciente));
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any()))
+                .thenReturn(List.of(paciente));
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(
+                1L, "5583999999999"
+        )).thenReturn(Optional.of(paciente));
 
         assertThrows(IllegalStateException.class, () -> service.iniciar(
-                clinica, gestor, new IniciarAtendimentoRequest(null, "5583999999999")
+                clinica, gestor, new IniciarAtendimentoRequest(
+                        null, "5583999999999", "Contato Teste"
+                )
         ));
         verifyNoInteractions(atendimentoRepository);
     }
@@ -219,7 +238,7 @@ class IniciarAtendimentoServiceTest {
     @Test
     void should_reject_invalid_phone_before_persistence() {
         assertThrows(BadRequestException.class, () -> service.iniciar(
-                clinica, gestor, new IniciarAtendimentoRequest(null, "123")
+                clinica, gestor, new IniciarAtendimentoRequest(null, "123", "Contato Teste")
         ));
         verifyNoInteractions(atendimentoRepository);
     }
@@ -231,9 +250,172 @@ class IniciarAtendimentoServiceTest {
         gestor.setClinica(outra);
 
         assertThrows(NotFoundException.class, () -> service.iniciar(
-                clinica, gestor, new IniciarAtendimentoRequest(null, "5583999999999")
+                clinica, gestor, new IniciarAtendimentoRequest(
+                        null, "5583999999999", "Contato Teste"
+                )
         ));
         verify(clinicaRepository, never()).findByIdForUpdate(any());
+    }
+
+    @Test
+    void should_reuse_legacy_mobile_alias_and_existing_active_attendance() {
+        Paciente patient = paciente(20L, ExternalProviderType.WHATSAPP);
+        patient.setTelefone("+558391114004");
+        patient.setTelefoneNormalizado("558391114004");
+        Atendimento active = atendimento(patient, gestor, false);
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any()))
+                .thenReturn(List.of(patient));
+        when(atendimentoRepository.findAtivo(1L, 20L)).thenReturn(Optional.of(active));
+        when(mensagemRepository.countByAtendimentoAndDirecao(1L, 30L, "ENTRADA"))
+                .thenReturn(1L);
+
+        var result = service.iniciar(
+                clinica,
+                gestor,
+                new IniciarAtendimentoRequest(
+                        null, "5583991114004", "Marcondss Teste"
+                )
+        );
+
+        assertEquals(20L, result.pacienteId());
+        assertEquals(30L, result.atendimentoId());
+        assertFalse(result.pacienteCriado());
+        assertTrue(result.atendimentoReutilizado());
+        assertEquals("558391114004", active.getWhatsappChatId());
+        verify(pacienteRepository, never()).save(argThat(item ->
+                item.getId() == null || item.getId() != 20L));
+    }
+
+    @Test
+    void should_reuse_modern_mobile_alias_when_legacy_phone_is_supplied() {
+        Paciente patient = paciente(20L, ExternalProviderType.WHATSAPP);
+        patient.setTelefone("+5583991114004");
+        patient.setTelefoneNormalizado("5583991114004");
+        Atendimento active = atendimento(patient, gestor, false);
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any()))
+                .thenReturn(List.of(patient));
+        when(atendimentoRepository.findAtivo(1L, 20L)).thenReturn(Optional.of(active));
+
+        var result = service.iniciar(
+                clinica,
+                gestor,
+                new IniciarAtendimentoRequest(null, "558391114004", "Marcondss Teste")
+        );
+
+        assertEquals(20L, result.pacienteId());
+        assertEquals(30L, result.atendimentoId());
+        assertFalse(result.pacienteCriado());
+    }
+
+    @Test
+    void should_update_whatsapp_placeholder_but_preserve_external_patient_name() {
+        Paciente whatsapp = paciente(20L, ExternalProviderType.WHATSAPP);
+        whatsapp.setNome(WhatsappContactNameService.PLACEHOLDER);
+        whatsapp.setNomeBusca("CONTATO WHATSAPP");
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any()))
+                .thenReturn(List.of(whatsapp));
+        when(atendimentoRepository.findAtivo(1L, 20L)).thenReturn(Optional.empty());
+
+        service.iniciar(
+                clinica,
+                gestor,
+                new IniciarAtendimentoRequest(null, "5583999999999", "Maria Ávila")
+        );
+
+        assertEquals("Maria Ávila", whatsapp.getNome());
+        assertEquals("MARIA ÁVILA", whatsapp.getNomeBusca());
+
+        Paciente medware = paciente(20L, ExternalProviderType.MEDWARE);
+        medware.setNome(WhatsappContactNameService.PLACEHOLDER);
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any()))
+                .thenReturn(List.of(medware));
+        when(atendimentoRepository.findAtivo(1L, 20L)).thenReturn(Optional.of(
+                atendimento(medware, gestor, false)
+        ));
+
+        service.iniciar(
+                clinica,
+                gestor,
+                new IniciarAtendimentoRequest(null, "5583999999999", "Nome Manual")
+        );
+
+        assertEquals(WhatsappContactNameService.PLACEHOLDER, medware.getNome());
+
+        Paciente darwin = paciente(20L, ExternalProviderType.DARWIN);
+        darwin.setNome(WhatsappContactNameService.PLACEHOLDER);
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any()))
+                .thenReturn(List.of(darwin));
+        when(atendimentoRepository.findAtivo(1L, 20L)).thenReturn(Optional.of(
+                atendimento(darwin, gestor, false)
+        ));
+
+        service.iniciar(
+                clinica,
+                gestor,
+                new IniciarAtendimentoRequest(null, "5583999999999", "Nome Manual")
+        );
+
+        assertEquals(WhatsappContactNameService.PLACEHOLDER, darwin.getNome());
+    }
+
+    @Test
+    void should_reject_real_identity_conflict_without_creating_third_patient() {
+        Paciente legacy = paciente(20L, ExternalProviderType.WHATSAPP);
+        legacy.setTelefoneNormalizado("558391114004");
+        legacy.setNome("Paciente Legado");
+        Paciente modern = paciente(21L, ExternalProviderType.WHATSAPP);
+        modern.setTelefoneNormalizado("5583991114004");
+        modern.setNome("Paciente Moderno");
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any()))
+                .thenReturn(List.of(legacy, modern));
+        when(atendimentoRepository.findHistoricoPaciente(eq(1L), anyLong()))
+                .thenReturn(List.of());
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> service.iniciar(
+                        clinica,
+                        gestor,
+                        new IniciarAtendimentoRequest(
+                                null, "5583991114004", "Outro Contato"
+                        )
+                )
+        );
+
+        assertEquals(WhatsappPhoneIdentityService.CONFLICT_MESSAGE, error.getMessage());
+        verify(pacienteRepository, never()).save(argThat(item -> item.getId() == null));
+        verify(atendimentoRepository, never()).save(any());
+    }
+
+    @Test
+    void should_prefer_established_patient_over_exact_provisional_duplicate() {
+        Paciente established = paciente(20L, ExternalProviderType.WHATSAPP);
+        established.setTelefoneNormalizado("558391114004");
+        established.setNome("Marcondss");
+        Paciente provisional = paciente(21L, ExternalProviderType.WHATSAPP);
+        provisional.setTelefoneNormalizado("5583991114004");
+        provisional.setNome(WhatsappContactNameService.PLACEHOLDER);
+        provisional.setNomeBusca("CONTATO WHATSAPP");
+        Atendimento active = atendimento(established, gestor, false);
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(eq(1L), any()))
+                .thenReturn(List.of(established, provisional));
+        when(atendimentoRepository.findHistoricoPaciente(eq(1L), anyLong()))
+                .thenReturn(List.of());
+        when(atendimentoRepository.findAtivo(1L, 20L)).thenReturn(Optional.of(active));
+
+        var result = service.iniciar(
+                clinica,
+                gestor,
+                new IniciarAtendimentoRequest(
+                        null, "5583991114004", "Marcondss Teste"
+                )
+        );
+
+        assertEquals(20L, result.pacienteId());
+        assertEquals(30L, result.atendimentoId());
+        assertTrue(result.atendimentoReutilizado());
+        assertEquals(WhatsappContactNameService.PLACEHOLDER, provisional.getNome());
+        verify(pacienteRepository, never()).delete(any());
     }
 
     private Paciente paciente(Long id, ExternalProviderType source) {

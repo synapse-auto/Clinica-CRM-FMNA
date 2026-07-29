@@ -108,6 +108,17 @@ public interface AtendimentoRepository extends JpaRepository<Atendimento, Long> 
     Optional<Atendimento> findAtivo(@Param("clinicaId") Long clinicaId,
                                     @Param("pacienteId") Long pacienteId);
 
+    @Query("""
+            SELECT a FROM Atendimento a
+            WHERE a.clinica.id = :clinicaId
+              AND a.paciente.id = :pacienteId
+            ORDER BY a.dataInicio DESC, a.id DESC
+            """)
+    List<Atendimento> findHistoricoPaciente(
+            @Param("clinicaId") Long clinicaId,
+            @Param("pacienteId") Long pacienteId
+    );
+
     /** Último atendimento (qualquer status) de um paciente. */
     @Query("""
             SELECT a FROM Atendimento a

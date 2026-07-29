@@ -94,6 +94,7 @@ export function AtendimentosClient({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [composerDrafts, setComposerDrafts] = useState<Record<number, string>>({});
   const knownNotifications = useRef<Set<number> | null>(null);
   const activeIdRef = useRef<number | null>(activeId);
   const listAbortController = useRef<AbortController | null>(null);
@@ -373,12 +374,16 @@ export function AtendimentosClient({
       if (targetId && activeIdRef.current === targetId) await loadActiveConversation(targetId, 'revalidate');
       await refreshList();
       if (activeIdRef.current === targetId) {
-        setError(sentMessage?.whatsappStatus === 'FALHA'
+        const failureMessage = sentMessage?.whatsappStatus === 'FALHA'
           ? mensagemFalhaAmigavel(
               sentMessage.motivoFalha,
               detail?.whatsappCapabilities?.enforcesCustomerCareWindow ?? true
             )
-          : null);
+          : null;
+        setError(failureMessage);
+        if (failureMessage && options.propagate) {
+          throw new Error(failureMessage);
+        }
       }
     } catch (cause) {
       if (targetId && activeIdRef.current === targetId) {
@@ -433,6 +438,10 @@ export function AtendimentosClient({
       const sentMessage = await enviarMensagem(id, mensagemInicial);
       if (activeIdRef.current === id) {
         setMessages((current) => mergeMensagem(current, sentMessage));
+        setComposerDrafts((current) => ({
+          ...current,
+          [id]: sentMessage.whatsappStatus === 'FALHA' ? mensagemInicial : '',
+        }));
         setError(sentMessage.whatsappStatus === 'FALHA'
           ? mensagemFalhaAmigavel(
               sentMessage.motivoFalha,
@@ -442,6 +451,7 @@ export function AtendimentosClient({
       }
     } catch (cause) {
       if (activeIdRef.current === id) {
+        setComposerDrafts((current) => ({ ...current, [id]: mensagemInicial }));
         if (isWhatsappTemplateRequiredError(cause)) {
           await loadActiveConversation(id, 'revalidate');
         }
@@ -515,6 +525,11 @@ export function AtendimentosClient({
           quickMessages={quickMessages}
           busy={busy}
           error={error}
+          initialDraft={activeId ? composerDrafts[activeId] ?? '' : ''}
+          onDraftChange={(content) => {
+            if (!activeId) return;
+            setComposerDrafts((current) => ({ ...current, [activeId]: content }));
+          }}
           onSend={(content) => activeId
             ? runAction(() => enviarMensagem(activeId, content), { propagate: true, targetId: activeId })
             : Promise.resolve()}

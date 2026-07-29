@@ -19,16 +19,19 @@ export function IniciarAtendimentoDialog({
   onOpenChange,
   onStarted,
 }: Props) {
+  const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [mensagemInicial, setMensagemInicial] = useState('');
+  const [nameTouched, setNameTouched] = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const phoneRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    phoneRef.current?.focus();
+    nameRef.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !submitting) {
         onOpenChange(false);
@@ -57,18 +60,26 @@ export function IniciarAtendimentoDialog({
 
   const digits = telefone.replace(/\D/g, '');
   const phoneValid = digits.length >= 10 && digits.length <= 15;
+  const normalizedName = nome.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  const nameValid = normalizedName.length >= 2
+    && normalizedName.length <= 120
+    && normalizedName.toLocaleLowerCase('pt-BR') !== 'null'
+    && /\p{L}/u.test(normalizedName);
 
   async function submit() {
-    if (!phoneValid || submitting) return;
+    if (!nameValid || !phoneValid || submitting) return;
     setSubmitting(true);
     setError(null);
     try {
-      const response = await iniciarAtendimento({ telefone });
+      const response = await iniciarAtendimento({ nome: normalizedName, telefone });
       const nextMessage = mensagemInicial.trim();
+      await onStarted(response, nextMessage);
+      setNome('');
       setTelefone('');
       setMensagemInicial('');
+      setNameTouched(false);
+      setPhoneTouched(false);
       onOpenChange(false);
-      await onStarted(response, nextMessage);
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -117,20 +128,50 @@ export function IniciarAtendimentoDialog({
 
         <div className="space-y-4 p-5">
           <label className="block text-[11px] font-bold text-clinic-text">
+            Nome do contato
+            <input
+              ref={nameRef}
+              type="text"
+              required
+              value={nome}
+              maxLength={120}
+              onChange={(event) => setNome(event.target.value)}
+              onBlur={() => setNameTouched(true)}
+              aria-invalid={nameTouched && !nameValid}
+              placeholder="Nome da paciente"
+              className="mt-1.5 h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-[12px] text-clinic-text outline-none focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10"
+            />
+            {nameTouched && !normalizedName ? (
+              <span className="mt-1 block text-[10px] font-semibold text-clinic-danger">
+                Nome do contato é obrigatório.
+              </span>
+            ) : nameTouched && !nameValid ? (
+              <span className="mt-1 block text-[10px] font-semibold text-clinic-danger">
+                Informe um nome entre 2 e 120 caracteres, contendo letras.
+              </span>
+            ) : null}
+          </label>
+
+          <label className="block text-[11px] font-bold text-clinic-text">
             Telefone
             <input
-              ref={phoneRef}
               type="tel"
+              required
               value={telefone}
               onChange={(event) => setTelefone(formatPhone(event.target.value))}
+              onBlur={() => setPhoneTouched(true)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') event.preventDefault();
               }}
-              aria-invalid={telefone.length > 0 && !phoneValid}
+              aria-invalid={phoneTouched && !phoneValid}
               placeholder="(83) 99999-9999"
               className="mt-1.5 h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-[12px] text-clinic-text outline-none focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10"
             />
-            {telefone.length > 0 && !phoneValid ? (
+            {phoneTouched && !telefone ? (
+              <span className="mt-1 block text-[10px] font-semibold text-clinic-danger">
+                Telefone é obrigatório.
+              </span>
+            ) : phoneTouched && !phoneValid ? (
               <span className="mt-1 block text-[10px] font-semibold text-clinic-danger">
                 Informe DDD e número válidos.
               </span>
@@ -168,7 +209,7 @@ export function IniciarAtendimentoDialog({
           </button>
           <button
             type="button"
-            disabled={!phoneValid || submitting}
+            disabled={!nameValid || !phoneValid || submitting}
             onClick={() => void submit()}
             className="inline-flex h-9 items-center gap-2 rounded-lg bg-clinic-primary px-4 text-[11px] font-extrabold text-white hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
           >

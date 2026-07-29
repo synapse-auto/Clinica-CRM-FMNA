@@ -24,6 +24,7 @@ import com.synapse.clinicafemina.service.AtendimentoNotificationService;
 import com.synapse.clinicafemina.service.HorarioIaService;
 import com.synapse.clinicafemina.service.N8nEventPayload;
 import com.synapse.clinicafemina.service.N8nEventService;
+import com.synapse.clinicafemina.service.WhatsappPhoneIdentityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -71,6 +72,7 @@ public class WhatsappInboundMapper {
     private final List<WhatsappMediaDownloader> mediaDownloaders;
     private final ApplicationEventPublisher eventPublisher;
     private final WhatsappProperties whatsappProperties;
+    private final WhatsappPhoneIdentityService phoneIdentityService;
 
     /**
      * Auto-referência para que {@link #processarEntradaIsolada} passe pelo proxy transacional do
@@ -164,7 +166,7 @@ public class WhatsappInboundMapper {
             return;
         }
  
-        String telefone = payloadParser.normalizarTelefone(String.valueOf(contato.get("wa_id")));
+        String telefone = resolverWhatsappChatId(payloadMensagem, contato);
         log.info("Processando mensagem inbound. Remetente: {}, clinicaId={}", maskPhone(telefone), clinica.getId());
         logDiagnosticoContatoSanitizado(contato);
  
@@ -174,6 +176,7 @@ public class WhatsappInboundMapper {
         solicitarEnriquecimentoFotoUazap(paciente);
  
         Atendimento atendimento = resolverOuCriarAtendimento(clinica, paciente);
+        persistirWhatsappChatId(atendimento, telefone);
         log.info("Atendimento resolvido: id={}, status={}", atendimento.getId(), atendimento.getStatus());
  
         DadosMensagem dados = payloadParser.extrairDados(payloadMensagem);
@@ -233,8 +236,8 @@ public class WhatsappInboundMapper {
                 mensagem.setLidaEm(dataHora);
             }
             Mensagem salva = mensagemRepository.save(mensagem);
-            log.info("Status da mensagem atualizado: id={}, whatsappMessageId={}, novoStatus={}", 
-                    salva.getId(), whatsappMessageId, novoStatus);
+            log.info("Status da mensagem atualizado: id={}, whatsappMessageId={}, novoStatus={}",
+                    salva.getId(), maskId(whatsappMessageId), novoStatus);
             return salva;
         });
     }
@@ -639,18 +642,77 @@ public class WhatsappInboundMapper {
             String telefone,
             Map<String, Object> contato
     ) {
-        Optional<Paciente> existente = pacienteRepository.findByClinicaIdAndTelefoneNormalizado(
-                clinica.getId(), telefone
-        );
+        Optional<WhatsappPhoneIdentityService.PatientResolution> existente =
+                phoneIdentityService.resolvePatient(clinica.getId(), telefone);
         if (existente.isPresent()) {
-            Paciente paciente = existente.get();
+            Paciente paciente = existente.get().patient();
             atualizarPerfilDoContato(paciente, contato, telefone);
+            log.info(
+                    "Identidade inbound resolvida. clinicaId={} pacienteId={} origemResolucao={} "
+                            + "finalTelefone={}",
+                    clinica.getId(), paciente.getId(), existente.get().origin(), maskPhone(telefone)
+            );
             return new PacienteResolvido(paciente, false);
         }
         return new PacienteResolvido(
                 pacienteRepository.save(criarPaciente(clinica, telefone, contato)),
                 true
         );
+    }
+
+    private String resolverWhatsappChatId(
+            Map<String, Object> payloadMensagem,
+            Map<String, Object> contato
+    ) {
+        String from = normalizeOptionalPhone(payloadMensagem.get("from"));
+        String waId = normalizeOptionalPhone(contato == null ? null : contato.get("wa_id"));
+        if (from == null && waId == null) {
+            throw new IllegalStateException("Mensagem inbound sem identificador de contato valido.");
+        }
+        String confirmed = from != null ? from : waId;
+        if (from != null && waId != null
+                && !phoneIdentityService.identify(from).aliases().contains(waId)) {
+            throw new IllegalStateException(
+                    "Mensagem inbound com identificadores de contato conflitantes."
+            );
+        }
+        return confirmed;
+    }
+
+    private String normalizeOptionalPhone(Object rawValue) {
+        if (rawValue == null || String.valueOf(rawValue).isBlank()
+                || "null".equalsIgnoreCase(String.valueOf(rawValue))) {
+            return null;
+        }
+        return phoneIdentityService.identify(String.valueOf(rawValue)).normalized();
+    }
+
+    private void persistirWhatsappChatId(Atendimento atendimento, String confirmedChatId) {
+        if (confirmedChatId == null || confirmedChatId.isBlank()) {
+            return;
+        }
+        String normalized = phoneIdentityService.identify(confirmedChatId).normalized();
+        String current = atendimento.getWhatsappChatId();
+        if (current != null && !current.isBlank()
+                && !phoneIdentityService.identify(current).aliases().contains(normalized)) {
+            log.warn(
+                    "whatsappChatId divergente nao atualizado. clinicaId={} pacienteId={} "
+                            + "atendimentoId={} atual={} recebido={}",
+                    atendimento.getClinica().getId(), atendimento.getPaciente().getId(),
+                    atendimento.getId(), maskPhone(current), maskPhone(normalized)
+            );
+            throw new IllegalStateException("Identidade WhatsApp conflitante no atendimento.");
+        }
+        if (!normalized.equals(current)) {
+            atendimento.setWhatsappChatId(normalized);
+            atendimentoRepository.save(atendimento);
+            log.info(
+                    "whatsappChatId confirmado pelo inbound. clinicaId={} pacienteId={} "
+                            + "atendimentoId={} finalTelefone={}",
+                    atendimento.getClinica().getId(), atendimento.getPaciente().getId(),
+                    atendimento.getId(), maskPhone(normalized)
+            );
+        }
     }
 
     private Paciente criarPaciente(Clinica clinica, String telefone, Map<String, Object> contato) {
