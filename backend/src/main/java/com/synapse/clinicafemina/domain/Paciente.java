@@ -99,6 +99,9 @@ public class Paciente {
     @Column(name = "external_id", length = 100)
     private String externalId;
 
+    @Column(length = 20)
+    private String origem;
+
     @Column(name = "external_payload", columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
     private String externalPayload;

@@ -15,9 +15,24 @@ public record PacienteResumoDTO(
         String status,
         String externalSource,
         String externalId,
+        String origem,
         String fotoUrl,
         OffsetDateTime criadoEm,
         OffsetDateTime ultimaInteracaoEm,
         List<TagResponse> tags
 ) {
+    public PacienteResumoDTO(
+            Long id,
+            String nome,
+            String telefone,
+            String status,
+            String externalSource,
+            String externalId,
+            String fotoUrl,
+            OffsetDateTime criadoEm,
+            OffsetDateTime ultimaInteracaoEm,
+            List<TagResponse> tags
+    ) {
+        this(id, nome, telefone, status, externalSource, externalId, null, fotoUrl, criadoEm, ultimaInteracaoEm, tags);
+    }
 }

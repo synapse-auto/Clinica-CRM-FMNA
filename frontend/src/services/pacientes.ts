@@ -1,5 +1,10 @@
 import type { TagOperacional } from '@/types/operacional';
-import type { PacientePage } from '@/types/paciente';
+import type {
+  ImportacaoCsvContatoMapping,
+  ImportacaoCsvContatoPreview,
+  ImportacaoCsvContatoResultado,
+  PacientePage,
+} from '@/types/paciente';
 
 export function pesquisarPacientes(params: {
   q?: string;
@@ -24,6 +29,28 @@ export function adicionarTagPaciente(id: number, tagId: number): Promise<TagOper
 
 export function removerTagPaciente(id: number, tagId: number): Promise<void> {
   return requestVoid(`/api/pacientes/${id}/tags/${tagId}`, { method: 'DELETE' });
+}
+
+export function previewImportacaoCsv(
+  file: File,
+  mapping?: ImportacaoCsvContatoMapping,
+): Promise<ImportacaoCsvContatoPreview> {
+  const data = new FormData();
+  data.append('file', file);
+  if (mapping) data.append('mapping', new Blob([JSON.stringify(mapping)], { type: 'application/json' }));
+  return requestJson('/api/pacientes/importacoes/csv/preview', { method: 'POST', body: data });
+}
+
+export function confirmarImportacaoCsv(
+  file: File,
+  expectedFileHash: string,
+  mapping: ImportacaoCsvContatoMapping,
+): Promise<ImportacaoCsvContatoResultado> {
+  const data = new FormData();
+  data.append('file', file);
+  data.append('expectedFileHash', expectedFileHash);
+  data.append('mapping', new Blob([JSON.stringify(mapping)], { type: 'application/json' }));
+  return requestJson('/api/pacientes/importacoes/csv', { method: 'POST', body: data });
 }
 
 async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {

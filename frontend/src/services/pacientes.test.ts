@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   adicionarTagPaciente,
+  confirmarImportacaoCsv,
   removerTagPaciente,
 } from './pacientes';
 
@@ -28,6 +29,25 @@ describe('pacientes service', () => {
       '/api/pacientes/12/tags/9',
       expect.objectContaining({ method: 'DELETE' }),
     );
+  });
+
+  it('should_send_csv_confirmation_as_multipart_with_hash_and_mapping', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ created: 1 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await confirmarImportacaoCsv(
+      new File(['nome;telefone\nAna;5583999999999'], 'contatos.csv', { type: 'text/csv' }),
+      'a'.repeat(64),
+      { nameColumn: 'nome', phoneColumn: 'telefone' },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/pacientes/importacoes/csv',
+      expect.objectContaining({ method: 'POST', body: expect.any(FormData) }),
+    );
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('expectedFileHash')).toBe('a'.repeat(64));
+    expect(form.get('file')).toBeInstanceOf(File);
   });
 });
 

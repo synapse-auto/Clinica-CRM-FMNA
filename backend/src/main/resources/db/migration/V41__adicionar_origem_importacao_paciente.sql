@@ -1,0 +1,1 @@
+ALTER TABLE paciente ADD COLUMN origem VARCHAR(20);

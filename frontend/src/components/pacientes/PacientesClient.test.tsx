@@ -152,6 +152,39 @@ describe('PacientesClient', () => {
     expect(screen.queryByRole('button', { name: 'Remover tag Prioridade de Maria Silva' })).not.toBeInTheDocument();
   });
 
+  it('should_open_csv_import_and_show_detected_headers_after_selecting_a_csv_file', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      fileHash: 'a'.repeat(64),
+      fileName: 'contatos.csv',
+      encoding: 'UTF-8',
+      delimiter: ';',
+      totalRows: 1,
+      headers: ['Nome', 'Celular'],
+      suggestedMapping: { nameColumn: 'Nome', phoneColumn: 'Celular' },
+      sampleRows: [{ rowNumber: 2, values: ['Maria', '5583999999999'] }],
+      warnings: [],
+      validation: { totalRows: 1, valid: 1, existing: 0, duplicateInFile: 0, invalid: 0, toCreate: 1, totalErrors: 0, errorsTruncated: false, errors: [] },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = render(<PacientesClient initialPage={pageWith([paciente])} availableTags={tags} initialError={null} canManage />);
+
+    await user.click(screen.getByRole('button', { name: 'Importar CSV' }));
+    expect(screen.getByRole('dialog', { name: 'Importar contatos por CSV' })).toBeInTheDocument();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, new File(['nome;telefone\nMaria;5583999999999\n'], 'contatos.csv', { type: 'text/csv' }));
+    await user.click(screen.getByRole('button', { name: 'Analisar arquivo' }));
+
+    expect(await screen.findByRole('combobox', { name: 'Coluna de nome' })).toHaveValue('Nome');
+    expect(screen.getByRole('combobox', { name: 'Coluna de telefone' })).toHaveValue('Celular');
+  });
+
+  it('should_show_import_origin_label_when_provided_by_backend', () => {
+    render(<PacientesClient initialPage={pageWith([{ ...paciente, origem: 'IMPORTACAO', externalSource: null }])} availableTags={tags} initialError={null} canManage />);
+
+    expect(screen.getByText('Importação')).toBeInTheDocument();
+  });
+
   it('should_search_server_side_by_normalized_name_and_preserve_current_results_while_loading', async () => {
     const user = userEvent.setup();
     const joao: PacienteResumo = { ...paciente, id: 42, nome: 'Jo\u00e3o  L\u00f3pes', telefone: '(83) 99999-9999', externalId: 'MW-42' };

@@ -5,6 +5,7 @@ import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.PacienteFotoPerfilService;
 import com.synapse.clinicafemina.service.PacienteService;
 import com.synapse.clinicafemina.service.PacienteTagService;
+import com.synapse.clinicafemina.service.ImportacaoCsvContatoService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +24,7 @@ class PacienteFotoControllerTest {
     @Mock private PacienteService pacienteService;
     @Mock private PacienteTagService pacienteTagService;
     @Mock private PacienteFotoPerfilService fotoService;
+    @Mock private ImportacaoCsvContatoService importacaoCsvContatoService;
 
     private PacienteController controller;
 
@@ -32,7 +34,8 @@ class PacienteFotoControllerTest {
                 clinicaConfigService,
                 pacienteService,
                 pacienteTagService,
-                fotoService
+                fotoService,
+                importacaoCsvContatoService
         );
         Clinica clinica = new Clinica();
         clinica.setId(2L);

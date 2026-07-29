@@ -90,6 +90,11 @@ Ao criar ou alterar qualquer endpoint `/api/n8n/**`, siga obrigatoriamente
 Ao criar ou alterar envio WhatsApp, consultar obrigatoriamente
 [docs/integracoes/WHATSAPP_OUTBOUND.md](./docs/integracoes/WHATSAPP_OUTBOUND.md).
 
+## Importação de contatos
+
+Alterações na importação de contatos por CSV devem consultar obrigatoriamente
+[docs/contatos/IMPORTACAO_CSV.md](./docs/contatos/IMPORTACAO_CSV.md).
+
 ## What This Feature Does NOT Include
 
 - Mobile-first responsive UI (PT01 — backlog).

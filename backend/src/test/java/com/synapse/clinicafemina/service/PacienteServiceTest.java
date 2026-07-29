@@ -323,6 +323,11 @@ class PacienteServiceTest {
             }
 
             @Override
+            public String getOrigem() {
+                return null;
+            }
+
+            @Override
             public Instant getCriadoEm() {
                 return criadoEm;
             }

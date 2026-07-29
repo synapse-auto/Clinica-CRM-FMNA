@@ -32,6 +32,8 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
 
         String getExternalId();
 
+        String getOrigem();
+
         String getFotoUrl();
 
         Instant getCriadoEm();
@@ -112,6 +114,7 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
                 status AS status,
                 external_source AS "externalSource",
                 external_id AS "externalId",
+                origem AS origem,
                 foto_url AS "fotoUrl",
                 criado_em AS "criadoEm",
                 ultima_interacao_em AS "ultimaInteracaoEm"
@@ -131,6 +134,7 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
                 p.status AS status,
                 p.external_source AS "externalSource",
                 p.external_id AS "externalId",
+                p.origem AS origem,
                 p.foto_url AS "fotoUrl",
                 p.criado_em AS "criadoEm",
                 p.ultima_interacao_em AS "ultimaInteracaoEm"
@@ -249,6 +253,7 @@ public interface PacienteRepository extends JpaRepository<Paciente, Long> {
                 status AS status,
                 external_source AS "externalSource",
                 external_id AS "externalId",
+                origem AS origem,
                 foto_url AS "fotoUrl",
                 criado_em AS "criadoEm",
                 ultima_interacao_em AS "ultimaInteracaoEm"

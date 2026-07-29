@@ -10,6 +10,7 @@ import {
   Search,
   Tag,
   Trash2,
+  Upload,
   Users,
   X,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import { DemoTable } from '@/components/demo/DemoTable';
 import { StatusBadge } from '@/components/demo/StatusBadge';
+import { ImportacaoCsvModal } from '@/components/pacientes/ImportacaoCsvModal';
 import {
   adicionarTagPaciente,
   pesquisarPacientes,
@@ -55,6 +57,7 @@ export function PacientesClient({
   const [busy, setBusy] = useState(false);
   const [startingPatientId, setStartingPatientId] = useState<number | null>(null);
   const [error, setError] = useState(initialError);
+  const [importOpen, setImportOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(patientSearch, 300);
   const normalizedSearch = normalizeSearchText(debouncedSearch);
   const searchKey = isSearchableTerm(debouncedSearch) ? normalizedSearch : '';
@@ -166,10 +169,8 @@ export function PacientesClient({
     <div className="h-full overflow-auto bg-clinic-canvas p-4 custom-scrollbar">
       <header className="mb-3 border-b border-clinic-border pb-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h1 className="text-[17px] font-extrabold leading-6 text-clinic-text">Pacientes</h1>
-            <p className="text-[10px] text-clinic-muted">{counts.total} pacientes</p>
-          </div>
+          <div><h1 className="text-[17px] font-extrabold leading-6 text-clinic-text">Pacientes</h1><p className="text-[10px] text-clinic-muted">{counts.total} pacientes</p></div>
+          {canManage ? <button type="button" onClick={() => setImportOpen(true)} className="inline-flex h-9 items-center gap-1.5 self-start rounded-lg bg-clinic-primary px-3 text-[10px] font-extrabold text-white hover:brightness-95"><Upload className="h-3.5 w-3.5" />Importar CSV</button> : null}
         </div>
       </header>
 
@@ -296,7 +297,7 @@ export function PacientesClient({
               className: 'min-w-[110px] w-[12%]',
               render: (item) => (
                 <span className="text-[9px] text-clinic-muted">
-                  {item.externalSource ?? 'Manual'}
+                  {formatOrigem(item.origem, item.externalSource)}
                 </span>
               ),
             },
@@ -403,6 +404,7 @@ export function PacientesClient({
           </div>
         </div>
       ) : null}
+      {importOpen ? <ImportacaoCsvModal onClose={() => setImportOpen(false)} onComplete={() => setRetryVersion((current) => current + 1)} /> : null}
     </div>
   );
 }
@@ -524,6 +526,11 @@ function formatStatus(status: string) {
     INATIVO: 'Inativo',
   };
   return map[status] ?? status;
+}
+
+function formatOrigem(origem?: string | null, externalSource?: string | null) {
+  if (origem === 'IMPORTACAO') return 'Importação';
+  return externalSource ?? 'Manual';
 }
 
 function statusTone(status: string): 'green' | 'blue' | 'orange' | 'slate' {
