@@ -35,6 +35,7 @@ class UazapClientTest {
 
     private MockRestServiceServer server;
     private UazapClient client;
+    private WhatsappProperties properties;
 
     @BeforeEach
     void setUp() {
@@ -42,7 +43,9 @@ class UazapClientTest {
         server = MockRestServiceServer.bindTo(builder).build();
         RestClient restClient = builder.build();
 
-        WhatsappProperties properties = new WhatsappProperties();
+        properties = new WhatsappProperties();
+        properties.setEnabled(true);
+        properties.setProvider("UAZAP");
         WhatsappProperties.Uazap uazap = properties.getUazap();
         uazap.setBaseUrl("https://uazap.test");
         uazap.setUsername("user");
@@ -54,21 +57,31 @@ class UazapClientTest {
     }
 
     @Test
-    @DisplayName("sendText monta URL/Bearer/body e extrai messageId como externalMessageId")
-    void sendText_success_extractsMessageId() {
+    @DisplayName("contrato Uzapi: envia uma vez, usa wamid e confirma o wa_id resolvido")
+    void sendText_success_usesOfficialWamidAndConfirmedRecipient() {
         server.expect(requestTo(MESSAGES_URL))
                 .andExpect(method(POST))
                 .andExpect(header(AUTHORIZATION, "Bearer secret-token"))
                 .andExpect(jsonPath("$.to").value("5511999999999"))
+                .andExpect(jsonPath("$.delayMessage").value(0))
+                .andExpect(jsonPath("$.delayTyping").value(0))
                 .andExpect(jsonPath("$.type").value("text"))
                 .andExpect(jsonPath("$.text.body").value("Olá"))
                 .andRespond(withSuccess(
-                        "{\"statusCode\":200,\"message\":\"ok\",\"queueId\":\"q1\",\"messageId\":\"UZ-123\"}",
+                        """
+                                {"status":"success","message":"Mensagem colocada na fila de envios com sucesso!",
+                                "queueId":"QUEUE-123","messageId":"INTERNO-456",
+                                "contacts":[{"input":"5511999999999","wa_id":"5511999999999"}],
+                                "messages":[{"id":"wamid.TESTE"}]}
+                                """,
                         MediaType.APPLICATION_JSON));
 
         WhatsappSendResult result = client.sendText("+55 (11) 99999-9999", "Olá");
 
-        assertThat(result.externalMessageId()).isEqualTo("UZ-123");
+        assertThat(result.externalMessageId()).isEqualTo("wamid.TESTE");
+        assertThat(result.externalMessageId()).isNotEqualTo("INTERNO-456");
+        assertThat(result.externalMessageId()).isNotEqualTo("QUEUE-123");
+        assertThat(result.confirmedRecipient()).isEqualTo("5511999999999");
         assertThat(result.provider()).isEqualTo(WhatsappProviderType.UAZAP);
         server.verify();
     }
@@ -82,24 +95,70 @@ class UazapClientTest {
                 .andExpect(jsonPath("$.image.link").value("https://cdn.test/x.jpg"))
                 .andExpect(jsonPath("$.image.caption").value("legenda"))
                 .andRespond(withSuccess(
-                        "{\"messageId\":\"UZ-9\"}", MediaType.APPLICATION_JSON));
+                        "{\"status\":\"success\",\"queueId\":\"QUEUE-9\",\"messageId\":\"INTERNO-9\","
+                                + "\"messages\":[{\"id\":\"wamid.MEDIA\"}]}",
+                        MediaType.APPLICATION_JSON));
 
         WhatsappSendResult result = client.sendMedia(
                 "5511999999999", WhatsappMessageType.IMAGE, "https://cdn.test/x.jpg", "legenda");
 
-        assertThat(result.externalMessageId()).isEqualTo("UZ-9");
+        assertThat(result.externalMessageId()).isEqualTo("wamid.MEDIA");
         server.verify();
     }
 
     @Test
-    @DisplayName("resposta sem messageId gera UazapException")
-    void missingMessageId_throws() {
+    @DisplayName("resposta de sucesso sem wamid nao e aceita como envio comprovado")
+    void successfulResponseWithoutWamid_throws() {
         server.expect(requestTo(MESSAGES_URL))
-                .andRespond(withSuccess("{\"statusCode\":200}", MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(
+                        "{\"status\":\"success\",\"queueId\":\"QUEUE-123\",\"messageId\":\"INTERNO-456\",\"messages\":[]}",
+                        MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> client.sendText("5511999999999", "oi"))
                 .isInstanceOf(UazapException.class)
-                .hasMessageContaining("sem messageId");
+                .hasMessageContaining("WhatsApp");
+    }
+
+    @Test
+    @DisplayName("status logico de erro nao e aceito mesmo com HTTP 200")
+    void logicalErrorResponse_throws() {
+        server.expect(requestTo(MESSAGES_URL))
+                .andRespond(withSuccess(
+                        "{\"status\":\"error\",\"message\":\"Instancia desconectada\",\"queueId\":null,\"messageId\":null,\"contacts\":[],\"messages\":[]}",
+                        MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.sendText("5511999999999", "oi"))
+                .isInstanceOf(UazapException.class);
+    }
+
+    @Test
+    @DisplayName("falha antes do HTTP quando o provider configurado nao e UAZAP")
+    void providerOtherThanUazap_failsFast() {
+        properties.setProvider("META");
+
+        assertThatThrownBy(() -> client.sendText("5511999999999", "oi"))
+                .isInstanceOf(UazapException.class)
+                .hasMessageContaining("WHATSAPP_PROVIDER");
+    }
+
+    @Test
+    @DisplayName("falha antes do HTTP quando WHATSAPP_ENABLED esta desabilitado")
+    void disabledWhatsapp_failsFast() {
+        properties.setEnabled(false);
+
+        assertThatThrownBy(() -> client.sendText("5511999999999", "oi"))
+                .isInstanceOf(UazapException.class)
+                .hasMessageContaining("WHATSAPP_ENABLED");
+    }
+
+    @Test
+    @DisplayName("falha antes do HTTP quando UAZAP_TOKEN esta ausente")
+    void missingToken_failsFast() {
+        properties.getUazap().setToken(" ");
+
+        assertThatThrownBy(() -> client.sendText("5511999999999", "oi"))
+                .isInstanceOf(UazapException.class)
+                .hasMessageContaining("UAZAP_TOKEN");
     }
 
     @Test

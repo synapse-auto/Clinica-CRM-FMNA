@@ -5,6 +5,8 @@ import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import com.synapse.clinicafemina.service.WhatsappWebhookDispatchService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -25,6 +27,16 @@ class UazapWebhookControllerTest {
             "value":{"metadata":{"phone_number_id":"PNID-1"},
             "messages":[{"from":"5511988887777","id":"UZ-1","type":"text","text":{"body":"oi"}}]}}]}]}
             """;
+
+    // Swagger Uzapi 1.0: /webhook/status/{delivered,read}; MessageStatus tambem enumera sent e failed.
+    private static String statusPayload(String status) {
+        return """
+                {"object":"whatsapp_business_account","entry":[{"id":"","changes":[{"field":"messages",
+                "value":{"messaging_product":"whatsapp","metadata":{"display_phone_number":"5583000000000","phone_number_id":"PNID-1"},
+                "contacts":[{"profile":{"name":"Contato"},"wa_id":"558391114004"}],
+                "statuses":[{"id":"wamid.TESTE","status":"%s","timestamp":"1781455200","recipient_id":"558391114004"}]}}]}]}
+                """.formatted(status);
+    }
 
     private final WhatsappWebhookDispatchService dispatchService = mock(WhatsappWebhookDispatchService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -54,6 +66,19 @@ class UazapWebhookControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         verify(dispatchService, times(1)).despachar(bytes(VALID_PAYLOAD));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"sent", "delivered", "read", "failed"})
+    @DisplayName("fixture oficial de status e aceita e despachada sem alterar o wamid")
+    void officialStatusPayload_dispatches(String status) {
+        String payload = statusPayload(status);
+
+        ResponseEntity<Void> response = controller(properties(true, "UAZAP", "PNID-1", null))
+                .receberWebhook(bytes(payload), null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(dispatchService).despachar(bytes(payload));
     }
 
     @Test

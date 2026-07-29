@@ -108,6 +108,7 @@ class MensagemServiceUazapOutboundWiringTest {
         RestClient mockedRestClient = builder.build();
 
         WhatsappProperties properties = new WhatsappProperties();
+        properties.setEnabled(true);
         properties.setProvider("UAZAP");
         properties.getUazap().setBaseUrl("https://uazap.test");
         properties.getUazap().setUsername("user");
@@ -124,10 +125,15 @@ class MensagemServiceUazapOutboundWiringTest {
                 .andExpect(method(org.springframework.http.HttpMethod.POST))
                 .andExpect(header("Authorization", "Bearer secret-token"))
                 .andExpect(jsonPath("$.to").value("558391114004"))
+                .andExpect(jsonPath("$.delayMessage").value(0))
+                .andExpect(jsonPath("$.delayTyping").value(0))
                 .andExpect(jsonPath("$.type").value("text"))
                 .andExpect(jsonPath("$.text.body").value("Ola FMNA via UAZAP"))
                 .andRespond(withSuccess(
-                        "{\"statusCode\":200,\"message\":\"ok\",\"queueId\":\"q1\",\"messageId\":\"UZ-OUT-1\"}",
+                        "{\"status\":\"success\",\"message\":\"Mensagem colocada na fila de envios com sucesso!\","
+                                + "\"queueId\":\"QUEUE-1\",\"messageId\":\"INTERNO-1\","
+                                + "\"contacts\":[{\"input\":\"5583991114004\",\"wa_id\":\"558391114004\"}],"
+                                + "\"messages\":[{\"id\":\"wamid.UZAPI-1\"}]}",
                         MediaType.APPLICATION_JSON));
 
         service(resolver).enviar(30L, 9L, new EnviarMensagemRequest("TEXTO", "Ola FMNA via UAZAP"), 99L);
@@ -137,10 +143,46 @@ class MensagemServiceUazapOutboundWiringTest {
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
         verify(mensagemRepository, org.mockito.Mockito.atLeastOnce()).save(mensagemCaptor.capture());
         Mensagem mensagemFinal = mensagemCaptor.getAllValues().getLast();
-        assertEquals("UZ-OUT-1", mensagemFinal.getWhatsappMessageId()); // messageId persistido/propagado
+        assertEquals("wamid.UZAPI-1", mensagemFinal.getWhatsappMessageId());
         assertEquals("ENVIADA", mensagemFinal.getWhatsappStatus());
 
         verifyNoInteractions(whatsappOutboundClient); // client Meta nunca foi chamado
+    }
+
+    @Test
+    @DisplayName("resposta logica de erro da Uzapi persiste FALHA e nunca o ID interno")
+    void uazapLogicalError_persistsFailure() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        RestClient mockedRestClient = builder.build();
+
+        WhatsappProperties properties = new WhatsappProperties();
+        properties.setEnabled(true);
+        properties.setProvider("UAZAP");
+        properties.getUazap().setBaseUrl("https://uazap.test");
+        properties.getUazap().setUsername("user");
+        properties.getUazap().setVersion("v2");
+        properties.getUazap().setPhoneNumberId("inst-fmna");
+        properties.getUazap().setToken("secret-token");
+
+        UazapClient uazapClient = new UazapClient(mockedRestClient, properties);
+        WhatsappProviderResolver resolver = new WhatsappProviderResolver(
+                List.of(new UazapWhatsappProvider(uazapClient)), properties);
+        server.expect(requestTo("https://uazap.test/user/v2/inst-fmna/messages"))
+                .andRespond(withSuccess(
+                        "{\"status\":\"error\",\"message\":\"Instancia desconectada\","
+                                + "\"queueId\":null,\"messageId\":null,\"contacts\":[],\"messages\":[]}",
+                        MediaType.APPLICATION_JSON));
+
+        service(resolver).enviar(30L, 9L, new EnviarMensagemRequest("TEXTO", "Mensagem inicial"), 99L);
+
+        server.verify();
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository, org.mockito.Mockito.atLeastOnce()).save(mensagemCaptor.capture());
+        Mensagem mensagemFinal = mensagemCaptor.getAllValues().getLast();
+        assertEquals("FALHA", mensagemFinal.getWhatsappStatus());
+        assertEquals(null, mensagemFinal.getWhatsappMessageId());
+        verifyNoInteractions(whatsappOutboundClient);
     }
 
     @Test
@@ -149,7 +191,7 @@ class MensagemServiceUazapOutboundWiringTest {
         WhatsappProperties properties = new WhatsappProperties(); // provider default = META
         WhatsappProviderResolver resolver = new WhatsappProviderResolver(
                 List.of(new MetaWhatsappProvider(whatsappOutboundClient)), properties);
-        when(whatsappOutboundClient.enviarTextoComResultado("5583991114004", "Ola FMNA via Meta"))
+        when(whatsappOutboundClient.enviarTextoComResultado("558391114004", "Ola FMNA via Meta"))
                 .thenReturn(new com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult(
                         "wamid-meta-out-1", com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType.META
                 ));
@@ -157,7 +199,7 @@ class MensagemServiceUazapOutboundWiringTest {
         service(resolver).enviar(30L, 9L, new EnviarMensagemRequest("TEXTO", "Ola FMNA via Meta"), 99L);
 
         verify(whatsappOutboundClient).validarConfiguracao();
-        verify(whatsappOutboundClient).enviarTextoComResultado("5583991114004", "Ola FMNA via Meta");
+        verify(whatsappOutboundClient).enviarTextoComResultado("558391114004", "Ola FMNA via Meta");
 
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
         verify(mensagemRepository, org.mockito.Mockito.atLeastOnce()).save(mensagemCaptor.capture());
@@ -178,7 +220,8 @@ class MensagemServiceUazapOutboundWiringTest {
 
         when(uazapClient.sendText("5583991114004", "Mensagem inicial"))
                 .thenReturn(new com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult(
-                        "UZ-OUT-NEW", com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType.UAZAP
+                        "wamid.UZAPI-NOVO", com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType.UAZAP,
+                        "558391114004"
                 ));
         service(resolver).enviar(
                 30L,
@@ -193,5 +236,7 @@ class MensagemServiceUazapOutboundWiringTest {
         verify(mensagemRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
         Mensagem persisted = captor.getAllValues().getLast();
         assertEquals("ENVIADA", persisted.getWhatsappStatus());
+        assertEquals("wamid.UZAPI-NOVO", persisted.getWhatsappMessageId());
+        assertEquals("558391114004", atendimento.getWhatsappChatId());
     }
 }

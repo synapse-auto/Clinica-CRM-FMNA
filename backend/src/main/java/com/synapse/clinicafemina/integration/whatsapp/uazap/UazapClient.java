@@ -4,6 +4,8 @@ import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
 import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappMessageType;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
+import com.synapse.clinicafemina.integration.whatsapp.uazap.dto.UazapContact;
+import com.synapse.clinicafemina.integration.whatsapp.uazap.dto.UazapMessageReference;
 import com.synapse.clinicafemina.integration.whatsapp.uazap.dto.UazapSendMessageResponse;
 import com.synapse.clinicafemina.integration.whatsapp.uazap.exception.UazapException;
 import lombok.extern.slf4j.Slf4j;
@@ -17,16 +19,18 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 /**
- * Cliente HTTP isolado para envio outbound via UAZAP (contrato confirmado por OpenAPI).
+ * Cliente HTTP isolado para envio outbound via Uzapi/Autotic.
  *
  * <p>Autenticação: {@code Authorization: Bearer <token>}. Endpoint:
- * {@code POST {baseUrl}/{username}/{version}/{phoneNumberId}/messages}. O {@code messageId} da
- * resposta vira o {@code externalMessageId} do domínio.</p>
+ * {@code POST {baseUrl}/{username}/{version}/{phoneNumberId}/messages}. O identificador externo
+ * persistido é {@code messages[0].id}; {@code queueId} e {@code messageId} são internos.</p>
  *
  * <p><strong>Sem retry automático</strong> (não há chave de idempotência de envio comprovada).
  * Logs sanitizados: nunca registram token, {@code Authorization}, corpo integral, telefone
@@ -37,6 +41,7 @@ import java.util.Map;
 public class UazapClient {
 
     private final RestClient restClient;
+    private final WhatsappProperties properties;
     private final WhatsappProperties.Uazap config;
 
     @Autowired
@@ -47,6 +52,7 @@ public class UazapClient {
     /** Construtor visível para testes: injeta um {@link RestClient} já vinculado (ex.: MockRestServiceServer). */
     UazapClient(RestClient restClient, WhatsappProperties properties) {
         this.restClient = restClient;
+        this.properties = properties;
         this.config = properties.getUazap();
     }
 
@@ -60,6 +66,8 @@ public class UazapClient {
     public WhatsappSendResult sendText(String toE164, String body) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("to", onlyDigits(toE164));
+        payload.put("delayMessage", 0);
+        payload.put("delayTyping", 0);
         payload.put("type", "text");
         payload.put("text", Map.of("body", body));
         return post(payload);
@@ -83,6 +91,7 @@ public class UazapClient {
     }
 
     private WhatsappSendResult post(Map<String, Object> payload) {
+        validarConfiguracao();
         String url = messagesUrl();
         try {
             UazapSendMessageResponse response = restClient.post()
@@ -93,10 +102,7 @@ public class UazapClient {
                     .retrieve()
                     .body(UazapSendMessageResponse.class);
 
-            if (response == null || response.messageId() == null || response.messageId().isBlank()) {
-                throw new UazapException("Resposta da UAZAP sem messageId");
-            }
-            return new WhatsappSendResult(response.messageId(), WhatsappProviderType.UAZAP);
+            return interpretarResposta(response);
 
         } catch (RestClientResponseException exception) {
             // Cobre 400/401/403/404/409/429/5xx — status explícito, sem vazar corpo/segredos.
@@ -122,5 +128,71 @@ public class UazapClient {
 
     private static String onlyDigits(String value) {
         return value == null ? "" : value.replaceAll("\\D", "");
+    }
+
+    private WhatsappSendResult interpretarResposta(UazapSendMessageResponse response) {
+        if (response == null) {
+            throw new UazapException("Resposta da Uzapi ausente");
+        }
+        if (!"success".equals(response.status()) || preenchido(response.error())) {
+            log.warn("Envio Uzapi rejeitado no corpo. status={} possuiErro={}",
+                    response.status(), preenchido(response.error()));
+            throw new UazapException("Uzapi rejeitou o envio da mensagem");
+        }
+
+        String queueId = exigirIdentificador(response.queueId(), "queueId");
+        String messageId = exigirIdentificador(response.messageId(), "messageId");
+        String wamid = response.messages().stream()
+                .map(UazapMessageReference::id)
+                .filter(this::preenchido)
+                .map(String::trim)
+                .findFirst()
+                .orElseThrow(() -> new UazapException("Resposta da Uzapi sem identificador WhatsApp"));
+        String confirmedRecipient = response.contacts().stream()
+                .map(UazapContact::waId)
+                .filter(this::preenchido)
+                .map(String::trim)
+                .findFirst()
+                .orElse(null);
+
+        log.info("Envio Uzapi aceito. endpoint=messages status={} queueId={} messageId={} wamid={}",
+                response.status(), maskId(queueId), maskId(messageId), maskId(wamid));
+        return new WhatsappSendResult(wamid, WhatsappProviderType.UAZAP, confirmedRecipient);
+    }
+
+    private void validarConfiguracao() {
+        if (!properties.isEnabled()) {
+            throw new UazapException("Configuracao Uzapi invalida: WHATSAPP_ENABLED deve estar habilitado");
+        }
+        if (properties.resolveProvider() != WhatsappProviderType.UAZAP) {
+            throw new UazapException("Configuracao Uzapi invalida: WHATSAPP_PROVIDER deve ser UAZAP");
+        }
+        List<String> ausentes = new ArrayList<>();
+        if (!preenchido(config.getBaseUrl())) ausentes.add("UAZAP_BASE_URL");
+        if (!preenchido(config.getUsername())) ausentes.add("UAZAP_USERNAME");
+        if (!preenchido(config.getVersion())) ausentes.add("UAZAP_VERSION");
+        if (!preenchido(config.getPhoneNumberId())) ausentes.add("UAZAP_PHONE_NUMBER_ID");
+        if (!preenchido(config.getToken())) ausentes.add("UAZAP_TOKEN");
+        if (!ausentes.isEmpty()) {
+            throw new UazapException("Configuracao Uzapi incompleta: " + String.join(", ", ausentes));
+        }
+    }
+
+    private boolean preenchido(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private String exigirIdentificador(String value, String field) {
+        if (!preenchido(value)) {
+            throw new UazapException("Resposta da Uzapi sem " + field);
+        }
+        return value.trim();
+    }
+
+    private String maskId(String value) {
+        if (!preenchido(value) || value.length() <= 4) {
+            return "****";
+        }
+        return "****" + value.substring(value.length() - 4);
     }
 }
