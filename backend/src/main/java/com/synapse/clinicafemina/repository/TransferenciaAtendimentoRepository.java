@@ -26,6 +26,18 @@ public interface TransferenciaAtendimentoRepository extends JpaRepository<Transf
     );
 
     @Query("""
+            SELECT t FROM TransferenciaAtendimento t
+            JOIN FETCH t.atendimento a
+            JOIN FETCH a.paciente
+            JOIN FETCH t.paraUsuario
+            LEFT JOIN FETCH a.atendentePrincipal
+            WHERE t.idempotencyKey = :idempotencyKey
+            """)
+    Optional<TransferenciaAtendimento> findByIdempotencyKey(
+            @Param("idempotencyKey") String idempotencyKey
+    );
+
+    @Query("""
             SELECT t.paraUsuario.id
             FROM TransferenciaAtendimento t
             WHERE t.atendimento.clinica.id = :clinicaId

@@ -21,6 +21,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -239,6 +240,39 @@ class N8nAtendimentoControllerTest {
     }
 
     @Test
+    void should_normalize_real_n8n_rotation_payload_variants_before_calling_service() throws Exception {
+        autorizar("test-secret");
+        when(atendimentoService.transferirProximoPorN8n(eq(30L), any(), any(), eq(7L)))
+                .thenReturn(new AtendimentoService.TransferenciaRodizioHumanoResultado(
+                        resultadoHumano(false, true, 2), 10L, 0
+                ));
+
+        for (String payload : new String[]{
+                "{\"atendentesIds\":[10,11]}",
+                "{\"atendentesIds\":[\"10\",\"11\"]}",
+                "{\"atendentesIds\":\"[10,11]\"}",
+                "{\"atendentes_ids\":[10,11]}",
+                "{\"atendenteIds\":[10,11]}"
+        }) {
+            mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-proximo-humano")
+                            .header("X-N8N-SECRET", "test-secret")
+                            .header("iDeMpOtEnCy-KeY", "rodizio-real")
+                            .contentType("application/json")
+                            .content(payload))
+                    .andExpect(status().isOk());
+        }
+
+        ArgumentCaptor<com.synapse.clinicafemina.dto.n8n.N8nTransferirProximoHumanoRequest> captor =
+                ArgumentCaptor.forClass(
+                        com.synapse.clinicafemina.dto.n8n.N8nTransferirProximoHumanoRequest.class
+                );
+        verify(atendimentoService, org.mockito.Mockito.times(5))
+                .transferirProximoPorN8n(eq(30L), captor.capture(), eq("rodizio-real"), eq(7L));
+        captor.getAllValues().forEach(request ->
+                assertEquals(List.of(10L, 11L), request.idsOrdenados()));
+    }
+
+    @Test
     void should_reject_repeated_attendants_in_n8n_rotation_without_calling_service() throws Exception {
         autorizar("test-secret");
 
@@ -276,6 +310,55 @@ class N8nAtendimentoControllerTest {
                         .content("{\"atendentesIds\":[10,11}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_JSON"));
+    }
+
+    @Test
+    void should_return_clear_error_for_wrong_rotation_content_type() throws Exception {
+        mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-proximo-humano")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .header("Idempotency-Key", "rodizio-content-type")
+                        .contentType("text/plain")
+                        .content("{\"atendentesIds\":[10,11]}"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"))
+                .andExpect(jsonPath("$.message").value("Use Content-Type: application/json."));
+    }
+
+    @Test
+    void should_return_conflict_for_known_rotation_idempotency_constraint() throws Exception {
+        autorizar("test-secret");
+        when(atendimentoService.transferirProximoPorN8n(eq(30L), any(), eq("rodizio-race"), eq(7L)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "violação",
+                        new RuntimeException("constraint uq_transferencia_atendimento_idempotency_key")
+                ));
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-proximo-humano")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .header("Idempotency-Key", "rodizio-race")
+                        .contentType("application/json")
+                        .content("{\"atendentesIds\":[10,11]}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_CONFLICT"));
+    }
+
+    @Test
+    void should_keep_unknown_integrity_violation_sanitized_as_bad_request() throws Exception {
+        autorizar("test-secret");
+        when(atendimentoService.transferirProximoPorN8n(eq(30L), any(), eq("rodizio-outra"), eq(7L)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "violação",
+                        new RuntimeException("outra constraint")
+                ));
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/transferir-proximo-humano")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .header("Idempotency-Key", "rodizio-outra")
+                        .contentType("application/json")
+                        .content("{\"atendentesIds\":[10,11]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Dados violam uma regra de validação."))
+                .andExpect(jsonPath("$.code").doesNotExist());
     }
 
     @Test

@@ -12,6 +12,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
@@ -244,11 +245,41 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_REQUEST, "Requisição inválida.", request);
     }
 
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<Object> handleUnsupportedMediaType(
+            HttpMediaTypeNotSupportedException ex,
+            WebRequest request
+    ) {
+        if (isN8nTransferPath(request)) {
+            log.warn("Content-Type rejeitado no callback de transferência N8N em [{}]", path(request));
+            return buildResponse(
+                    HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                    "Use Content-Type: application/json.",
+                    "UNSUPPORTED_MEDIA_TYPE",
+                    request
+            );
+        }
+        return buildResponse(
+                HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "Tipo de conteúdo não suportado.",
+                request
+        );
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<Object> handleDataIntegrity(DataIntegrityViolationException ex, WebRequest request) {
-        log.warn("Violação de integridade em [{}]: {}",
-                request.getDescription(false).replace("uri=", ""),
-                ex.getMostSpecificCause().getMessage());
+        if (isN8nTransferPath(request) && isTransferenciaIdempotencyConstraint(ex)) {
+            log.warn("Conflito de idempotência no callback de transferência N8N. path={} constraint={}",
+                    path(request),
+                    "uq_transferencia_atendimento_idempotency_key");
+            return buildResponse(
+                    HttpStatus.CONFLICT,
+                    "Esta Idempotency-Key já foi usada em outra transferência ou com dados diferentes.",
+                    IdempotencyConflictException.CODE,
+                    request
+            );
+        }
+        log.warn("Violação de integridade sanitizada em [{}]", path(request));
         return buildResponse(HttpStatus.BAD_REQUEST, "Dados violam uma regra de validação.", request);
     }
 
@@ -306,6 +337,19 @@ public class GlobalExceptionHandler {
 
     private boolean isN8nTransferPath(WebRequest request) {
         return path(request).matches("/api/n8n/atendimentos/[^/]+/transferir(-proximo)?-humano");
+    }
+
+    private boolean isTransferenciaIdempotencyConstraint(DataIntegrityViolationException ex) {
+        Throwable current = ex;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null
+                    && message.toLowerCase().contains("uq_transferencia_atendimento_idempotency_key")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private String path(WebRequest request) {

@@ -41,6 +41,9 @@ public class TransferenciaAtendimento {
     @Column(name = "idempotency_key", length = 120)
     private String idempotencyKey;
 
+    @Column(name = "idempotency_fingerprint", length = 64)
+    private String idempotencyFingerprint;
+
     @Column(name = "transferido_em", nullable = false, updatable = false)
     private OffsetDateTime transferidoEm;
 

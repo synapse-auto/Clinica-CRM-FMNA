@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.service;
 import com.synapse.clinicafemina.domain.*;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.dto.n8n.N8nTransferirProximoHumanoRequest;
+import com.synapse.clinicafemina.exception.IdempotencyConflictException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.dto.WhatsappCapabilitiesDTO;
 import com.synapse.clinicafemina.repository.*;
@@ -285,8 +286,7 @@ class AtendimentoServiceTest {
         Recepcionista primeira = atendente(10L);
         Recepcionista segunda = atendente(11L);
         when(clinicaRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(clinica));
-        when(transferenciaRepository.findByClinicaIdAndOrigemAndIdempotencyKey(
-                1L, "N8N_RODIZIO", "rodizio-1"))
+        when(transferenciaRepository.findByIdempotencyKey("rodizio-1"))
                 .thenReturn(Optional.empty());
         when(usuarioRepository.findById(10L)).thenReturn(Optional.of(primeira));
         when(usuarioRepository.findById(11L)).thenReturn(Optional.of(segunda));
@@ -322,8 +322,7 @@ class AtendimentoServiceTest {
         Recepcionista primeira = atendente(10L);
         Recepcionista segunda = atendente(11L);
         when(clinicaRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(clinica));
-        when(transferenciaRepository.findByClinicaIdAndOrigemAndIdempotencyKey(
-                1L, "N8N_RODIZIO", "rodizio-2"))
+        when(transferenciaRepository.findByIdempotencyKey("rodizio-2"))
                 .thenReturn(Optional.empty());
         when(usuarioRepository.findById(10L)).thenReturn(Optional.of(primeira));
         when(usuarioRepository.findById(11L)).thenReturn(Optional.of(segunda));
@@ -356,14 +355,17 @@ class AtendimentoServiceTest {
         transferenciaAnterior.setAtendimento(atendimento);
         transferenciaAnterior.setParaUsuario(segunda);
         transferenciaAnterior.setTransferidoEm(OffsetDateTime.parse("2026-07-28T15:00:00Z"));
+        N8nTransferirProximoHumanoRequest request =
+                new N8nTransferirProximoHumanoRequest(List.of(10L, 11L), "Rodízio", null, null);
+        transferenciaAnterior.setOrigem("N8N_RODIZIO");
+        transferenciaAnterior.setIdempotencyFingerprint(request.fingerprint(3L));
         when(clinicaRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(clinica));
-        when(transferenciaRepository.findByClinicaIdAndOrigemAndIdempotencyKey(
-                1L, "N8N_RODIZIO", "rodizio-retry"))
+        when(transferenciaRepository.findByIdempotencyKey("rodizio-retry"))
                 .thenReturn(Optional.of(transferenciaAnterior));
 
         var result = service.transferirProximoPorN8n(
                 3L,
-                new N8nTransferirProximoHumanoRequest(List.of(10L, 11L), "Rodízio", null, null),
+                request,
                 "rodizio-retry",
                 1L
         );
@@ -373,6 +375,55 @@ class AtendimentoServiceTest {
         verify(transferenciaRepository, never()).findDestinatariosPorOrigem(anyLong(), anyString(), anyList(), any());
         verify(atendimentoRepository, never()).save(any());
         verify(notificationService, never()).notificarTransferenciaIa(any(), any(), anyString(), any(), any());
+    }
+
+    @Test
+    void should_reject_reused_rotation_key_with_different_payload() {
+        Recepcionista primeira = atendente(10L);
+        atendimento.setAtendentePrincipal(primeira);
+        N8nTransferirProximoHumanoRequest original =
+                new N8nTransferirProximoHumanoRequest(List.of(10L, 11L), "Rodízio", null, null);
+        TransferenciaAtendimento existente = new TransferenciaAtendimento();
+        existente.setAtendimento(atendimento);
+        existente.setParaUsuario(primeira);
+        existente.setOrigem("N8N_RODIZIO");
+        existente.setIdempotencyFingerprint(original.fingerprint(3L));
+        when(clinicaRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(clinica));
+        when(transferenciaRepository.findByIdempotencyKey("rodizio-conflito"))
+                .thenReturn(Optional.of(existente));
+
+        N8nTransferirProximoHumanoRequest diferente =
+                new N8nTransferirProximoHumanoRequest(List.of(11L, 10L), "Rodízio", null, null);
+
+        assertThrows(
+                IdempotencyConflictException.class,
+                () -> service.transferirProximoPorN8n(3L, diferente, "rodizio-conflito", 1L)
+        );
+        verify(atendimentoRepository, never()).save(any());
+        verify(notificationService, never()).notificarTransferenciaIa(any(), any(), anyString(), any(), any());
+    }
+
+    @Test
+    void should_reject_reused_rotation_key_for_another_attendance() {
+        Recepcionista primeira = atendente(10L);
+        N8nTransferirProximoHumanoRequest request =
+                new N8nTransferirProximoHumanoRequest(List.of(10L, 11L), "Rodízio", null, null);
+        TransferenciaAtendimento existente = new TransferenciaAtendimento();
+        existente.setAtendimento(atendimento);
+        existente.setParaUsuario(primeira);
+        existente.setOrigem("N8N_RODIZIO");
+        existente.setIdempotencyFingerprint(request.fingerprint(3L));
+        when(clinicaRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(clinica));
+        when(transferenciaRepository.findByIdempotencyKey("rodizio-outro-atendimento"))
+                .thenReturn(Optional.of(existente));
+
+        assertThrows(
+                IdempotencyConflictException.class,
+                () -> service.transferirProximoPorN8n(
+                        99L, request, "rodizio-outro-atendimento", 1L
+                )
+        );
+        verify(atendimentoRepository, never()).save(any());
     }
 
     @Test

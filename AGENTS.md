@@ -80,6 +80,11 @@ Read [.specify/memory/constitution.md](./.specify/memory/constitution.md) before
 - All sensitive columns marked 🔒 in `data-model.md` are AES-256-GCM encrypted at column level.
 - Default UI language: pt-BR.
 
+## Endpoints N8N
+
+Ao criar ou alterar qualquer endpoint `/api/n8n/**`, siga obrigatoriamente
+[docs/integracoes/N8N_ENDPOINT_CHECKLIST.md](./docs/integracoes/N8N_ENDPOINT_CHECKLIST.md).
+
 ## What This Feature Does NOT Include
 
 - Mobile-first responsive UI (PT01 — backlog).

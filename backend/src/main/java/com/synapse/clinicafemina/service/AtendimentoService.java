@@ -13,6 +13,7 @@ import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.dto.WhatsappCapabilitiesDTO;
 import com.synapse.clinicafemina.dto.n8n.N8nTransferirProximoHumanoRequest;
 import com.synapse.clinicafemina.dto.operacional.TagResponse;
+import com.synapse.clinicafemina.exception.IdempotencyConflictException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
@@ -167,7 +168,7 @@ public class AtendimentoService {
         atendimentoRepository.save(atendimento);
         transferenciaRepository.save(criarTransferencia(
                 atendimento, antigoAtendente, novoAtendente, responsavel, request.motivo(),
-                ORIGEM_TRANSFERENCIA_MANUAL, null
+                ORIGEM_TRANSFERENCIA_MANUAL, null, null
         ));
         notificationService.notificarAtribuicao(atendimento, novoAtendente);
 
@@ -190,7 +191,7 @@ public class AtendimentoService {
             TransferirAtendimentoRequest request,
             Long clinicaId
     ) {
-        return transferirPorN8n(id, request, clinicaId, ORIGEM_TRANSFERENCIA_N8N, null);
+        return transferirPorN8n(id, request, clinicaId, ORIGEM_TRANSFERENCIA_N8N, null, null);
     }
 
     @Transactional
@@ -202,16 +203,14 @@ public class AtendimentoService {
     ) {
         List<Long> atendentesIds = request.idsOrdenados();
         String chaveIdempotencia = request.validarIdempotencyKey(idempotencyKey);
+        String fingerprint = request.fingerprint(id);
         clinicaRepository.findByIdForUpdate(clinicaId)
                 .orElseThrow(() -> new NotFoundException("Clínica não encontrada"));
         Optional<TransferenciaAtendimento> transferenciaExistente =
-                transferenciaRepository.findByClinicaIdAndOrigemAndIdempotencyKey(
-                        clinicaId,
-                        ORIGEM_TRANSFERENCIA_N8N_RODIZIO,
-                        chaveIdempotencia
-                );
+                transferenciaRepository.findByIdempotencyKey(chaveIdempotencia);
         if (transferenciaExistente.isPresent()) {
             TransferenciaAtendimento existente = transferenciaExistente.get();
+            validarRetryRodizio(existente, id, clinicaId, fingerprint);
             return new TransferenciaRodizioHumanoResultado(
                     resultadoIdempotente(existente),
                     existente.getParaUsuario().getId(),
@@ -237,7 +236,8 @@ public class AtendimentoService {
                 transferencia,
                 clinicaId,
                 ORIGEM_TRANSFERENCIA_N8N_RODIZIO,
-                chaveIdempotencia
+                chaveIdempotencia,
+                fingerprint
         );
         return new TransferenciaRodizioHumanoResultado(resultado, novoAtendenteId, posicaoSelecionada);
     }
@@ -247,7 +247,8 @@ public class AtendimentoService {
             TransferirAtendimentoRequest request,
             Long clinicaId,
             String origemTransferencia,
-            String idempotencyKey
+            String idempotencyKey,
+            String idempotencyFingerprint
     ) {
         Atendimento atendimento = atendimentoRepository.findByIdAndClinicaIdForUpdate(id, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
@@ -284,7 +285,8 @@ public class AtendimentoService {
                     responsavel,
                     sanitizarTextoCurto(motivoTransferencia),
                     origemTransferencia,
-                    idempotencyKey
+                    idempotencyKey,
+                    idempotencyFingerprint
             ));
         }
 
@@ -556,7 +558,8 @@ public class AtendimentoService {
             Usuario responsavel,
             String motivo,
             String origem,
-            String idempotencyKey
+            String idempotencyKey,
+            String idempotencyFingerprint
     ) {
         TransferenciaAtendimento transferencia = new TransferenciaAtendimento();
         transferencia.setAtendimento(atendimento);
@@ -566,7 +569,28 @@ public class AtendimentoService {
         transferencia.setMotivo(motivo);
         transferencia.setOrigem(origem);
         transferencia.setIdempotencyKey(idempotencyKey);
+        transferencia.setIdempotencyFingerprint(idempotencyFingerprint);
         return transferencia;
+    }
+
+    private void validarRetryRodizio(
+            TransferenciaAtendimento existente,
+            Long atendimentoId,
+            Long clinicaId,
+            String fingerprint
+    ) {
+        Atendimento atendimentoExistente = existente.getAtendimento();
+        boolean mesmaOperacao = atendimentoExistente != null
+                && atendimentoId.equals(atendimentoExistente.getId())
+                && atendimentoExistente.getClinica() != null
+                && clinicaId.equals(atendimentoExistente.getClinica().getId())
+                && ORIGEM_TRANSFERENCIA_N8N_RODIZIO.equals(existente.getOrigem())
+                && fingerprint.equals(existente.getIdempotencyFingerprint());
+        if (!mesmaOperacao) {
+            throw new IdempotencyConflictException(
+                    "Esta Idempotency-Key já foi usada em outra transferência ou com dados diferentes."
+            );
+        }
     }
 
     private TransferenciaHumanoResultado resultadoIdempotente(TransferenciaAtendimento transferencia) {

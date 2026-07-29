@@ -100,11 +100,19 @@ public class N8nAtendimentoController {
     ) {
         N8nCallbackAuthorizationService.Autorizacao autorizacao =
                 authorizationService.autorizar(secret, atendimentoId);
-        request.idsOrdenados();
-        request.validarIdempotencyKey(idempotencyKey);
+        log.info("Callback N8N de rodizio recebido. path=/api/n8n/atendimentos/{}/transferir-proximo-humano "
+                        + "atendimentoId={} clinicaId={} idempotencyKeyPresente={} atendentesIdsTipo={} atendentesQuantidade={}",
+                atendimentoId,
+                atendimentoId,
+                autorizacao.clinicaId(),
+                idempotencyKey != null && !idempotencyKey.isBlank(),
+                request.tipoAtendentesIds(),
+                request.quantidadeAtendentes());
+        List<Long> atendentesIds = request.idsOrdenados();
+        String chaveIdempotencia = request.validarIdempotencyKey(idempotencyKey);
         AtendimentoService.TransferenciaRodizioHumanoResultado resultado =
                 atendimentoService.transferirProximoPorN8n(
-                        atendimentoId, request, idempotencyKey, autorizacao.clinicaId()
+                        atendimentoId, request, chaveIdempotencia, autorizacao.clinicaId()
                 );
         Map<String, Object> body = transferirHumanoResponse(resultado.transferencia());
         body.put("novoAtendenteId", resultado.novoAtendenteId());
