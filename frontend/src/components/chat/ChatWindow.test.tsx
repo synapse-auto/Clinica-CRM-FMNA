@@ -134,6 +134,29 @@ function setScrollMetrics(element: HTMLElement, metrics: { scrollHeight: number;
 }
 
 describe('ChatWindow', () => {
+  it('should_render_closed_attendance_as_read_only_without_sending_controls', () => {
+    const onSend = vi.fn();
+    const onAttach = vi.fn();
+    render(
+      <ChatWindow
+        detail={{ ...detail, status: 'ENCERRADO', dataEncerramento: '2026-07-29T12:00:00Z' }}
+        messages={[makeMessage(1)]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={onSend}
+        onAttach={onAttach}
+      />,
+    );
+
+    expect(screen.getByText(/histórico permanece disponível somente para leitura/i)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Digite uma mensagem...')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Enviar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Adicionar' })).not.toBeInTheDocument();
+    expect(onSend).not.toHaveBeenCalled();
+    expect(onAttach).not.toHaveBeenCalled();
+  });
+
   const quickMessages = [
     {
       id: 90,

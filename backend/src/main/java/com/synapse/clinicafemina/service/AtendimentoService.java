@@ -106,7 +106,9 @@ public class AtendimentoService {
             default -> null;
         };
         String filtroNormalizado = filtro == null ? "TODOS" : filtro.toUpperCase();
-        String statusEfetivo = "FINALIZADOS".equals(filtroNormalizado) ? "ENCERRADO" : normalizar(status);
+        String statusEfetivo = "FINALIZADOS".equals(filtroNormalizado)
+                ? "ENCERRADO"
+                : Optional.ofNullable(normalizar(status)).orElse("ATIVO");
 
         SmartSearchCriteria search = SmartSearchCriteria.from(busca);
         Page<Atendimento> atendimentos = atendimentoRepository.findByClinica(
@@ -372,13 +374,16 @@ public class AtendimentoService {
 
     @Transactional
     public AtendimentoDetalheDTO encerrar(Long id, Long clinicaId, String motivo) {
-        Atendimento atendimento = buscarOuFalhar(id, clinicaId);
+        Atendimento atendimento = atendimentoRepository.findByIdAndClinicaIdForUpdate(id, clinicaId)
+                .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
         if ("ENCERRADO".equals(atendimento.getStatus())) {
-            throw new IllegalStateException("Atendimento já encerrado");
+            return toDetalheDTO(atendimento);
         }
         atendimento.setStatus("ENCERRADO");
         atendimento.setDataEncerramento(OffsetDateTime.now());
-        atendimento.setMotivoEncerramento(motivo);
+        atendimento.setMotivoEncerramento(MotivoEncerramentoAtendimento.sanitizar(
+                motivo, MotivoEncerramentoAtendimento.PADRAO_MANUAL
+        ));
         return toDetalheDTO(atendimentoRepository.save(atendimento));
     }
 

@@ -171,6 +171,20 @@ export type AtendimentoFilter =
   | 'FINALIZADOS'
   | 'REVISAO';
 
+export type AtendimentosAtivosContagem = {
+  total: number;
+};
+
+export type EncerramentoEmMassaRequest = {
+  confirmado: true;
+  motivo?: string;
+};
+
+export type EncerramentoEmMassaResponse = {
+  encerrados: number;
+  dataEncerramento: string;
+};
+
 export type NotificacaoAtendimento = {
   id: number;
   atendimentoId: number;

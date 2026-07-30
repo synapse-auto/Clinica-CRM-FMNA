@@ -51,6 +51,27 @@ describe('ChatList', () => {
     expect(screen.queryByRole('button', { name: 'Novo atendimento' })).not.toBeInTheDocument();
   });
 
+  it('should_keep_manual_start_and_show_accessible_close_all_action_for_managers', () => {
+    const onStartManual = vi.fn();
+    const onCloseAll = vi.fn();
+    render(
+      <ChatList
+        {...baseProps}
+        conversations={[]}
+        canStartManual
+        onStartManual={onStartManual}
+        canCloseAll
+        onCloseAll={onCloseAll}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Novo atendimento' })).toBeInTheDocument();
+    const closeAll = screen.getByRole('button', { name: 'Encerrar todos os atendimentos' });
+    expect(closeAll).toHaveAttribute('title', 'Encerrar todos os atendimentos');
+    fireEvent.click(closeAll);
+    expect(onCloseAll).toHaveBeenCalledOnce();
+  });
+
   const unicodeName = '𝑨𝒃𝒊𝒎𝒂𝒆𝒍 𝑴𝒐𝒖𝒓𝒂';
 
   it('should_render_real_tags_and_limit_visual_overflow', () => {

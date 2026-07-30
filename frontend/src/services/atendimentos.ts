@@ -1,11 +1,14 @@
 import type {
   AtendenteOption,
+  AtendimentosAtivosContagem,
   AtendimentoDetalhe,
   AtendimentoFilter,
   AtendimentoLembrete,
   AtendimentoPage,
   AtendimentoResumo,
   EnviarTemplateWhatsappRequest,
+  EncerramentoEmMassaRequest,
+  EncerramentoEmMassaResponse,
   IniciarAtendimentoRequest,
   IniciarAtendimentoResponse,
   MensagemAtendimento,
@@ -162,6 +165,24 @@ export function assumirAtendimento(id: number): Promise<AtendimentoDetalhe> {
 
 export function ativarIaAtendimento(id: number): Promise<AtendimentoDetalhe> {
   return requestJson(`/api/atendimentos/${id}/modo-ia`, { method: 'PATCH' });
+}
+
+export function encerrarAtendimento(id: number, motivo?: string): Promise<AtendimentoDetalhe> {
+  const search = motivo?.trim() ? `?motivo=${encodeURIComponent(motivo.trim())}` : '';
+  return requestJson(`/api/atendimentos/${id}/encerrar${search}`, { method: 'POST' });
+}
+
+export function contarAtendimentosAtivos(): Promise<AtendimentosAtivosContagem> {
+  return requestJson('/api/atendimentos/ativos/contagem');
+}
+
+export function encerrarTodosAtendimentos(
+  request: EncerramentoEmMassaRequest,
+): Promise<EncerramentoEmMassaResponse> {
+  return requestJson('/api/atendimentos/encerrar-todos', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
 }
 
 export function revisarConvenio(

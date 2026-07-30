@@ -18,6 +18,9 @@ const services = vi.hoisted(() => ({
   getNotificacoes: vi.fn().mockResolvedValue([]),
   getNotificacoesResumo: vi.fn().mockResolvedValue(0),
   iniciarAtendimento: vi.fn(),
+  encerrarAtendimento: vi.fn(),
+  contarAtendimentosAtivos: vi.fn(),
+  encerrarTodosAtendimentos: vi.fn(),
 }));
 
 vi.mock('@/services/atendimentos', () => ({
@@ -36,6 +39,8 @@ vi.mock('./ChatList', () => ({
     onSelect: (id: number) => void;
     onSearchChange: (value: string) => void;
     onStartManual?: () => void;
+    onCloseAll?: () => void;
+    canCloseAll?: boolean;
   }) => (
     <div>
       <span data-testid="selected-atendimento">{props.activeId ?? 'nenhum'}</span>
@@ -51,6 +56,9 @@ vi.mock('./ChatList', () => ({
       />
       {props.onStartManual ? (
         <button type="button" onClick={props.onStartManual}>Novo atendimento</button>
+      ) : null}
+      {props.canCloseAll ? (
+        <button type="button" onClick={props.onCloseAll}>Encerrar todos</button>
       ) : null}
       {props.searching ? <span>Pesquisando...</span> : null}
     </div>
@@ -99,10 +107,19 @@ vi.mock('./ChatWindow', () => ({
   },
 }));
 vi.mock('./ContactDetails', () => ({
-  ContactDetails: ({ onClose }: { onClose: () => void }) => (
+  ContactDetails: ({
+    onClose,
+    onEncerrarAtendimento,
+  }: {
+    onClose: () => void;
+    onEncerrarAtendimento?: () => void;
+  }) => (
     <div>
       <span>Controles do painel</span>
       <button type="button" onClick={onClose}>Minimizar detalhes do atendimento</button>
+      {onEncerrarAtendimento ? (
+        <button type="button" onClick={onEncerrarAtendimento}>Encerrar atendimento</button>
+      ) : null}
     </div>
   ),
 }));
@@ -488,5 +505,86 @@ describe('AtendimentosClient troca de conversa (latência)', () => {
     expect(screen.getByRole('status')).toHaveTextContent('A IA transferiu um atendimento para humano');
     expect(services.getAtendimento.mock.calls.length).toBeGreaterThan(detailCallsBeforeNotification);
     vi.useRealTimers();
+  });
+});
+
+describe('AtendimentosClient encerramento', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    services.listAtendimentos.mockResolvedValue({ content: [{ id: 8 }], totalElements: 1 });
+    services.getAtendimento.mockImplementation((id: number) => Promise.resolve({ id, status: 'ATIVO' }));
+    services.getMensagens.mockResolvedValue([]);
+    services.getAtendimentoTags.mockResolvedValue([]);
+    services.getAtendimentoLembretes.mockResolvedValue([]);
+    services.marcarAtendimentoComoLido.mockResolvedValue(undefined);
+    services.encerrarAtendimento.mockReset();
+    services.contarAtendimentosAtivos.mockReset();
+    services.encerrarTodosAtendimentos.mockReset();
+  });
+
+  it('should_remove_closed_attendance_select_the_next_one_and_update_the_url', async () => {
+    services.encerrarAtendimento.mockResolvedValue({ id: 7, status: 'ENCERRADO' });
+    window.localStorage.setItem('clinica-crm-atendimentos-details-open', 'true');
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7 }, { id: 8 }]} atendentes={[]} user={gestor} />);
+
+    const closeAction = screen.getByRole('button', { name: 'Encerrar atendimento' });
+    await user.click(closeAction);
+    expect(screen.getByRole('dialog', { name: 'Encerrar atendimento?' })).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: 'Encerrar atendimento' }).at(-1)!);
+
+    await waitFor(() => expect(services.encerrarAtendimento).toHaveBeenCalledWith(7));
+    await waitFor(() => expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('8'));
+    expect(screen.getByTestId('conversation-ids')).toHaveTextContent('8');
+    expect(window.location.search).toBe('?atendimentoId=8');
+    expect(screen.getByRole('status')).toHaveTextContent('Atendimento encerrado.');
+  });
+
+  it('should_not_show_close_all_for_medico', () => {
+    render(
+      <AtendimentosClient
+        initialConversations={[]}
+        atendentes={[]}
+        user={{ ...gestor, perfil: 'MEDICO' }}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Encerrar todos' })).not.toBeInTheDocument();
+  });
+
+  it('should_not_call_bulk_closure_when_active_count_is_zero', async () => {
+    services.contarAtendimentosAtivos.mockResolvedValue({ total: 0 });
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Encerrar todos' }));
+
+    await waitFor(() => expect(services.contarAtendimentosAtivos).toHaveBeenCalledOnce());
+    expect(services.encerrarTodosAtendimentos).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent('Não há atendimentos ativos para encerrar.');
+  });
+
+  it('should_require_strong_confirmation_and_clear_selection_after_bulk_closure', async () => {
+    services.contarAtendimentosAtivos.mockResolvedValue({ total: 2 });
+    services.encerrarTodosAtendimentos.mockResolvedValue({ encerrados: 2, dataEncerramento: '2026-07-29T12:00:00Z' });
+    services.listAtendimentos.mockResolvedValue({ content: [], totalElements: 0 });
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7 }, { id: 8 }]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Encerrar todos' }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Encerrar todos os atendimentos?' })).toBeInTheDocument());
+    const confirm = screen.getAllByRole('button', { name: 'Encerrar 2 atendimentos' }).at(-1)!;
+    expect(confirm).toBeDisabled();
+
+    await user.type(screen.getByRole('textbox', { name: 'Confirmação para encerrar todos' }), 'ENCERRAR TODOS');
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+
+    await waitFor(() => expect(services.encerrarTodosAtendimentos).toHaveBeenCalledWith({ confirmado: true }));
+    await waitFor(() => expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('nenhum'));
+    expect(screen.getByTestId('conversation-ids')).toHaveTextContent('');
+    expect(window.location.search).toBe('');
+    expect(screen.getByRole('status')).toHaveTextContent('2 atendimentos encerrados.');
   });
 });

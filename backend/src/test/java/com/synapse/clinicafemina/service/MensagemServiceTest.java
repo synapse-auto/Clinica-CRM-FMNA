@@ -35,6 +35,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -145,6 +146,19 @@ class MensagemServiceTest {
         org.junit.jupiter.api.Assertions.assertFalse(resultado.duplicada());
         verify(usuarioRepository, never()).findAtivoByIdAndClinicaId(any(), any());
         verify(atendimentoRepository, atLeastOnce()).save(atendimento);
+    }
+
+    @Test
+    void should_reject_message_for_closed_attendance_without_external_effects() {
+        atendimento.setStatus("ENCERRADO");
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> service.enviar(30L, 9L, new EnviarMensagemRequest("TEXTO", "Olá"), 99L));
+
+        assertEquals("Não é possível enviar mensagens em um atendimento encerrado.", error.getMessage());
+        verify(mensagemRepository, never()).save(any());
+        verify(whatsappOutboundClient, never()).enviarTextoComResultado(any(), any());
     }
 
     @Test

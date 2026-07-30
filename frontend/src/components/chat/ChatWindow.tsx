@@ -83,6 +83,7 @@ export function ChatWindow({
   const templatesSupported = capabilities.supportsMessageTemplates;
   const windowOpen = !enforcesCustomerCareWindow || detail?.janelaWhatsappAberta !== false;
   const templatesAvailable = templatesSupported && detail?.whatsappTemplatesDisponiveis === true;
+  const atendimentoEncerrado = detail?.status === 'ENCERRADO';
 
   const scrollToLastMessage = useCallback((behavior: ScrollBehavior = 'auto') => {
     const container = messageScrollContainer.current;
@@ -255,7 +256,7 @@ export function ChatWindow({
 
   async function submit() {
     const value = content.trim();
-    if (!value || busy || !detail || !windowOpen) return;
+    if (!value || busy || !detail || !windowOpen || atendimentoEncerrado) return;
     try {
       await onSend(value);
       setContent('');
@@ -266,7 +267,7 @@ export function ChatWindow({
   }
 
   function openTemplates(opener: HTMLElement | null) {
-    if (!detail || !templatesAvailable) return;
+    if (!detail || !templatesAvailable || atendimentoEncerrado) return;
     templateOpener.current = opener;
     setAddMenuOpen(false);
     setTemplatesOpen(true);
@@ -382,11 +383,11 @@ export function ChatWindow({
           accept="image/jpeg,image/png,image/webp,audio/ogg,audio/mpeg,audio/mp4,application/pdf"
           onChange={(event) => {
             const file = event.target.files?.[0];
-            if (file && windowOpen) void onAttach(file).catch(() => undefined);
+            if (file && windowOpen && !atendimentoEncerrado) void onAttach(file).catch(() => undefined);
             event.target.value = '';
           }}
         />
-        {windowOpen && quickOpen && detail ? (
+        {windowOpen && !atendimentoEncerrado && quickOpen && detail ? (
           <div className={`${CHAT_CONTENT_WIDTH} mb-3 rounded-xl border border-clinic-border bg-clinic-surface p-3 shadow-lg shadow-clinic-primary/5`}>
             <label className="relative block">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-clinic-muted" />
@@ -437,7 +438,14 @@ export function ChatWindow({
             </div>
           </div>
         ) : null}
-        {detail && enforcesCustomerCareWindow && !windowOpen ? (
+        {detail && atendimentoEncerrado ? (
+          <div className={`${CHAT_CONTENT_WIDTH} flex flex-col items-center rounded-lg border border-clinic-muted/35 bg-clinic-soft px-4 py-5 text-center`}>
+            <Clock3 className="h-5 w-5 text-clinic-muted" />
+            <p className="mt-2 max-w-2xl text-xs font-bold text-clinic-text">
+              Este atendimento foi encerrado. O histórico permanece disponível somente para leitura.
+            </p>
+          </div>
+        ) : detail && enforcesCustomerCareWindow && !windowOpen ? (
           <div className={`${CHAT_CONTENT_WIDTH} flex flex-col items-center rounded-lg border border-clinic-warning/35 bg-clinic-warning/10 px-4 py-5 text-center`}>
             <Clock3 className="h-5 w-5 text-clinic-warning" />
             <p className="mt-2 max-w-2xl text-xs font-bold text-clinic-text">
@@ -465,7 +473,7 @@ export function ChatWindow({
               <button
                 type="button"
                 aria-label="Mensagens rápidas"
-                disabled={!detail || busy || quickMessages.length === 0}
+                disabled={!detail || busy || atendimentoEncerrado || quickMessages.length === 0}
                 onClick={() => (quickOpen ? closeQuickMessages() : openQuickMessages())}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary disabled:opacity-40"
               >
@@ -477,7 +485,7 @@ export function ChatWindow({
                   aria-label="Adicionar"
                   aria-expanded={addMenuOpen}
                   aria-haspopup="menu"
-                  disabled={!detail || busy}
+                  disabled={!detail || busy || atendimentoEncerrado}
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-primary focus-visible:outline-2 focus-visible:outline-clinic-primary disabled:opacity-40"
                 >
                   <Plus className="h-5 w-5" />
@@ -486,7 +494,7 @@ export function ChatWindow({
                   <Menu.Positioner side="top" align="start" sideOffset={8} className="z-[70]">
                     <Menu.Popup className="w-64 rounded-md border border-clinic-border bg-clinic-surface p-1.5 text-clinic-text shadow-xl outline-none">
                       <Menu.Item
-                        disabled={!windowOpen || busy}
+                        disabled={!windowOpen || busy || atendimentoEncerrado}
                         onClick={() => fileInput.current?.click()}
                         className="flex cursor-default items-start gap-3 rounded-md px-3 py-2.5 text-xs outline-none data-[highlighted]:bg-clinic-hover data-[disabled]:opacity-45"
                       >
@@ -495,7 +503,7 @@ export function ChatWindow({
                       </Menu.Item>
                       {templatesSupported ? (
                         <Menu.Item
-                          disabled={!templatesAvailable || busy}
+                          disabled={!templatesAvailable || busy || atendimentoEncerrado}
                           onClick={() => openTemplates(addButton.current)}
                           className="flex cursor-default items-start gap-3 rounded-md px-3 py-2.5 text-xs outline-none data-[highlighted]:bg-clinic-hover data-[disabled]:opacity-45"
                         >
@@ -510,7 +518,7 @@ export function ChatWindow({
               <textarea
                 ref={composer}
                 value={content}
-                disabled={!detail || busy}
+                disabled={!detail || busy || atendimentoEncerrado}
                 onChange={(event) => {
                   setContent(event.target.value);
                   onDraftChange?.(event.target.value);
@@ -523,7 +531,7 @@ export function ChatWindow({
               <button
                 type="button"
                 aria-label="Enviar"
-                disabled={!detail || busy || !content.trim()}
+                disabled={!detail || busy || atendimentoEncerrado || !content.trim()}
                 onClick={() => void submit()}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-clinic-primary text-white transition hover:bg-clinic-primary-strong disabled:opacity-40"
               >
@@ -533,7 +541,7 @@ export function ChatWindow({
           </div>
         )}
       </div>
-      {templatesSupported ? (
+      {templatesSupported && !atendimentoEncerrado ? (
         <WhatsappTemplateDialog
           open={templatesOpen}
           atendimentoId={detail?.id ?? null}

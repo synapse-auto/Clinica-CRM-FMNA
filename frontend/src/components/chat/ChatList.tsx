@@ -1,6 +1,6 @@
 'use client';
 
-import { LoaderCircle, Plus, Search } from 'lucide-react';
+import { CircleStop, LoaderCircle, Plus, Search } from 'lucide-react';
 import type {
   AtendimentoFilter,
   AtendimentoResumo,
@@ -24,6 +24,9 @@ type Props = {
   onSearchChange: (value: string) => void;
   canStartManual?: boolean;
   onStartManual?: () => void;
+  canCloseAll?: boolean;
+  closeAllLoading?: boolean;
+  onCloseAll?: () => void;
 };
 
 const filters = [
@@ -63,6 +66,20 @@ export function ChatList(props: Props) {
               >
                 <Plus className="h-3.5 w-3.5" />
                 Novo atendimento
+              </button>
+            ) : null}
+            {props.canCloseAll ? (
+              <button
+                type="button"
+                disabled={props.closeAllLoading}
+                onClick={props.onCloseAll}
+                aria-label="Encerrar todos os atendimentos"
+                title="Encerrar todos os atendimentos"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-clinic-danger/50 px-2.5 text-[10px] font-extrabold text-clinic-danger hover:bg-clinic-danger/10 disabled:opacity-50"
+              >
+                {props.closeAllLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <CircleStop className="h-3.5 w-3.5" />}
+                <span className="hidden sm:inline">Encerrar todos</span>
+                <span className="sm:hidden">Encerrar</span>
               </button>
             ) : null}
           </div>

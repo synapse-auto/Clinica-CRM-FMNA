@@ -1,7 +1,7 @@
 'use client';
 
 import { type FormEvent, type ReactNode, useState } from 'react';
-import { Bot, CalendarCheck, CalendarClock, Check, Mail, PanelRightClose, Phone, Plus, User, X } from 'lucide-react';
+import { Bot, CalendarCheck, CalendarClock, Check, CircleStop, Mail, PanelRightClose, Phone, Plus, User, X } from 'lucide-react';
 import type {
   AtendenteOption,
   AtendimentoDetalhe,
@@ -26,6 +26,7 @@ type Props = {
   busy: boolean;
   onClose: () => void;
   onAssume: () => Promise<void>;
+  onEncerrarAtendimento?: () => void;
   onActivateIa: () => Promise<void>;
   onTransfer: (usuarioId: number) => Promise<void>;
   onReview: (result: 'APROVADO' | 'RECUSADO' | 'PENDENTE') => Promise<void>;
@@ -49,6 +50,7 @@ export function ContactDetails({
   busy,
   onClose,
   onAssume,
+  onEncerrarAtendimento,
   onActivateIa,
   onTransfer,
   onReview,
@@ -76,6 +78,7 @@ export function ContactDetails({
   const linkedTagIds = new Set(tags.map((tag) => tag.id));
   const tagsToAdd = availableTags.filter((tag) => !linkedTagIds.has(tag.id));
   const pendingReminders = reminders.filter((reminder) => reminder.status === 'PENDENTE');
+  const canManageActive = canManage && detail.status === 'ATIVO';
 
   async function submitReminder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -99,7 +102,7 @@ export function ContactDetails({
         <h2 className="text-[16px] font-extrabold text-clinic-text">{paciente.nome}</h2>
         <p className="mt-1 text-[11px] font-semibold text-clinic-muted">{detail.status}</p>
 
-        {paciente.requerRevisao && canManage ? (
+        {paciente.requerRevisao && canManageActive ? (
           <div className="mt-4 rounded-xl border border-clinic-warning/30 bg-clinic-warning/5 p-3">
             <p className="mb-2 flex items-center justify-center gap-1 text-[9px] font-extrabold text-clinic-warning">
               <CalendarCheck className="h-3.5 w-3.5" />
@@ -133,7 +136,7 @@ export function ContactDetails({
               Convênio: <strong className="text-clinic-text">{paciente.convenioStatus}</strong>
             </p>
           ) : null}
-          {canManage && !detail.atendentePrincipal ? (
+          {canManageActive && !detail.atendentePrincipal ? (
             <button
               disabled={busy}
               onClick={() => void onAssume()}
@@ -142,7 +145,7 @@ export function ContactDetails({
               Assumir atendimento
             </button>
           ) : null}
-          {canManage && !detail.tratadoPorIa ? (
+          {canManageActive && !detail.tratadoPorIa ? (
             <button
               type="button"
               disabled={busy}
@@ -153,7 +156,7 @@ export function ContactDetails({
               Voltar para IA
             </button>
           ) : null}
-          {canManage && atendentes.length > 0 ? (
+          {canManageActive && atendentes.length > 0 ? (
             <label className="block text-[9px] font-bold text-clinic-muted">
               Transferir para
               <SearchableSelect
@@ -167,6 +170,17 @@ export function ContactDetails({
                 options={atendentes.map((atendente) => ({ value: String(atendente.id), label: atendente.nome }))}
               />
             </label>
+          ) : null}
+          {canManageActive && onEncerrarAtendimento ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onEncerrarAtendimento}
+              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-clinic-danger/50 bg-clinic-danger/5 text-[11px] font-extrabold text-clinic-danger hover:bg-clinic-danger/10 disabled:opacity-50"
+            >
+              <CircleStop className="h-3.5 w-3.5" />
+              Encerrar atendimento
+            </button>
           ) : null}
         </Section>
 
@@ -182,7 +196,7 @@ export function ContactDetails({
                 >
                   <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: tag.cor }} />
                   <span className="truncate">{tag.nome}</span>
-                  {canManage ? (
+                  {canManageActive ? (
                     <button
                       type="button"
                       aria-label={`Remover tag ${tag.nome}`}
@@ -198,7 +212,7 @@ export function ContactDetails({
             </div>
           )}
 
-          {canManage ? (
+          {canManageActive ? (
             <div className="space-y-2">
               <button
                 type="button"
@@ -232,7 +246,7 @@ export function ContactDetails({
         </Section>
 
         <Section title="Lembretes">
-          {canManage ? (
+          {canManageActive ? (
             <form onSubmit={(event) => void submitReminder(event)} className="space-y-2 rounded-lg border border-clinic-border bg-clinic-soft/40 p-2">
               <div className="grid grid-cols-2 gap-2">
                 <label className="block text-[9px] font-bold text-clinic-muted">
@@ -303,7 +317,7 @@ export function ContactDetails({
                   <p className="break-words text-[10px] leading-4 text-clinic-text">
                     {reminder.mensagem}
                   </p>
-                  {canManage ? (
+                  {canManageActive ? (
                     <div className="mt-2 flex gap-1.5">
                       <button
                         type="button"

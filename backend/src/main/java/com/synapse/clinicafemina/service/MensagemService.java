@@ -250,6 +250,9 @@ public class MensagemService {
     private Atendimento buscarAtendimentoAtivo(Long atendimentoId, Long clinicaId) {
         Atendimento atendimento = atendimentoRepository.findByIdAndClinicaId(atendimentoId, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
+        if ("ENCERRADO".equals(atendimento.getStatus())) {
+            throw new IllegalStateException("Não é possível enviar mensagens em um atendimento encerrado.");
+        }
         if (!"ATIVO".equals(atendimento.getStatus())) {
             throw new IllegalStateException("Só é possível enviar mensagens para atendimentos ativos");
         }

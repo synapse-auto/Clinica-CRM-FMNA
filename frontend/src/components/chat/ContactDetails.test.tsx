@@ -101,6 +101,33 @@ describe('ContactDetails', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('should_show_close_attendance_only_for_managers_with_an_active_attendance', async () => {
+    const onEncerrarAtendimento = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <ContactDetails
+        detail={detail}
+        {...baseProps}
+        onEncerrarAtendimento={onEncerrarAtendimento}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Encerrar atendimento' }));
+    expect(onEncerrarAtendimento).toHaveBeenCalledOnce();
+
+    rerender(
+      <ContactDetails
+        detail={{ ...detail, status: 'ENCERRADO', dataEncerramento: '2026-07-29T12:00:00Z' }}
+        {...baseProps}
+        onEncerrarAtendimento={onEncerrarAtendimento}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Encerrar atendimento' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Assumir atendimento' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Voltar para IA' })).not.toBeInTheDocument();
+  });
+
   it('should_show_unicode_safe_initials_in_patient_details', () => {
     render(
       <ContactDetails

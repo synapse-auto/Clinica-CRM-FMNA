@@ -27,6 +27,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
@@ -99,6 +100,80 @@ class AtendimentoServiceTest {
         );
 
         assertFalse(result.isEmpty());
+    }
+
+    @Test
+    void should_list_only_active_attendances_for_operational_filters() {
+        stubList(List.of(atendimento));
+
+        service.listar(1L, null, "TODOS", "TODOS", null, null, PageRequest.of(0, 20));
+        service.listar(1L, null, "IA", "TODOS", null, null, PageRequest.of(0, 20));
+        service.listar(1L, null, "HUMANO", "TODOS", null, null, PageRequest.of(0, 20));
+
+        verify(atendimentoRepository, times(3)).findByClinica(
+                eq(1L), eq("ATIVO"), any(), any(), anyBoolean(), anyBoolean(), anyBoolean(),
+                anyInt(), anyString(), anyString(), anyString(), anyString(), any(),
+                anyString(), anyString(), anyString(), anyString(), anyString(), any()
+        );
+    }
+
+    @Test
+    void should_list_only_closed_attendances_for_finalizados_filter() {
+        stubList(List.of(atendimento));
+
+        service.listar(1L, null, "TODOS", "FINALIZADOS", null, null, PageRequest.of(0, 20));
+
+        verify(atendimentoRepository).findByClinica(
+                eq(1L), eq("ENCERRADO"), any(), any(), anyBoolean(), anyBoolean(), anyBoolean(),
+                anyInt(), anyString(), anyString(), anyString(), anyString(), any(),
+                anyString(), anyString(), anyString(), anyString(), anyString(), any()
+        );
+    }
+
+    @Test
+    void should_close_active_attendance_with_default_reason_and_preserve_relations() {
+        Paciente pacienteOriginal = atendimento.getPaciente();
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L))
+                .thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.save(atendimento)).thenReturn(atendimento);
+
+        service.encerrar(3L, 1L, null);
+
+        assertEquals("ENCERRADO", atendimento.getStatus());
+        assertTrue(atendimento.getDataEncerramento() != null);
+        assertEquals(MotivoEncerramentoAtendimento.PADRAO_MANUAL, atendimento.getMotivoEncerramento());
+        assertSame(pacienteOriginal, atendimento.getPaciente());
+        verify(atendimentoRepository).save(atendimento);
+        verify(mensagemRepository, never()).save(any(Mensagem.class));
+        verify(notificationService, never()).notificarAtribuicao(any(), any());
+        verify(broadcastService, never()).broadcastTransferencia(anyLong(), anyLong(), anyLong(), anyString(), anyLong(), anyString(), anyString());
+        verify(whatsappOutboundClient, never()).enviarTextoComResultado(anyString(), anyString());
+    }
+
+    @Test
+    void should_keep_original_closure_when_attendance_is_already_closed() {
+        OffsetDateTime encerradoEm = OffsetDateTime.parse("2026-07-29T10:00:00Z");
+        atendimento.setStatus("ENCERRADO");
+        atendimento.setDataEncerramento(encerradoEm);
+        atendimento.setMotivoEncerramento("Motivo original");
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L))
+                .thenReturn(Optional.of(atendimento));
+
+        service.encerrar(3L, 1L, "Outro motivo");
+
+        assertEquals(encerradoEm, atendimento.getDataEncerramento());
+        assertEquals("Motivo original", atendimento.getMotivoEncerramento());
+        verify(atendimentoRepository, never()).save(any());
+    }
+
+    @Test
+    void should_not_close_attendance_from_another_clinic() {
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 2L))
+                .thenReturn(Optional.empty());
+
+        assertThrows(NotFoundException.class, () -> service.encerrar(3L, 2L, null));
+
+        verify(atendimentoRepository, never()).save(any());
     }
 
     @Test

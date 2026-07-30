@@ -9,10 +9,13 @@ import {
   ativarIaAtendimento,
   cancelarAtendimentoLembrete,
   concluirAtendimentoLembrete,
+  contarAtendimentosAtivos,
   criarAtendimentoLembrete,
   enviarAnexo,
   enviarMensagem,
   enviarWhatsappTemplate,
+  encerrarAtendimento,
+  encerrarTodosAtendimentos,
   getAtendimento,
   getAtendimentoLembretes,
   getAtendimentoTags,
@@ -46,6 +49,7 @@ import { ChatList } from './ChatList';
 import { ChatWindow } from './ChatWindow';
 import { IniciarAtendimentoDialog } from './IniciarAtendimentoDialog';
 import { ContactDetails } from './ContactDetails';
+import { EncerrarAtendimentoDialog } from './EncerrarAtendimentoDialog';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { isSearchableTerm, normalizeSearchText } from '@/lib/search';
 
@@ -93,6 +97,11 @@ export function AtendimentosClient({
   const [transferAlert, setTransferAlert] = useState<{ atendimentoId: number; descricao: string } | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [startDialogOpen, setStartDialogOpen] = useState(false);
+  const [closeIndividualDialogOpen, setCloseIndividualDialogOpen] = useState(false);
+  const [closeAllDialogOpen, setCloseAllDialogOpen] = useState(false);
+  const [closeAllTotal, setCloseAllTotal] = useState(0);
+  const [closeAllLoading, setCloseAllLoading] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [composerDrafts, setComposerDrafts] = useState<Record<number, string>>({});
   const knownNotifications = useRef<Set<number> | null>(null);
@@ -102,6 +111,7 @@ export function AtendimentosClient({
   const activeAbortController = useRef<AbortController | null>(null);
   const activeRequestVersion = useRef(0);
   const activeInFlight = useRef(false);
+  const bloquearSelecaoAutomatica = useRef(false);
   const firstListEffect = useRef(true);
   const reopenDetailsButton = useRef<HTMLButtonElement>(null);
   const focusReopenDetails = useRef(false);
@@ -111,6 +121,29 @@ export function AtendimentosClient({
     : '';
   const requestSearchRef = useRef('');
   requestSearchRef.current = searchKey ? debouncedSearch.trim() : '';
+  const canManage = user.perfil === 'GESTOR' || user.perfil === 'RECEPCIONISTA';
+
+  const atualizarSelecao = useCallback((nextId: number | null) => {
+    activeAbortController.current?.abort();
+    activeRequestVersion.current += 1;
+    activeInFlight.current = false;
+    activeIdRef.current = nextId;
+    if (nextId !== null) bloquearSelecaoAutomatica.current = false;
+    setActiveId(nextId);
+    window.history.replaceState({}, '', nextId ? `/atendimentos?atendimentoId=${nextId}` : '/atendimentos');
+  }, []);
+
+  const limparAtendimentoEncerrado = useCallback(() => {
+    bloquearSelecaoAutomatica.current = true;
+    atualizarSelecao(null);
+    setDetail(null);
+    setMessages([]);
+    setActiveTags([]);
+    setReminders([]);
+    setRemindersError(null);
+    setError(null);
+    setDetailLoading(false);
+  }, [atualizarSelecao]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(DETAILS_PANEL_STORAGE_KEY);
@@ -148,7 +181,9 @@ export function AtendimentosClient({
       if (controller.signal.aborted || requestVersion !== listRequestVersion.current) return;
       setConversations(page.content);
       setListError(null);
-      setActiveId((current) => current ?? page.content[0]?.id ?? null);
+      if (activeIdRef.current === null && !bloquearSelecaoAutomatica.current && page.content[0]) {
+        atualizarSelecao(page.content[0].id);
+      }
     } catch (cause) {
       if (controller.signal.aborted || requestVersion !== listRequestVersion.current) return;
       setListError(errorMessage(cause));
@@ -157,7 +192,7 @@ export function AtendimentosClient({
         setSearching(false);
       }
     }
-  }, [filter, searchKey, type]);
+  }, [atualizarSelecao, filter, searchKey, type]);
 
   const refreshListRef = useRef(refreshList);
   refreshListRef.current = refreshList;
@@ -425,9 +460,7 @@ export function AtendimentosClient({
     mensagemInicial: string,
   ) {
     const id = response.atendimentoId;
-    activeIdRef.current = id;
-    setActiveId(id);
-    window.history.replaceState({}, '', `/atendimentos?atendimentoId=${id}`);
+    atualizarSelecao(id);
     void loadActiveConversation(id, 'select');
     void refreshList();
 
@@ -461,6 +494,80 @@ export function AtendimentosClient({
     }
   }
 
+  async function solicitarEncerramentoTodos() {
+    if (busy || closeAllLoading) return;
+    setCloseAllLoading(true);
+    setError(null);
+    try {
+      const { total } = await contarAtendimentosAtivos();
+      if (total === 0) {
+        setFeedback('Não há atendimentos ativos para encerrar.');
+        return;
+      }
+      setCloseAllTotal(total);
+      setCloseAllDialogOpen(true);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setCloseAllLoading(false);
+    }
+  }
+
+  function aplicarEncerramentoIndividual(atendimentoId: number, encerrado: AtendimentoDetalhe) {
+    activeAbortController.current?.abort();
+    activeRequestVersion.current += 1;
+    activeInFlight.current = false;
+    if (filter === 'FINALIZADOS') {
+      setDetail(encerrado);
+      void refreshList();
+      return;
+    }
+    const indiceEncerrado = conversations.findIndex((item) => item.id === atendimentoId);
+    const restantes = conversations.filter((item) => item.id !== atendimentoId);
+    const indiceSeguinte = indiceEncerrado < 0 ? 0 : indiceEncerrado;
+    const proximo = restantes[indiceSeguinte] ?? restantes[indiceSeguinte - 1] ?? null;
+    setConversations(restantes);
+    if (proximo) atualizarSelecao(proximo.id);
+    else limparAtendimentoEncerrado();
+    void refreshList();
+  }
+
+  async function encerrarAtendimentoSelecionado() {
+    const atendimentoId = activeIdRef.current;
+    if (!atendimentoId || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const encerrado = await encerrarAtendimento(atendimentoId);
+      setCloseIndividualDialogOpen(false);
+      aplicarEncerramentoIndividual(atendimentoId, encerrado);
+      setFeedback('Atendimento encerrado.');
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function encerrarTodosAtendimentosAtivos() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const resultado = await encerrarTodosAtendimentos({ confirmado: true });
+      setCloseAllDialogOpen(false);
+      limparAtendimentoEncerrado();
+      setComposerDrafts({});
+      if (filter !== 'FINALIZADOS') setConversations([]);
+      void refreshList();
+      setFeedback(`${resultado.encerrados} atendimento${resultado.encerrados === 1 ? '' : 's'} encerrado${resultado.encerrados === 1 ? '' : 's'}.`);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="relative flex h-full overflow-hidden bg-clinic-canvas">
       {notificationCount > 0 ? (
@@ -469,6 +576,11 @@ export function AtendimentosClient({
           <button className="text-clinic-primary" onClick={() => void dismissNotifications()}>
             Marcar como lidas
           </button>
+        </div>
+      ) : null}
+      {feedback ? (
+        <div role="status" className="absolute right-4 top-14 z-30 rounded-lg border border-clinic-primary/30 bg-clinic-surface px-3 py-2 text-[11px] font-semibold text-clinic-text shadow-lg">
+          {feedback}
         </div>
       ) : null}
       {transferAlert ? (
@@ -481,7 +593,7 @@ export function AtendimentosClient({
             type="button"
             className="shrink-0 text-clinic-primary"
             onClick={() => {
-              setActiveId(transferAlert.atendimentoId);
+              atualizarSelecao(transferAlert.atendimentoId);
               setTransferAlert(null);
             }}
           >
@@ -507,14 +619,18 @@ export function AtendimentosClient({
         searching={searching}
         error={listError}
         onRetry={() => void refreshList()}
-        onSelect={setActiveId}
+        onSelect={atualizarSelecao}
         onFilterChange={(nextFilter, nextType) => {
+          bloquearSelecaoAutomatica.current = false;
           setFilter(nextFilter);
           setType(nextType);
         }}
         onSearchChange={setSearch}
-        canStartManual={user.perfil === 'GESTOR' || user.perfil === 'RECEPCIONISTA'}
+        canStartManual={canManage}
         onStartManual={() => setStartDialogOpen(true)}
+        canCloseAll={canManage}
+        closeAllLoading={closeAllLoading}
+        onCloseAll={() => void solicitarEncerramentoTodos()}
       />
       <div className="flex min-w-0 flex-1">
         <ChatWindow
@@ -571,12 +687,13 @@ export function AtendimentosClient({
         reminders={reminders}
         remindersLoading={remindersLoading}
         remindersError={remindersError}
-        canManage={user.perfil !== 'MEDICO'}
+        canManage={canManage}
         busy={busy}
         onClose={() => changeDetailsOpen(false)}
         onAssume={() => activeId
           ? runAction(() => assumirAtendimento(activeId))
           : Promise.resolve()}
+        onEncerrarAtendimento={() => setCloseIndividualDialogOpen(true)}
         onActivateIa={() => activeId
           ? runAction(() => ativarIaAtendimento(activeId))
           : Promise.resolve()}
@@ -607,6 +724,21 @@ export function AtendimentosClient({
         open={startDialogOpen}
         onOpenChange={setStartDialogOpen}
         onStarted={handleManualStarted}
+      />
+      <EncerrarAtendimentoDialog
+        open={closeIndividualDialogOpen}
+        mode="INDIVIDUAL"
+        processing={busy}
+        onOpenChange={setCloseIndividualDialogOpen}
+        onConfirm={() => void encerrarAtendimentoSelecionado()}
+      />
+      <EncerrarAtendimentoDialog
+        open={closeAllDialogOpen}
+        mode="MASSA"
+        total={closeAllTotal}
+        processing={busy}
+        onOpenChange={setCloseAllDialogOpen}
+        onConfirm={() => void encerrarTodosAtendimentosAtivos()}
       />
     </div>
   );

@@ -9,12 +9,16 @@ import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.dto.atendimento.AtendimentoLembreteRequest;
 import com.synapse.clinicafemina.dto.atendimento.AtendimentoLembreteResponse;
+import com.synapse.clinicafemina.dto.atendimento.AtendimentosAtivosContagemResponse;
+import com.synapse.clinicafemina.dto.atendimento.EncerramentoEmMassaRequest;
+import com.synapse.clinicafemina.dto.atendimento.EncerramentoEmMassaResponse;
 import com.synapse.clinicafemina.dto.atendimento.IniciarAtendimentoRequest;
 import com.synapse.clinicafemina.dto.atendimento.IniciarAtendimentoResponse;
 import com.synapse.clinicafemina.dto.operacional.TagResponse;
 import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada;
 import com.synapse.clinicafemina.service.AtendimentoService;
+import com.synapse.clinicafemina.service.AtendimentoEncerramentoEmMassaService;
 import com.synapse.clinicafemina.service.AtendimentoLembreteService;
 import com.synapse.clinicafemina.service.AtendimentoTagService;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
@@ -44,6 +48,7 @@ import java.util.List;
 public class AtendimentoController {
 
     private final AtendimentoService atendimentoService;
+    private final AtendimentoEncerramentoEmMassaService atendimentoEncerramentoEmMassaService;
     private final AtendimentoLembreteService atendimentoLembreteService;
     private final AtendimentoTagService atendimentoTagService;
     private final MensagemService mensagemService;
@@ -194,11 +199,26 @@ public class AtendimentoController {
     }
 
     @PostMapping("/{id}/encerrar")
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public AtendimentoDetalheDTO encerrar(
             @PathVariable Long id,
             @RequestParam(required = false) String motivo
     ) {
         return atendimentoService.encerrar(id, clinicaId(), motivo);
+    }
+
+    @GetMapping("/ativos/contagem")
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
+    public AtendimentosAtivosContagemResponse contarAtivos() {
+        return atendimentoEncerramentoEmMassaService.contarAtivos(clinicaId());
+    }
+
+    @PostMapping("/encerrar-todos")
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
+    public EncerramentoEmMassaResponse encerrarTodos(
+            @RequestBody @Valid EncerramentoEmMassaRequest request
+    ) {
+        return atendimentoEncerramentoEmMassaService.encerrarTodos(clinicaId(), request);
     }
 
     @GetMapping("/{id}/mensagens/{mensagemId}/midia")

@@ -7,6 +7,7 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -71,6 +72,23 @@ public interface AtendimentoRepository extends JpaRepository<Atendimento, Long> 
     );
 
     Optional<Atendimento> findByIdAndClinicaId(Long id, Long clinicaId);
+
+    long countByClinicaIdAndStatus(Long clinicaId, String status);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            UPDATE Atendimento a
+            SET a.status = 'ENCERRADO',
+                a.dataEncerramento = :dataEncerramento,
+                a.motivoEncerramento = :motivo
+            WHERE a.clinica.id = :clinicaId
+              AND a.status = 'ATIVO'
+            """)
+    int encerrarTodosAtivos(
+            @Param("clinicaId") Long clinicaId,
+            @Param("dataEncerramento") OffsetDateTime dataEncerramento,
+            @Param("motivo") String motivo
+    );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
