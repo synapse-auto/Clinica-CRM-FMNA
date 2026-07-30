@@ -202,6 +202,51 @@ function setScrollMetrics(element: HTMLElement, metrics: { scrollHeight: number;
 }
 
 describe('ChatWindow', () => {
+  it('should_group_messages_by_local_calendar_day_with_semantic_separators', () => {
+    const currentDate = new Date();
+    const todayDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 9);
+    const yesterdayDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - 1, 18);
+    const today = todayDate.toISOString();
+    const yesterday = yesterdayDate.toISOString();
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[
+          { ...makeMessage(1), dataHora: yesterday },
+          { ...makeMessage(2, 'SAIDA'), dataHora: today },
+          { ...makeMessage(3), dataHora: today, tipoMedia: 'AI_HANDOFF_SUMMARY' },
+        ]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getAllByText('Hoje')).toHaveLength(1);
+    expect(screen.getAllByText('Ontem')).toHaveLength(1);
+    expect(screen.getAllByTestId(/^chat-date-/)[0].querySelector('time')).toHaveAttribute('dateTime', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+
+  it('should_ignore_invalid_message_dates_without_breaking_the_history', () => {
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[{ ...makeMessage(1), dataHora: 'invalid' }]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText('Mensagem 1')).toBeInTheDocument();
+    expect(screen.getByText('Horário indisponível')).toBeInTheDocument();
+    expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument();
+  });
+
   it('should_render_closed_attendance_as_read_only_without_sending_controls', () => {
     const onSend = vi.fn();
     const onAttach = vi.fn();

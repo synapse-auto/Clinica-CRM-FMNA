@@ -30,6 +30,12 @@ import {
   formatWhatsappWindowExpiration,
   formatWhatsappWindowExpirationTitle,
 } from '@/lib/whatsapp-window-format';
+import {
+  formatChatDateAccessibleLabel,
+  formatChatDateLabel,
+  formatChatMessageTime,
+  getChatDateKey,
+} from '@/lib/chat-date';
 
 type Props = {
   detail: AtendimentoDetalhe | null;
@@ -79,6 +85,7 @@ export function ChatWindow({
   const [quickSearch, setQuickSearch] = useState('');
   const [quickActiveIndex, setQuickActiveIndex] = useState(0);
   const [showNewMessagesNotice, setShowNewMessagesNotice] = useState(false);
+  const [dateReference, setDateReference] = useState(() => new Date());
   const fileInput = useRef<HTMLInputElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
@@ -192,6 +199,11 @@ export function ChatWindow({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [scrollToLastMessage]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setDateReference(new Date()), 60000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     setContent(initialDraft);
@@ -366,24 +378,33 @@ export function ChatWindow({
           <p className="text-center text-[11px] text-clinic-muted">
             Ainda não há mensagens nesta conversa.
           </p>
-        ) : messages.map((message) => (
-          <div key={getMessageRenderKey?.(message) ?? String(message.id)}>
-            <MessageBubble
-              message={message}
-              enforcesCustomerCareWindow={enforcesCustomerCareWindow}
-              onMediaLayoutChanged={detail ? () => handleMediaLayoutChanged(detail.id) : undefined}
-            />
-            {message.direcao === 'SAIDA' && message.whatsappStatus === 'FALHA' && onRetryFailedMessage && canRetryFailedMessage?.(message.id) ? (
-              <button
-                type="button"
-                className="mt-1 text-[10px] font-bold text-clinic-danger underline underline-offset-2"
-                onClick={() => onRetryFailedMessage(message.id)}
-              >
-                Tentar novamente
-              </button>
-            ) : null}
-          </div>
-        ))}
+        ) : messages.map((message, index) => {
+          const dateKey = getChatDateKey(message.dataHora);
+          const previousDateKey = index > 0 ? getChatDateKey(messages[index - 1].dataHora) : null;
+          const dateLabel = dateKey ? formatChatDateLabel(message.dataHora, dateReference) : null;
+          const accessibleDate = dateKey ? formatChatDateAccessibleLabel(message.dataHora) : null;
+          return (
+            <div key={getMessageRenderKey?.(message) ?? String(message.id)}>
+              {dateKey && dateKey !== previousDateKey && dateLabel && accessibleDate ? (
+                <ChatDateSeparator dateKey={dateKey} label={dateLabel} accessibleDate={accessibleDate} />
+              ) : null}
+              <MessageBubble
+                message={message}
+                enforcesCustomerCareWindow={enforcesCustomerCareWindow}
+                onMediaLayoutChanged={detail ? () => handleMediaLayoutChanged(detail.id) : undefined}
+              />
+              {message.direcao === 'SAIDA' && message.whatsappStatus === 'FALHA' && onRetryFailedMessage && canRetryFailedMessage?.(message.id) ? (
+                <button
+                  type="button"
+                  className="mt-1 text-[10px] font-bold text-clinic-danger underline underline-offset-2"
+                  onClick={() => onRetryFailedMessage(message.id)}
+                >
+                  Tentar novamente
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
           <div aria-hidden="true" data-testid="message-scroll-end" />
           </div>
         </div>
@@ -628,6 +649,30 @@ function WhatsappWindowIndicator({ expiresAt }: { expiresAt: string | null }) {
   );
 }
 
+function ChatDateSeparator({
+  dateKey,
+  label,
+  accessibleDate,
+}: {
+  dateKey: string;
+  label: string;
+  accessibleDate: string;
+}) {
+  return (
+    <div className="my-1 flex items-center gap-3 py-1" data-testid={`chat-date-${dateKey}`}>
+      <span className="h-px flex-1 bg-clinic-border" />
+      <time
+        dateTime={dateKey}
+        aria-label={`${label}, ${accessibleDate}`}
+        className="shrink-0 rounded-full bg-clinic-soft px-2.5 py-1 text-[10px] font-bold text-clinic-muted"
+      >
+        {label}
+      </time>
+      <span className="h-px flex-1 bg-clinic-border" />
+    </div>
+  );
+}
+
 function MessageBubble({
   message,
   enforcesCustomerCareWindow,
@@ -670,10 +715,7 @@ function MessageBubble({
       </div>
       <div className="mt-1 flex items-center gap-1 text-[10px] text-clinic-muted">
         {outbound ? <MessageAuthor message={message} /> : null}
-        {new Intl.DateTimeFormat('pt-BR', {
-          hour: '2-digit',
-          minute: '2-digit',
-        }).format(new Date(message.dataHora))}
+        {formatChatMessageTime(message.dataHora)}
         {outbound ? <StatusIcon status={message.whatsappStatus} /> : null}
         {message.whatsappStatus === 'FALHA' ? (
           <span className="font-semibold text-clinic-danger">
@@ -729,10 +771,7 @@ function AiHandoffSummaryMessage({ message }: { message: MensagemAtendimento }) 
         {message.conteudo}
       </p>
       <time className="mt-2 block text-right text-[10px] text-clinic-muted">
-        {new Intl.DateTimeFormat('pt-BR', {
-          hour: '2-digit',
-          minute: '2-digit',
-        }).format(new Date(message.dataHora))}
+        {formatChatMessageTime(message.dataHora)}
       </time>
     </article>
   );
