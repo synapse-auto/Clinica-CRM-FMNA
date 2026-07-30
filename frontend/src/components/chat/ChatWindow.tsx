@@ -26,6 +26,10 @@ import type { MensagemRapida } from '@/types/operacional';
 import { ContactAvatar } from './ContactAvatar';
 import { WhatsappTemplateDialog } from './WhatsappTemplateDialog';
 import { matchesSearchTokens } from '@/lib/search';
+import {
+  formatWhatsappWindowExpiration,
+  formatWhatsappWindowExpirationTitle,
+} from '@/lib/whatsapp-window-format';
 
 type Props = {
   detail: AtendimentoDetalhe | null;
@@ -574,23 +578,23 @@ function normalizeShortcut(value: string) {
 }
 
 function WhatsappWindowIndicator({ expiresAt }: { expiresAt: string | null }) {
-  const expiration = expiresAt ? new Date(expiresAt) : null;
-  const validExpiration = expiration && !Number.isNaN(expiration.getTime()) ? expiration : null;
-  const formatted = validExpiration ? new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(validExpiration) : null;
-  const time = validExpiration && validExpiration.getTime() >= Date.now()
-    ? new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(validExpiration)
-    : null;
+  const [now, setNow] = useState(() => new Date());
+  const closingText = formatWhatsappWindowExpiration(expiresAt, now);
+  const expirationTitle = formatWhatsappWindowExpirationTitle(expiresAt);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   return (
     <p
-      title={formatted ? `Janela disponível até ${formatted}` : undefined}
-      aria-label={formatted ? `Janela do WhatsApp aberta. Disponível até ${formatted}` : 'Janela do WhatsApp aberta'}
-      className="flex items-center gap-1.5 text-[10px] font-semibold text-clinic-success"
+      title={expirationTitle ? `Janela do WhatsApp disponível até ${expirationTitle}` : undefined}
+      aria-label={closingText ? `Janela do WhatsApp aberta. ${closingText}.` : 'Janela do WhatsApp aberta'}
+      className="flex flex-wrap items-center gap-1.5 text-[10px] font-semibold leading-4 text-clinic-success"
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-clinic-success" />
-      Janela do WhatsApp aberta{time ? ` · Disponível até ${time}` : ''}
+      <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-clinic-success" />
+      <span>Janela do WhatsApp aberta{closingText ? ` · ${closingText}` : ''}</span>
     </p>
   );
 }

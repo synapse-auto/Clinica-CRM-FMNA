@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getWhatsappTemplates } from '@/services/atendimentos';
@@ -153,6 +153,7 @@ describe('ChatWindow', () => {
     expect(screen.queryByPlaceholderText('Digite uma mensagem...')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Enviar' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Adicionar' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Janela do WhatsApp aberta/)).not.toBeInTheDocument();
     expect(onSend).not.toHaveBeenCalled();
     expect(onAttach).not.toHaveBeenCalled();
   });
@@ -679,6 +680,7 @@ describe('ChatWindow', () => {
 
     expect(screen.getByText(/A sessão de 24 horas para atendimento foi encerrada/)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Digite uma mensagem...')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Janela do WhatsApp aberta/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Mensagens rápidas' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Adicionar' })).not.toBeInTheDocument();
 
@@ -826,7 +828,67 @@ describe('ChatWindow', () => {
     expect(screen.getByText(/Mensagem de template/)).toHaveClass('whitespace-pre-wrap');
   });
 
-  it('should_not_render_negative_expiration_information', () => {
+  it('should_show_a_natural_expiration_for_today', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-30T10:00:00-03:00'));
+    render(
+      <ChatWindow
+        detail={{ ...detail, janelaWhatsappExpiraEm: '2026-07-30T19:00:00-03:00' }}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText('Janela do WhatsApp aberta · Fecha hoje às 19:00')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('should_expose_tomorrow_expiration_in_the_accessible_name_and_full_title', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-30T10:00:00-03:00'));
+    render(
+      <ChatWindow
+        detail={{ ...detail, janelaWhatsappExpiraEm: '2026-07-31T22:00:00-03:00' }}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    const indicator = screen.getByLabelText('Janela do WhatsApp aberta. Fecha amanhã às 22:00.');
+    expect(indicator).toHaveAttribute('title', 'Janela do WhatsApp disponível até 31/07/2026 às 22:00');
+    vi.useRealTimers();
+  });
+
+  it('should_refresh_relative_expiration_after_midnight_without_requesting_data', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-30T23:59:30-03:00'));
+    render(
+      <ChatWindow
+        detail={{ ...detail, janelaWhatsappExpiraEm: '2026-07-31T00:30:00-03:00' }}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText('Janela do WhatsApp aberta · Fecha amanhã às 00:30')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(screen.getByText('Janela do WhatsApp aberta · Fecha hoje às 00:30')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('should_not_render_negative_or_invalid_expiration_information', () => {
     render(
       <ChatWindow
         detail={{ ...detail, janelaWhatsappExpiraEm: '2020-01-01T10:00:00Z' }}
@@ -840,7 +902,37 @@ describe('ChatWindow', () => {
     );
 
     expect(screen.getByText('Janela do WhatsApp aberta')).toBeInTheDocument();
-    expect(screen.queryByText(/Disponível até/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Fecha /)).not.toBeInTheDocument();
+  });
+
+  it('should_keep_only_the_open_state_when_the_expiration_is_null_or_invalid', () => {
+    const { rerender } = render(
+      <ChatWindow
+        detail={{ ...detail, janelaWhatsappExpiraEm: null }}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+    expect(screen.getByText('Janela do WhatsApp aberta')).toBeInTheDocument();
+    expect(screen.queryByText(/Fecha /)).not.toBeInTheDocument();
+
+    rerender(
+      <ChatWindow
+        detail={{ ...detail, janelaWhatsappExpiraEm: 'data-inválida' }}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+    expect(screen.getByText('Janela do WhatsApp aberta')).toBeInTheDocument();
+    expect(screen.queryByText(/Fecha /)).not.toBeInTheDocument();
   });
 
   it('should_scroll_to_latest_message_when_opening_conversation', async () => {
