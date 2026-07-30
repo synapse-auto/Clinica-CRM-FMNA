@@ -780,7 +780,7 @@ describe('ChatWindow', () => {
     expect(screen.queryByRole('button', { name: 'Mensagens rápidas' })).not.toBeInTheDocument();
   });
 
-  it('should_keep_typed_text_when_backend_rejects_common_send', async () => {
+  it('should_clear_typed_text_immediately_when_common_send_is_queued', async () => {
     const user = userEvent.setup();
     const onSend = vi.fn().mockRejectedValue(new Error('Use um template aprovado.'));
     render(
@@ -800,7 +800,8 @@ describe('ChatWindow', () => {
     await user.click(screen.getByRole('button', { name: 'Enviar' }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledWith('Texto que não deve sumir'));
-    expect(composer).toHaveValue('Texto que não deve sumir');
+    expect(composer).toHaveValue('');
+    expect(composer).toHaveFocus();
   });
 
   it('should_render_template_metadata_without_regressing_message_content', () => {

@@ -96,15 +96,9 @@ vi.mock('./ChatWindow', () => ({
       <button
         type="button"
         onClick={() => {
-          const sending = props.onSend?.(draft);
-          if (sending) {
-            void sending
-              .then(() => {
-                setDraft('');
-                props.onDraftChange?.('');
-              })
-              .catch(() => undefined);
-          }
+          props.onSend?.(draft);
+          setDraft('');
+          props.onDraftChange?.('');
         }}
       >
         Reenviar rascunho
@@ -446,6 +440,33 @@ describe('AtendimentosClient troca de conversa (latência)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Selecionar atendimento local' }));
     await waitFor(() => expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('7'));
+  });
+
+  it('should_send_consecutive_text_messages_in_fifo_order_without_using_global_busy', async () => {
+    let resolveFirst: (value: { id: number; whatsappStatus: string; motivoFalha: null }) => void = () => {};
+    let resolveSecond: (value: { id: number; whatsappStatus: string; motivoFalha: null }) => void = () => {};
+    services.enviarMensagem
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7 }]} atendentes={[]} user={gestor} initialAtendimentoId={7} />);
+
+    await waitFor(() => expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('7'));
+    const composer = screen.getByRole('textbox', { name: 'Rascunho do chat' });
+    await user.type(composer, 'um');
+    await user.click(screen.getByRole('button', { name: 'Reenviar rascunho' }));
+    await user.type(composer, 'dois');
+    await user.click(screen.getByRole('button', { name: 'Reenviar rascunho' }));
+
+    expect(composer).toHaveValue('');
+    expect(services.enviarMensagem).toHaveBeenCalledTimes(1);
+    expect(services.enviarMensagem).toHaveBeenLastCalledWith(7, 'um');
+
+    await act(async () => { resolveFirst({ id: 101, whatsappStatus: 'ENVIADA', motivoFalha: null }); });
+    await waitFor(() => expect(services.enviarMensagem).toHaveBeenLastCalledWith(7, 'dois'));
+    await act(async () => { resolveSecond({ id: 102, whatsappStatus: 'ENVIADA', motivoFalha: null }); });
+
+    expect(services.enviarMensagem).toHaveBeenCalledTimes(2);
   });
 
   it('should_render_critical_content_without_waiting_for_tags_or_reminders', async () => {

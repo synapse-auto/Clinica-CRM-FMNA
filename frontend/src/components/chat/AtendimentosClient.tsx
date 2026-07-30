@@ -57,6 +57,12 @@ import { isSearchableTerm, normalizeSearchText } from '@/lib/search';
 
 const DETAILS_PANEL_STORAGE_KEY = 'clinica-crm-atendimentos-details-open';
 
+type TextQueueItem = {
+  atendimentoId: number;
+  clientId: number;
+  conteudo: string;
+};
+
 function getAtendimentosUrl(view: AtendimentoView, atendimentoId: number | null) {
   const params = new URLSearchParams();
   if (view === 'FINALIZADOS') params.set('visao', 'finalizados');
@@ -119,6 +125,7 @@ export function AtendimentosClient({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [composerDrafts, setComposerDrafts] = useState<Record<number, string>>({});
+  const [outboxMessages, setOutboxMessages] = useState<Record<number, MensagemAtendimento[]>>({});
   const knownNotifications = useRef<Set<number> | null>(null);
   const closeAllActionFocus = useRef<(() => void) | null>(null);
   const activeIdRef = useRef<number | null>(activeId);
@@ -136,6 +143,11 @@ export function AtendimentosClient({
   const firstListEffect = useRef(initialView === 'ATIVOS');
   const reopenDetailsButton = useRef<HTMLButtonElement>(null);
   const focusReopenDetails = useRef(false);
+  const textQueues = useRef(new Map<number, TextQueueItem[]>());
+  const drainingTextQueues = useRef(new Set<number>());
+  const outboxMessagesRef = useRef<Record<number, MensagemAtendimento[]>>({});
+  const failedTextContents = useRef(new Map<number, { atendimentoId: number; conteudo: string }>());
+  const nextClientMessageId = useRef(-1);
   const debouncedSearch = useDebouncedValue(search, 300);
   const searchKey = isSearchableTerm(debouncedSearch)
     ? normalizeSearchText(debouncedSearch)
@@ -322,7 +334,7 @@ export function AtendimentosClient({
       ]);
       if (!isCurrent()) return;
       setDetail(nextDetail);
-      setMessages(nextMessages);
+      setMessages(mergeOutboxMessages(id, nextMessages));
       setError(null);
     } catch (cause) {
       if (isAbortError(cause) || !isCurrent()) return;
@@ -470,6 +482,114 @@ export function AtendimentosClient({
     const interval = window.setInterval(() => void pollNotifications(), 5000);
     return () => window.clearInterval(interval);
   }, []);
+
+  function mergeOutboxMessages(atendimentoId: number, current: MensagemAtendimento[]) {
+    return (outboxMessagesRef.current[atendimentoId] ?? []).reduce(mergeMensagem, current);
+  }
+
+  function updateOutboxMessages(
+    atendimentoId: number,
+    transform: (current: MensagemAtendimento[]) => MensagemAtendimento[],
+  ) {
+    const nextMessages = transform(outboxMessagesRef.current[atendimentoId] ?? []);
+    const next = { ...outboxMessagesRef.current, [atendimentoId]: nextMessages };
+    outboxMessagesRef.current = next;
+    setOutboxMessages(next);
+    if (activeIdRef.current === atendimentoId) {
+      setMessages((current) => mergeOutboxMessages(atendimentoId, current));
+    }
+  }
+
+  function createLocalTextMessage(item: TextQueueItem, whatsappStatus: string, motivoFalha: string | null = null): MensagemAtendimento {
+    return {
+      id: item.clientId,
+      direcao: 'SAIDA',
+      remetente: 'ATENDENTE',
+      tipoMedia: 'TEXTO',
+      conteudo: item.conteudo,
+      conteudoPrevia: item.conteudo,
+      whatsappStatus,
+      motivoFalha,
+      dataHora: new Date().toISOString(),
+      entregueEm: null,
+      lidaEm: null,
+      midia: null,
+      templateNome: null,
+      templateIdioma: null,
+    };
+  }
+
+  function removeOutboxMessage(atendimentoId: number, clientId: number) {
+    updateOutboxMessages(atendimentoId, (current) => current.filter((message) => message.id !== clientId));
+    if (activeIdRef.current === atendimentoId) {
+      setMessages((current) => current.filter((message) => message.id !== clientId));
+    }
+  }
+
+  function markQueuedMessageAsFailed(item: TextQueueItem, cause: unknown) {
+    const failure = createLocalTextMessage(item, 'FALHA', errorMessage(cause));
+    failedTextContents.current.set(item.clientId, { atendimentoId: item.atendimentoId, conteudo: item.conteudo });
+    updateOutboxMessages(item.atendimentoId, (current) => current.map((message) => (
+      message.id === item.clientId ? failure : message
+    )));
+    if (activeIdRef.current === item.atendimentoId) setError(errorMessage(cause));
+  }
+
+  async function drainTextQueue(atendimentoId: number) {
+    if (drainingTextQueues.current.has(atendimentoId)) return;
+    drainingTextQueues.current.add(atendimentoId);
+    try {
+      const queue = textQueues.current.get(atendimentoId);
+      while (queue?.length) {
+        const item = queue.shift();
+        if (!item) continue;
+        try {
+          const sentMessage = await enviarMensagem(item.atendimentoId, item.conteudo);
+          removeOutboxMessage(item.atendimentoId, item.clientId);
+          if (sentMessage.whatsappStatus === 'FALHA') {
+            failedTextContents.current.set(sentMessage.id, { atendimentoId: item.atendimentoId, conteudo: item.conteudo });
+            if (activeIdRef.current === item.atendimentoId) {
+              setMessages((current) => mergeMensagem(current, sentMessage));
+              setError(mensagemFalhaAmigavel(sentMessage.motivoFalha));
+            }
+          } else if (activeIdRef.current === item.atendimentoId) {
+            setMessages((current) => mergeMensagem(current, sentMessage));
+          }
+        } catch (cause) {
+          markQueuedMessageAsFailed(item, cause);
+          if (isWhatsappTemplateRequiredError(cause)) {
+            while (queue.length) markQueuedMessageAsFailed(queue.shift()!, cause);
+            void loadActiveConversationRef.current(atendimentoId, 'revalidate');
+          }
+        }
+      }
+    } finally {
+      textQueues.current.delete(atendimentoId);
+      drainingTextQueues.current.delete(atendimentoId);
+      void refreshListRef.current();
+    }
+  }
+
+  function enqueueTextMessage(atendimentoId: number, conteudo: string) {
+    const item: TextQueueItem = {
+      atendimentoId,
+      conteudo,
+      clientId: nextClientMessageId.current--,
+    };
+    updateOutboxMessages(atendimentoId, (current) => [...current, createLocalTextMessage(item, 'PENDENTE')]);
+    const queue = textQueues.current.get(atendimentoId) ?? [];
+    queue.push(item);
+    textQueues.current.set(atendimentoId, queue);
+    void drainTextQueue(atendimentoId);
+  }
+
+  function retryFailedTextMessage(messageId: number) {
+    const failed = failedTextContents.current.get(messageId);
+    if (!failed) return;
+    failedTextContents.current.delete(messageId);
+    if (messageId < 0) removeOutboxMessage(failed.atendimentoId, messageId);
+    enqueueTextMessage(failed.atendimentoId, failed.conteudo);
+  }
 
   async function runAction(
     action: () => Promise<unknown>,
@@ -723,13 +843,21 @@ export function AtendimentosClient({
           busy={busy}
           error={error}
           initialDraft={activeId ? composerDrafts[activeId] ?? '' : ''}
+          pendingTextMessageCount={activeId
+            ? (outboxMessages[activeId] ?? []).filter((message) => message.whatsappStatus === 'PENDENTE').length
+            : 0}
           onDraftChange={(content) => {
             if (!activeId) return;
             setComposerDrafts((current) => ({ ...current, [activeId]: content }));
           }}
-          onSend={(content) => activeId
-            ? runAction(() => enviarMensagem(activeId, content), { propagate: true, targetId: activeId })
-            : Promise.resolve()}
+          onSend={(content) => {
+            if (!activeId) return;
+            const targetId = activeId;
+            setComposerDrafts((current) => ({ ...current, [targetId]: '' }));
+            enqueueTextMessage(targetId, content);
+          }}
+          onRetryFailedMessage={retryFailedTextMessage}
+          canRetryFailedMessage={(messageId) => failedTextContents.current.has(messageId)}
           onAttach={(file) => activeId
             ? runAction(() => enviarAnexo(activeId, file), { propagate: true, targetId: activeId })
             : Promise.resolve()}

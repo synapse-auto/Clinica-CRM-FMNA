@@ -40,9 +40,12 @@ type Props = {
   error: string | null;
   initialDraft?: string;
   onDraftChange?: (content: string) => void;
-  onSend: (content: string) => Promise<void>;
+  onSend: (content: string) => void | Promise<void>;
   onAttach: (file: File) => Promise<void>;
   onSendTemplate?: (request: EnviarTemplateWhatsappRequest) => Promise<void>;
+  pendingTextMessageCount?: number;
+  onRetryFailedMessage?: (messageId: number) => void;
+  canRetryFailedMessage?: (messageId: number) => boolean;
 };
 
 const NEAR_BOTTOM_THRESHOLD = 96;
@@ -63,6 +66,9 @@ export function ChatWindow({
   onSend,
   onAttach,
   onSendTemplate,
+  pendingTextMessageCount = 0,
+  onRetryFailedMessage,
+  canRetryFailedMessage,
 }: Props) {
   const [content, setContent] = useState('');
   const [quickOpen, setQuickOpen] = useState(false);
@@ -258,16 +264,14 @@ export function ChatWindow({
     }
   }
 
-  async function submit() {
+  function submit() {
     const value = content.trim();
-    if (!value || busy || !detail || !windowOpen || atendimentoEncerrado) return;
-    try {
-      await onSend(value);
-      setContent('');
-      onDraftChange?.('');
-    } catch {
-      // O texto permanece para correção ou envio posterior por decisão do usuário.
-    }
+    if (!value || !detail || !windowOpen || atendimentoEncerrado) return;
+    setContent('');
+    onDraftChange?.('');
+    closeQuickMessages();
+    focusComposer();
+    void Promise.resolve(onSend(value)).catch(() => undefined);
   }
 
   function openTemplates(opener: HTMLElement | null) {
@@ -357,12 +361,22 @@ export function ChatWindow({
             Ainda não há mensagens nesta conversa.
           </p>
         ) : messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            enforcesCustomerCareWindow={enforcesCustomerCareWindow}
-            onMediaLayoutChanged={detail ? () => handleMediaLayoutChanged(detail.id) : undefined}
-          />
+          <div key={message.id}>
+            <MessageBubble
+              message={message}
+              enforcesCustomerCareWindow={enforcesCustomerCareWindow}
+              onMediaLayoutChanged={detail ? () => handleMediaLayoutChanged(detail.id) : undefined}
+            />
+            {message.direcao === 'SAIDA' && message.whatsappStatus === 'FALHA' && onRetryFailedMessage && canRetryFailedMessage?.(message.id) ? (
+              <button
+                type="button"
+                className="mt-1 text-[10px] font-bold text-clinic-danger underline underline-offset-2"
+                onClick={() => onRetryFailedMessage(message.id)}
+              >
+                Tentar novamente
+              </button>
+            ) : null}
+          </div>
         ))}
           <div aria-hidden="true" data-testid="message-scroll-end" />
           </div>
@@ -522,7 +536,7 @@ export function ChatWindow({
               <textarea
                 ref={composer}
                 value={content}
-                disabled={!detail || busy || atendimentoEncerrado}
+                disabled={!detail || atendimentoEncerrado}
                 onChange={(event) => {
                   setContent(event.target.value);
                   onDraftChange?.(event.target.value);
@@ -535,13 +549,18 @@ export function ChatWindow({
               <button
                 type="button"
                 aria-label="Enviar"
-                disabled={!detail || busy || atendimentoEncerrado || !content.trim()}
+                disabled={!detail || atendimentoEncerrado || !content.trim()}
                 onClick={() => void submit()}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-clinic-primary text-white transition hover:bg-clinic-primary-strong disabled:opacity-40"
               >
                 <Send className="ml-0.5 h-4 w-4" />
               </button>
             </div>
+            {pendingTextMessageCount > 0 ? (
+              <p className="mt-2 text-right text-[10px] font-semibold text-clinic-muted" aria-live="polite">
+                Enviando {pendingTextMessageCount} mensagem{pendingTextMessageCount === 1 ? '' : 'ens'}…
+              </p>
+            ) : null}
           </div>
         )}
       </div>
