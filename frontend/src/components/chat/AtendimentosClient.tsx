@@ -37,8 +37,10 @@ import type {
   AtendenteOption,
   AtendimentoDetalhe,
   AtendimentoFilter,
+  AtendimentoFiltroOperacional,
   AtendimentoLembrete,
   AtendimentoResumo,
+  AtendimentoView,
   EnviarTemplateWhatsappRequest,
   MensagemAtendimento,
   NovoAtendimentoLembrete,
@@ -55,6 +57,14 @@ import { isSearchableTerm, normalizeSearchText } from '@/lib/search';
 
 const DETAILS_PANEL_STORAGE_KEY = 'clinica-crm-atendimentos-details-open';
 
+function getAtendimentosUrl(view: AtendimentoView, atendimentoId: number | null) {
+  const params = new URLSearchParams();
+  if (view === 'FINALIZADOS') params.set('visao', 'finalizados');
+  if (atendimentoId !== null) params.set('atendimentoId', String(atendimentoId));
+  const query = params.toString();
+  return query ? `/atendimentos?${query}` : '/atendimentos';
+}
+
 function isAbortError(cause: unknown): boolean {
   return cause instanceof DOMException
     ? cause.name === 'AbortError'
@@ -66,6 +76,7 @@ type Props = {
   atendentes: AtendenteOption[];
   user: AuthUser;
   initialAtendimentoId?: number | null;
+  initialView?: AtendimentoView;
 };
 
 export function AtendimentosClient({
@@ -73,10 +84,14 @@ export function AtendimentosClient({
   atendentes,
   user,
   initialAtendimentoId = null,
+  initialView = 'ATIVOS',
 }: Props) {
-  const [conversations, setConversations] = useState(initialConversations);
+  const [view, setView] = useState<AtendimentoView>(initialView);
+  const [conversations, setConversations] = useState(
+    initialView === 'ATIVOS' ? initialConversations : [],
+  );
   const [activeId, setActiveId] = useState<number | null>(
-    initialAtendimentoId ?? initialConversations[0]?.id ?? null,
+    initialView === 'ATIVOS' ? initialAtendimentoId ?? initialConversations[0]?.id ?? null : null,
   );
   const [detail, setDetail] = useState<AtendimentoDetalhe | null>(null);
   const [messages, setMessages] = useState<MensagemAtendimento[]>([]);
@@ -86,7 +101,7 @@ export function AtendimentosClient({
   const [reminders, setReminders] = useState<AtendimentoLembrete[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
   const [remindersError, setRemindersError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<AtendimentoFilter>('TODOS');
+  const [filter, setFilter] = useState<AtendimentoFiltroOperacional>('TODOS');
   const [type, setType] = useState<'TODOS' | 'IA' | 'HUMANO'>('TODOS');
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
@@ -106,13 +121,18 @@ export function AtendimentosClient({
   const [composerDrafts, setComposerDrafts] = useState<Record<number, string>>({});
   const knownNotifications = useRef<Set<number> | null>(null);
   const activeIdRef = useRef<number | null>(activeId);
+  const viewRef = useRef<AtendimentoView>(initialView);
+  const initialRequestedIdRef = useRef<number | null>(
+    initialView === 'FINALIZADOS' ? initialAtendimentoId : null,
+  );
   const listAbortController = useRef<AbortController | null>(null);
   const listRequestVersion = useRef(0);
   const activeAbortController = useRef<AbortController | null>(null);
   const activeRequestVersion = useRef(0);
   const activeInFlight = useRef(false);
   const bloquearSelecaoAutomatica = useRef(false);
-  const firstListEffect = useRef(true);
+  const viewTransitioning = useRef(initialView === 'FINALIZADOS');
+  const firstListEffect = useRef(initialView === 'ATIVOS');
   const reopenDetailsButton = useRef<HTMLButtonElement>(null);
   const focusReopenDetails = useRef(false);
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -122,15 +142,17 @@ export function AtendimentosClient({
   const requestSearchRef = useRef('');
   requestSearchRef.current = searchKey ? debouncedSearch.trim() : '';
   const canManage = user.perfil === 'GESTOR' || user.perfil === 'RECEPCIONISTA';
+  const filtroDaLista: AtendimentoFilter = view === 'FINALIZADOS' ? 'FINALIZADOS' : filter;
+  const tipoDaLista: 'TODOS' | 'IA' | 'HUMANO' = view === 'FINALIZADOS' ? 'TODOS' : type;
 
-  const atualizarSelecao = useCallback((nextId: number | null) => {
+  const atualizarSelecao = useCallback((nextId: number | null, nextView = viewRef.current) => {
     activeAbortController.current?.abort();
     activeRequestVersion.current += 1;
     activeInFlight.current = false;
     activeIdRef.current = nextId;
     if (nextId !== null) bloquearSelecaoAutomatica.current = false;
     setActiveId(nextId);
-    window.history.replaceState({}, '', nextId ? `/atendimentos?atendimentoId=${nextId}` : '/atendimentos');
+    window.history.replaceState({}, '', getAtendimentosUrl(nextView, nextId));
   }, []);
 
   const limparAtendimentoEncerrado = useCallback(() => {
@@ -143,6 +165,30 @@ export function AtendimentosClient({
     setRemindersError(null);
     setError(null);
     setDetailLoading(false);
+  }, [atualizarSelecao]);
+
+  const mudarVisao = useCallback((nextView: AtendimentoView) => {
+    if (nextView === viewRef.current) return;
+    listAbortController.current?.abort();
+    listRequestVersion.current += 1;
+    activeAbortController.current?.abort();
+    activeRequestVersion.current += 1;
+    activeInFlight.current = false;
+    bloquearSelecaoAutomatica.current = false;
+    viewTransitioning.current = true;
+    initialRequestedIdRef.current = null;
+    viewRef.current = nextView;
+    setConversations([]);
+    setListError(null);
+    atualizarSelecao(null, nextView);
+    setDetail(null);
+    setMessages([]);
+    setActiveTags([]);
+    setReminders([]);
+    setRemindersError(null);
+    setError(null);
+    setDetailLoading(true);
+    setView(nextView);
   }, [atualizarSelecao]);
 
   useEffect(() => {
@@ -175,14 +221,35 @@ export function AtendimentosClient({
     setSearching(true);
     try {
       const page = await listAtendimentos(
-        { filtro: filter, tipo: type, busca: requestSearchRef.current },
+        { filtro: filtroDaLista, tipo: tipoDaLista, busca: requestSearchRef.current },
         controller.signal,
       );
       if (controller.signal.aborted || requestVersion !== listRequestVersion.current) return;
       setConversations(page.content);
       setListError(null);
-      if (activeIdRef.current === null && !bloquearSelecaoAutomatica.current && page.content[0]) {
-        atualizarSelecao(page.content[0].id);
+      const currentId = activeIdRef.current;
+      const requestedId = initialRequestedIdRef.current;
+      const currentStillVisible = currentId !== null && page.content.some((item) => item.id === currentId);
+      const requestedStillVisible = requestedId !== null && page.content.some((item) => item.id === requestedId);
+      initialRequestedIdRef.current = null;
+      const nextId = currentStillVisible
+        ? currentId
+        : requestedStillVisible
+          ? requestedId
+          : (currentId !== null || !bloquearSelecaoAutomatica.current ? page.content[0]?.id ?? null : null);
+
+      if (nextId !== currentId) {
+        viewTransitioning.current = false;
+        atualizarSelecao(nextId, viewRef.current);
+      } else if (nextId === null) {
+        viewTransitioning.current = false;
+        setDetail(null);
+        setMessages([]);
+        setActiveTags([]);
+        setReminders([]);
+        setRemindersError(null);
+        setError(null);
+        setDetailLoading(false);
       }
     } catch (cause) {
       if (controller.signal.aborted || requestVersion !== listRequestVersion.current) return;
@@ -192,7 +259,7 @@ export function AtendimentosClient({
         setSearching(false);
       }
     }
-  }, [atualizarSelecao, filter, searchKey, type]);
+  }, [atualizarSelecao, filtroDaLista, searchKey, tipoDaLista]);
 
   const refreshListRef = useRef(refreshList);
   refreshListRef.current = refreshList;
@@ -321,7 +388,7 @@ export function AtendimentosClient({
       setActiveTags([]);
       setReminders([]);
       setRemindersError(null);
-      setDetailLoading(false);
+      setDetailLoading(viewTransitioning.current);
       return;
     }
     // Resposta imediata ao clique: descarta o conteúdo do paciente anterior e sinaliza carregamento.
@@ -460,9 +527,11 @@ export function AtendimentosClient({
     mensagemInicial: string,
   ) {
     const id = response.atendimentoId;
-    atualizarSelecao(id);
+    const mudouParaAtivos = viewRef.current !== 'ATIVOS';
+    if (mudouParaAtivos) mudarVisao('ATIVOS');
+    atualizarSelecao(id, 'ATIVOS');
     void loadActiveConversation(id, 'select');
-    void refreshList();
+    if (!mudouParaAtivos) void refreshList();
 
     if (!mensagemInicial) return;
     setBusy(true);
@@ -517,7 +586,7 @@ export function AtendimentosClient({
     activeAbortController.current?.abort();
     activeRequestVersion.current += 1;
     activeInFlight.current = false;
-    if (filter === 'FINALIZADOS') {
+    if (viewRef.current === 'FINALIZADOS') {
       setDetail(encerrado);
       void refreshList();
       return;
@@ -558,7 +627,7 @@ export function AtendimentosClient({
       setCloseAllDialogOpen(false);
       limparAtendimentoEncerrado();
       setComposerDrafts({});
-      if (filter !== 'FINALIZADOS') setConversations([]);
+      if (viewRef.current === 'ATIVOS') setConversations([]);
       void refreshList();
       setFeedback(`${resultado.encerrados} atendimento${resultado.encerrados === 1 ? '' : 's'} encerrado${resultado.encerrados === 1 ? '' : 's'}.`);
     } catch (cause) {
@@ -613,6 +682,7 @@ export function AtendimentosClient({
       <ChatList
         conversations={conversations}
         activeId={activeId}
+        view={view}
         filter={filter}
         type={type}
         search={search}
@@ -620,6 +690,7 @@ export function AtendimentosClient({
         error={listError}
         onRetry={() => void refreshList()}
         onSelect={atualizarSelecao}
+        onViewChange={mudarVisao}
         onFilterChange={(nextFilter, nextType) => {
           bloquearSelecaoAutomatica.current = false;
           setFilter(nextFilter);
@@ -628,7 +699,7 @@ export function AtendimentosClient({
         onSearchChange={setSearch}
         canStartManual={canManage}
         onStartManual={() => setStartDialogOpen(true)}
-        canCloseAll={canManage}
+        canCloseAll={canManage && view === 'ATIVOS'}
         closeAllLoading={closeAllLoading}
         onCloseAll={() => void solicitarEncerramentoTodos()}
       />

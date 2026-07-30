@@ -171,6 +171,10 @@ export type AtendimentoFilter =
   | 'FINALIZADOS'
   | 'REVISAO';
 
+export type AtendimentoView = 'ATIVOS' | 'FINALIZADOS';
+
+export type AtendimentoFiltroOperacional = Exclude<AtendimentoFilter, 'FINALIZADOS'>;
+
 export type AtendimentosAtivosContagem = {
   total: number;
 };

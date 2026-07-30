@@ -32,11 +32,14 @@ vi.mock('./ChatList', () => ({
   ChatList: (props: {
     activeId: number | null;
     conversations: { id: number }[];
+    view: 'ATIVOS' | 'FINALIZADOS';
     filter: string;
     type: string;
     search: string;
     searching?: boolean;
     onSelect: (id: number) => void;
+    onViewChange: (view: 'ATIVOS' | 'FINALIZADOS') => void;
+    onFilterChange: (filter: 'TODOS' | 'MEUS', type: 'TODOS') => void;
     onSearchChange: (value: string) => void;
     onStartManual?: () => void;
     onCloseAll?: () => void;
@@ -44,11 +47,15 @@ vi.mock('./ChatList', () => ({
   }) => (
     <div>
       <span data-testid="selected-atendimento">{props.activeId ?? 'nenhum'}</span>
+      <span data-testid="current-view">{props.view}</span>
       <span data-testid="current-filter">{props.filter}/{props.type}</span>
       <span data-testid="conversation-ids">{props.conversations.map((item) => item.id).join(',')}</span>
       <button type="button" onClick={() => props.onSelect(7)}>Selecionar atendimento local</button>
       <button type="button" onClick={() => props.onSelect(8)}>Selecionar B</button>
       <button type="button" onClick={() => props.onSelect(9)}>Selecionar C</button>
+      <button type="button" onClick={() => props.onViewChange('ATIVOS')}>Em atendimento</button>
+      <button type="button" onClick={() => props.onViewChange('FINALIZADOS')}>Finalizados</button>
+      <button type="button" onClick={() => props.onFilterChange('MEUS', 'TODOS')}>Filtro Meus</button>
       <input
         aria-label="Buscar atendimentos"
         value={props.search}
@@ -282,6 +289,109 @@ const gestor = {
   podeGerenciarUsuarios: false,
 };
 
+describe('AtendimentosClient visões de atendimento', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState({}, '', '/atendimentos');
+    services.getMensagens.mockResolvedValue([]);
+    services.getAtendimentoTags.mockResolvedValue([]);
+    services.getAtendimentoLembretes.mockResolvedValue([]);
+    services.marcarAtendimentoComoLido.mockResolvedValue(undefined);
+    services.getAtendimento.mockImplementation((id: number) => Promise.resolve({
+      id,
+      status: id === 8 ? 'ENCERRADO' : 'ATIVO',
+    }));
+  });
+
+  afterEach(() => {
+    services.listAtendimentos.mockReset();
+    services.getAtendimento.mockReset();
+    services.getMensagens.mockReset();
+    services.getAtendimentoTags.mockReset();
+    services.getAtendimentoLembretes.mockReset();
+    services.marcarAtendimentoComoLido.mockReset();
+  });
+
+  it('should_load_finalized_history_with_its_own_filter_and_replace_the_active_selection', async () => {
+    let resolveFinalizedList: ((value: { content: Array<{ id: number; status: string }>; totalElements: number }) => void) | null = null;
+    services.listAtendimentos.mockImplementation(({ filtro }: { filtro: string }) => (
+      filtro === 'FINALIZADOS'
+        ? new Promise((resolve) => { resolveFinalizedList = resolve; })
+        : Promise.resolve({ content: [{ id: 7, status: 'ATIVO' }], totalElements: 1 })
+    ));
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7, status: 'ATIVO' }]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Finalizados' }));
+    expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('nenhum');
+    expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('none');
+    expect(screen.getByTestId('chat-loading')).toHaveTextContent('loading');
+
+    resolveFinalizedList?.({ content: [{ id: 8, status: 'ENCERRADO' }], totalElements: 1 });
+
+    await waitFor(() => expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('8'));
+    expect(screen.getByTestId('current-view')).toHaveTextContent('FINALIZADOS');
+    expect(screen.getByTestId('conversation-ids')).toHaveTextContent('8');
+    await waitFor(() => expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('8'));
+    expect(services.listAtendimentos).toHaveBeenCalledWith(
+      { filtro: 'FINALIZADOS', tipo: 'TODOS', busca: '' }, expect.any(AbortSignal),
+    );
+    expect(window.location.search).toBe('?visao=finalizados&atendimentoId=8');
+  });
+
+  it('should_keep_operational_filter_and_search_when_returning_from_history', async () => {
+    services.listAtendimentos.mockResolvedValue({ content: [{ id: 7, status: 'ATIVO' }], totalElements: 1 });
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7, status: 'ATIVO' }]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Filtro Meus' }));
+    await user.type(screen.getByRole('textbox', { name: 'Buscar atendimentos' }), 'Maria');
+    await user.click(screen.getByRole('button', { name: 'Finalizados' }));
+    await user.click(screen.getByRole('button', { name: 'Em atendimento' }));
+
+    expect(screen.getByTestId('current-view')).toHaveTextContent('ATIVOS');
+    expect(screen.getByTestId('current-filter')).toHaveTextContent('MEUS/TODOS');
+    expect(screen.getByRole('textbox', { name: 'Buscar atendimentos' })).toHaveValue('Maria');
+  });
+
+  it('should_keep_the_history_url_without_selection_when_the_finalized_result_is_empty', async () => {
+    services.listAtendimentos.mockResolvedValue({ content: [], totalElements: 0 });
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7, status: 'ATIVO' }]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Finalizados' }));
+
+    await waitFor(() => expect(services.listAtendimentos).toHaveBeenCalledWith(
+      { filtro: 'FINALIZADOS', tipo: 'TODOS', busca: '' }, expect.any(AbortSignal),
+    ));
+    expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('nenhum');
+    expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('none');
+    expect(window.location.search).toBe('?visao=finalizados');
+  });
+
+  it('should_restore_the_finalized_view_from_the_url_without_opening_the_active_initial_item', async () => {
+    services.listAtendimentos.mockImplementation(({ filtro }: { filtro: string }) => Promise.resolve({
+      content: filtro === 'FINALIZADOS' ? [{ id: 8, status: 'ENCERRADO' }] : [{ id: 7, status: 'ATIVO' }],
+      totalElements: 1,
+    }));
+    render(
+      <AtendimentosClient
+        initialConversations={[{ id: 7, status: 'ATIVO' }]}
+        atendentes={[]}
+        user={gestor}
+        initialAtendimentoId={8}
+        initialView="FINALIZADOS"
+      />,
+    );
+
+    expect(screen.getByTestId('current-view')).toHaveTextContent('FINALIZADOS');
+    expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('nenhum');
+    await waitFor(() => expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('8'));
+    expect(services.getAtendimento).not.toHaveBeenCalledWith(7, expect.any(AbortSignal));
+    expect(window.location.search).toBe('?visao=finalizados&atendimentoId=8');
+  });
+});
+
 describe('AtendimentosClient troca de conversa (latência)', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -395,6 +505,10 @@ describe('AtendimentosClient troca de conversa (latência)', () => {
   });
 
   it('should_keep_failed_initial_message_as_draft_and_retry_without_starting_again', async () => {
+    services.listAtendimentos.mockResolvedValue({
+      content: [{ id: 7 }, { id: 8 }, { id: 9 }, { id: 44 }],
+      totalElements: 4,
+    });
     services.iniciarAtendimento.mockResolvedValue({
       atendimentoId: 44,
       pacienteId: 20,
@@ -524,6 +638,15 @@ describe('AtendimentosClient encerramento', () => {
 
   it('should_remove_closed_attendance_select_the_next_one_and_update_the_url', async () => {
     services.encerrarAtendimento.mockResolvedValue({ id: 7, status: 'ENCERRADO' });
+    let atendimentoFoiEncerrado = false;
+    services.encerrarAtendimento.mockImplementation(async () => {
+      atendimentoFoiEncerrado = true;
+      return { id: 7, status: 'ENCERRADO' };
+    });
+    services.listAtendimentos.mockImplementation(() => Promise.resolve({
+      content: atendimentoFoiEncerrado ? [{ id: 8 }] : [{ id: 7 }, { id: 8 }],
+      totalElements: atendimentoFoiEncerrado ? 1 : 2,
+    }));
     window.localStorage.setItem('clinica-crm-atendimentos-details-open', 'true');
     const user = userEvent.setup();
     render(<AtendimentosClient initialConversations={[{ id: 7 }, { id: 8 }]} atendentes={[]} user={gestor} />);

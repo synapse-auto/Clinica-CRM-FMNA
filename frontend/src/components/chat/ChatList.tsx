@@ -2,23 +2,26 @@
 
 import { CircleStop, LoaderCircle, Plus, Search } from 'lucide-react';
 import type {
-  AtendimentoFilter,
+  AtendimentoFiltroOperacional,
   AtendimentoResumo,
+  AtendimentoView,
 } from '@/types/atendimento';
 import { ContactAvatar } from './ContactAvatar';
 
 type Props = {
   conversations: AtendimentoResumo[];
   activeId: number | null;
-  filter: AtendimentoFilter;
+  view: AtendimentoView;
+  filter: AtendimentoFiltroOperacional;
   type: 'TODOS' | 'IA' | 'HUMANO';
   search: string;
   searching?: boolean;
   error?: string | null;
   onRetry?: () => void;
   onSelect: (id: number) => void;
+  onViewChange: (view: AtendimentoView) => void;
   onFilterChange: (
-    filter: AtendimentoFilter,
+    filter: AtendimentoFiltroOperacional,
     type: 'TODOS' | 'IA' | 'HUMANO',
   ) => void;
   onSearchChange: (value: string) => void;
@@ -36,7 +39,6 @@ const filters = [
   { label: 'Meus', filter: 'MEUS', type: 'TODOS' },
   { label: 'Não lidos', filter: 'NAO_LIDOS', type: 'TODOS' },
   { label: 'Aguardando', filter: 'AGUARDANDO', type: 'TODOS' },
-  { label: 'Finalizados', filter: 'FINALIZADOS', type: 'TODOS' },
   { label: 'Convênio', filter: 'REVISAO', type: 'TODOS' },
 ] as const;
 
@@ -84,13 +86,54 @@ export function ChatList(props: Props) {
             ) : null}
           </div>
         </div>
+        <div
+          role="tablist"
+          aria-label="Visão dos atendimentos"
+          className="grid grid-cols-2 gap-1 rounded-xl border border-clinic-border bg-clinic-soft p-1"
+        >
+          <button
+            id="atendimentos-ativos-tab"
+            type="button"
+            role="tab"
+            aria-selected={props.view === 'ATIVOS'}
+            aria-controls="atendimentos-lista"
+            onClick={() => props.onViewChange('ATIVOS')}
+            className={`rounded-lg px-2 py-2 text-[11px] font-extrabold transition ${
+              props.view === 'ATIVOS'
+                ? 'bg-clinic-surface text-clinic-text shadow-sm'
+                : 'text-clinic-muted hover:bg-clinic-hover hover:text-clinic-text'
+            }`}
+          >
+            Em atendimento
+          </button>
+          <button
+            id="atendimentos-finalizados-tab"
+            type="button"
+            role="tab"
+            aria-selected={props.view === 'FINALIZADOS'}
+            aria-controls="atendimentos-lista"
+            onClick={() => props.onViewChange('FINALIZADOS')}
+            className={`rounded-lg px-2 py-2 text-[11px] font-extrabold transition ${
+              props.view === 'FINALIZADOS'
+                ? 'bg-clinic-surface text-clinic-text shadow-sm'
+                : 'text-clinic-muted hover:bg-clinic-hover hover:text-clinic-text'
+            }`}
+          >
+            Finalizados
+          </button>
+        </div>
+        {props.view === 'FINALIZADOS' ? (
+          <p className="text-[11px] font-medium text-clinic-muted">
+            Histórico de atendimentos encerrados
+          </p>
+        ) : null}
         <label className="relative block" aria-busy={props.searching}>
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clinic-muted" />
           <input
             type="search"
             value={props.search}
             onChange={(event) => props.onSearchChange(event.target.value)}
-            placeholder="Buscar paciente ou telefone..."
+            placeholder={props.view === 'FINALIZADOS' ? 'Buscar no histórico...' : 'Buscar paciente ou telefone...'}
             className="h-10 w-full rounded-xl border border-clinic-border bg-clinic-input pl-10 pr-10 text-[12px] text-clinic-text outline-none transition placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10"
           />
           {props.searching ? (
@@ -111,36 +154,55 @@ export function ChatList(props: Props) {
             </button>
           </div>
         ) : null}
-        <div className="flex gap-1.5 overflow-x-auto text-[10px] font-bold hide-scrollbar" aria-label="Filtros de atendimentos">
-          {filters.map((item) => {
-            const active = props.filter === item.filter && props.type === item.type;
-            return (
-              <button
-                type="button"
-                key={item.label}
-                onClick={() => props.onFilterChange(item.filter, item.type)}
-                className={`shrink-0 rounded-lg border px-3 py-2 transition ${
-                  active
-                    ? 'border-clinic-primary bg-clinic-primary text-white shadow-sm'
-                    : 'border-clinic-border bg-clinic-surface text-clinic-muted hover:border-clinic-primary/40 hover:bg-clinic-hover hover:text-clinic-text'
-                }`}
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
+        {props.view === 'ATIVOS' ? (
+          <div className="flex gap-1.5 overflow-x-auto text-[10px] font-bold hide-scrollbar" aria-label="Filtros de atendimentos ativos">
+            {filters.map((item) => {
+              const active = props.filter === item.filter && props.type === item.type;
+              return (
+                <button
+                  type="button"
+                  key={item.label}
+                  onClick={() => props.onFilterChange(item.filter, item.type)}
+                  className={`shrink-0 rounded-lg border px-3 py-2 transition ${
+                    active
+                      ? 'border-clinic-primary bg-clinic-primary text-white shadow-sm'
+                      : 'border-clinic-border bg-clinic-surface text-clinic-muted hover:border-clinic-primary/40 hover:bg-clinic-hover hover:text-clinic-text'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
+      <div
+        id="atendimentos-lista"
+        role="tabpanel"
+        aria-labelledby={props.view === 'ATIVOS' ? 'atendimentos-ativos-tab' : 'atendimentos-finalizados-tab'}
+        className="flex-1 overflow-y-auto custom-scrollbar"
+      >
         {props.conversations.length === 0 ? (
             <div className="m-4 rounded-xl border border-dashed border-clinic-border bg-clinic-surface-muted px-4 py-10 text-center">
-              <p className="text-[12px] font-bold text-clinic-text">Nenhum atendimento encontrado.</p>
-              <p className="mt-1 text-[11px] text-clinic-muted">Ajuste a busca ou selecione outro filtro.</p>
+              <p className="text-[12px] font-bold text-clinic-text">
+                {props.search.trim()
+                  ? 'Nenhum resultado encontrado.'
+                  : props.view === 'FINALIZADOS'
+                    ? 'Nenhum atendimento finalizado encontrado.'
+                    : 'Nenhum atendimento em andamento encontrado.'}
+              </p>
+              <p className="mt-1 text-[11px] text-clinic-muted">
+                {props.search.trim()
+                  ? 'Ajuste a busca para localizar outro atendimento.'
+                  : props.view === 'FINALIZADOS'
+                    ? 'Os atendimentos encerrados aparecerão neste histórico.'
+                    : 'Ajuste o filtro ou inicie um novo atendimento.'}
+              </p>
             </div>
         ) : props.conversations.map((chat) => {
           const active = chat.id === props.activeId;
-          const attendanceLabel = getAttendanceLabel(chat);
+          const attendanceLabel = getAttendanceLabel(chat, props.view);
           const visibleTags = chat.tags.slice(0, 2);
           const hiddenTags = Math.max(chat.tags.length - visibleTags.length, 0);
           return (
@@ -172,7 +234,7 @@ export function ChatList(props: Props) {
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
                     <span className="rounded-full bg-clinic-blue/10 px-2 py-1 font-bold text-clinic-blue">
-                      {chat.tratadoPorIa ? 'IA' : 'Humano'}
+                      {props.view === 'FINALIZADOS' ? 'Finalizado' : chat.tratadoPorIa ? 'IA' : 'Humano'}
                     </span>
                     {chat.requerRevisao ? (
                       <span className="rounded-full bg-clinic-warning/10 px-2 py-1 font-bold text-clinic-warning">
@@ -216,7 +278,10 @@ export function ChatList(props: Props) {
   );
 }
 
-function getAttendanceLabel(chat: AtendimentoResumo) {
+function getAttendanceLabel(chat: AtendimentoResumo, view: AtendimentoView) {
+  if (view === 'FINALIZADOS') {
+    return chat.tratadoPorIa ? 'Encerrado · Atendido por IA' : 'Encerrado · Atendimento humano';
+  }
   if (chat.tratadoPorIa) return 'Atendido por IA';
   if (chat.atendentePrincipal) return `Atendido por ${chat.atendentePrincipal.nome}`;
   return 'Humano sem responsável';

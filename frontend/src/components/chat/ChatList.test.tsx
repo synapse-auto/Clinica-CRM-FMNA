@@ -24,15 +24,52 @@ const baseConversation: AtendimentoResumo = {
 
 const baseProps = {
   activeId: null,
+  view: 'ATIVOS' as const,
   filter: 'TODOS' as const,
   type: 'TODOS' as const,
   search: '',
   onSelect: vi.fn(),
+  onViewChange: vi.fn(),
   onFilterChange: vi.fn(),
   onSearchChange: vi.fn(),
 };
 
 describe('ChatList', () => {
+  it('should_keep_the_main_view_selector_visible_and_remove_finalized_from_operational_filters', () => {
+    const onViewChange = vi.fn();
+    render(<ChatList {...baseProps} conversations={[]} onViewChange={onViewChange} />);
+
+    const activeTab = screen.getByRole('tab', { name: 'Em atendimento' });
+    const finalizedTab = screen.getByRole('tab', { name: 'Finalizados' });
+    expect(activeTab).toHaveAttribute('aria-selected', 'true');
+    expect(finalizedTab).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('button', { name: 'Todos' })).toBeInTheDocument();
+    fireEvent.click(finalizedTab);
+    expect(onViewChange).toHaveBeenCalledWith('FINALIZADOS');
+  });
+
+  it('should_render_history_as_read_only_context_without_secondary_filters', () => {
+    render(
+      <ChatList
+        {...baseProps}
+        view="FINALIZADOS"
+        conversations={[{ ...baseConversation, status: 'ENCERRADO' }]}
+      />,
+    );
+
+    expect(screen.getByText('Histórico de atendimentos encerrados')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Buscar no histórico...')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Todos' })).not.toBeInTheDocument();
+    expect(screen.getByText('Finalizado')).toBeInTheDocument();
+    expect(screen.getByText('Encerrado · Atendido por IA')).toBeInTheDocument();
+  });
+
+  it('should_show_a_history_specific_empty_state', () => {
+    render(<ChatList {...baseProps} view="FINALIZADOS" conversations={[]} />);
+
+    expect(screen.getByText('Nenhum atendimento finalizado encontrado.')).toBeInTheDocument();
+  });
+
   it('should_show_manual_start_only_when_the_authenticated_profile_can_use_it', () => {
     const onStartManual = vi.fn();
     const { rerender } = render(
