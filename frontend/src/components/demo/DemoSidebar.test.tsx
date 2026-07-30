@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { act } from 'react';
 import { beforeEach, vi } from 'vitest';
@@ -132,13 +132,13 @@ describe('DemoSidebar', () => {
     // Trilho sempre compacto (64px) no desktop, largura total (256px) no mobile.
     expect(rail).toHaveClass('w-[256px]', 'md:w-16');
     // Expansão temporária como overlay por hover/focus, sem mexer no trilho.
-    expect(sidebar).toHaveClass('absolute', 'z-40', 'md:w-16', 'md:hover:w-[256px]', 'md:focus-within:w-[256px]');
+    expect(sidebar).toHaveClass('absolute', 'z-40', 'md:w-16', 'md:hover:w-[256px]');
+    expect(sidebar).not.toHaveClass('md:focus-within:w-[256px]');
     // Ícones sempre presentes; labels só aparecem no hover/focus (opacity-0 -> 100).
     expect(screen.getByRole('link', { name: /Atendimentos/ })).toBeInTheDocument();
     expect(screen.getByText('Atendimentos')).toHaveClass(
       'opacity-0',
       'group-hover/sidebar:opacity-100',
-      'group-focus-within/sidebar:opacity-100',
     );
     // Sem botão de fixar/recolher.
     expect(screen.queryByRole('button', { name: /Fixar/i })).not.toBeInTheDocument();
@@ -179,7 +179,8 @@ describe('DemoSidebar', () => {
     const rail = screen.getByTestId('sidebar-rail');
     const sidebar = screen.getByTestId('main-sidebar');
     expect(rail).toHaveClass('w-[256px]', 'md:w-16');
-    expect(sidebar).toHaveClass('md:hover:w-[256px]', 'md:focus-within:w-[256px]');
+    expect(sidebar).toHaveClass('md:hover:w-[256px]');
+    expect(sidebar).not.toHaveClass('md:focus-within:w-[256px]');
     // Em todas as rotas, labels são reveladas apenas no hover ou foco no desktop.
     expect(screen.getByText('Atendimentos')).toHaveClass('opacity-0', 'group-hover/sidebar:opacity-100');
   });
@@ -195,6 +196,116 @@ describe('DemoSidebar', () => {
 
     expect(screen.getByTestId('sidebar-rail')).toHaveClass('md:w-16');
     expect(screen.getByRole('link', { name: 'Pacientes' })).toHaveClass('bg-sidebar-accent');
+  });
+
+  it('should_not_expand_for_a_link_focused_after_pointer_interaction', () => {
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: true }}
+      />,
+    );
+
+    const sidebar = screen.getByTestId('main-sidebar');
+    const equipeLink = screen.getByRole('link', { name: 'Equipe' });
+    fireEvent.pointerDown(equipeLink, { pointerType: 'mouse' });
+    fireEvent.focus(equipeLink);
+    fireEvent.pointerLeave(sidebar, { pointerType: 'mouse' });
+
+    expect(sidebar).toHaveAttribute('data-keyboard-expanded', 'false');
+    expect(sidebar).toHaveClass('md:w-16');
+    expect(sidebar).not.toHaveClass('md:w-[256px]');
+  });
+
+  it.each([
+    ['tema', () => screen.getByRole('button', { name: /Ativar tema claro/i })],
+    ['minha conta', () => screen.getAllByTitle('Minha conta').at(-1)!],
+    ['sair', () => screen.getByRole('button', { name: 'Sair' })],
+  ])('should_not_keep_keyboard_expansion_after_pointer_interaction_with_%s', (_, getControl) => {
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: false }}
+      />,
+    );
+
+    const sidebar = screen.getByTestId('main-sidebar');
+    const keyboardLink = screen.getByRole('link', { name: 'Dashboard' });
+    fireEvent.keyDown(window, { key: 'Tab' });
+    fireEvent.focus(keyboardLink);
+    expect(sidebar).toHaveAttribute('data-keyboard-expanded', 'true');
+
+    const control = getControl();
+    fireEvent.pointerDown(control, { pointerType: 'mouse' });
+    fireEvent.focus(control);
+
+    expect(sidebar).toHaveAttribute('data-keyboard-expanded', 'false');
+  });
+
+  it('should_expand_for_keyboard_focus_and_remain_expanded_between_internal_links', () => {
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: false }}
+      />,
+    );
+
+    const sidebar = screen.getByTestId('main-sidebar');
+    const dashboardLink = screen.getByRole('link', { name: 'Dashboard' });
+    const pacientesLink = screen.getByRole('link', { name: 'Pacientes' });
+    fireEvent.keyDown(window, { key: 'Tab' });
+    fireEvent.focus(dashboardLink);
+
+    expect(sidebar).toHaveAttribute('data-keyboard-expanded', 'true');
+    expect(sidebar).toHaveClass('md:w-[256px]');
+    expect(screen.getByText('Dashboard')).toHaveClass('opacity-100');
+
+    fireEvent.blur(dashboardLink, { relatedTarget: pacientesLink });
+    fireEvent.focus(pacientesLink);
+
+    expect(sidebar).toHaveAttribute('data-keyboard-expanded', 'true');
+  });
+
+  it('should_collapse_when_keyboard_focus_leaves_the_sidebar', () => {
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: false }}
+      />,
+    );
+
+    const sidebar = screen.getByTestId('main-sidebar');
+    const dashboardLink = screen.getByRole('link', { name: 'Dashboard' });
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    fireEvent.focus(dashboardLink);
+    fireEvent.keyDown(dashboardLink, { key: 'Enter' });
+    fireEvent.blur(dashboardLink, { relatedTarget: document.body });
+
+    expect(sidebar).toHaveAttribute('data-keyboard-expanded', 'false');
+    expect(sidebar).toHaveClass('md:w-16');
+  });
+
+  it('should_move_the_badge_for_keyboard_expansion_and_restore_it_after_blur', () => {
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: false }}
+      />,
+    );
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('atendimentos:badge', { detail: 3 }));
+    });
+    const dashboardLink = screen.getByRole('link', { name: 'Dashboard' });
+    const badge = screen.getByText('3');
+    fireEvent.keyDown(window, { key: 'Tab' });
+    fireEvent.focus(dashboardLink);
+
+    expect(badge).toHaveClass('md:right-3', 'md:left-auto');
+
+    fireEvent.blur(dashboardLink, { relatedTarget: document.body });
+
+    expect(badge).toHaveClass('md:left-8', 'md:right-auto');
   });
 
   it.each(['/pacientes', '/equipe'])(

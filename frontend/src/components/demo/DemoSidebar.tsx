@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { FocusEvent } from 'react';
 import {
   BadgeHelp,
   Calendar,
@@ -54,6 +55,8 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const [atendimentosBadge, setAtendimentosBadge] = useState(0);
+  const [keyboardExpanded, setKeyboardExpanded] = useState(false);
+  const inputModalityRef = useRef<'pointer' | 'keyboard'>('pointer');
   const initials = user.nome
     .split(/\s+/)
     .filter(Boolean)
@@ -82,16 +85,49 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
     };
   }, []);
 
+  function markKeyboardInput(event: { key: string }) {
+    if (event.key === 'Tab' || event.key === 'Enter' || event.key === ' ') {
+      inputModalityRef.current = 'keyboard';
+    }
+  }
+
+  useEffect(() => {
+    window.addEventListener('keydown', markKeyboardInput);
+    return () => window.removeEventListener('keydown', markKeyboardInput);
+  }, []);
+
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.replace('/login');
     router.refresh();
   }
 
-  // A sidebar permanece compacta (64px) no desktop e expande
-  // temporariamente como overlay apenas no hover/focus, sem mover o chat, sem botão
-  // de fixar e sem preferência persistida. No mobile (max-md) volta ao padrão estático.
-  const compactLabelClass = 'opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-focus-within/sidebar:opacity-100 max-md:opacity-100';
+  const sidebarDesktopWidthClass = keyboardExpanded
+    ? 'md:w-[256px] md:shadow-2xl'
+    : 'md:w-16 md:hover:w-[256px] md:hover:shadow-2xl';
+  const compactLabelClass = keyboardExpanded
+    ? 'opacity-100 transition-opacity duration-150'
+    : 'opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 max-md:opacity-100';
+  const badgePositionClass = keyboardExpanded
+    ? 'md:left-auto md:right-3 md:top-1/2 md:-translate-y-1/2'
+    : 'md:left-8 md:right-auto md:top-2 md:translate-y-0 md:group-hover/sidebar:left-auto md:group-hover/sidebar:right-3 md:group-hover/sidebar:top-1/2 md:group-hover/sidebar:-translate-y-1/2';
+
+  function handlePointerDown() {
+    inputModalityRef.current = 'pointer';
+    setKeyboardExpanded(false);
+  }
+
+  function handleFocus() {
+    if (inputModalityRef.current === 'keyboard') {
+      setKeyboardExpanded(true);
+    }
+  }
+
+  function handleBlur(event: FocusEvent<HTMLElement>) {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setKeyboardExpanded(false);
+    }
+  }
 
   return (
     <div
@@ -99,8 +135,13 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
       data-testid="sidebar-rail"
     >
     <aside
-      className="group/sidebar absolute inset-y-0 left-0 z-40 flex h-screen w-[256px] shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground transition-[width,box-shadow] duration-150 hover:shadow-2xl focus-within:shadow-2xl md:w-16 md:hover:w-[256px] md:focus-within:w-[256px] max-md:static"
+      className={`group/sidebar absolute inset-y-0 left-0 z-40 flex h-screen w-[256px] shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground transition-[width,box-shadow] duration-150 ${sidebarDesktopWidthClass} max-md:static`}
       data-testid="main-sidebar"
+      data-keyboard-expanded={keyboardExpanded}
+      onPointerDownCapture={handlePointerDown}
+      onKeyDownCapture={markKeyboardInput}
+      onFocusCapture={handleFocus}
+      onBlurCapture={handleBlur}
     >
       <div className="flex h-[84px] items-center gap-3 border-b border-sidebar-border px-2">
         <div className="flex h-11 w-11 items-center justify-center">
@@ -143,7 +184,7 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
                   <span className={`truncate ${compactLabelClass}`}>{item.name}</span>
                 </span>
                 {badge ? (
-                  <span className="absolute right-3 top-1/2 min-w-5 -translate-y-1/2 rounded-full bg-clinic-danger px-1.5 py-0.5 text-center text-[11px] font-bold text-white md:left-8 md:right-auto md:top-2 md:translate-y-0 md:group-hover/sidebar:left-auto md:group-hover/sidebar:right-3 md:group-hover/sidebar:top-1/2 md:group-hover/sidebar:-translate-y-1/2 md:group-focus-within/sidebar:left-auto md:group-focus-within/sidebar:right-3 md:group-focus-within/sidebar:top-1/2 md:group-focus-within/sidebar:-translate-y-1/2">
+                  <span className={`absolute right-3 top-1/2 min-w-5 -translate-y-1/2 rounded-full bg-clinic-danger px-1.5 py-0.5 text-center text-[11px] font-bold text-white ${badgePositionClass}`}>
                     {badge}
                   </span>
                 ) : active ? (
