@@ -1,6 +1,8 @@
 'use client';
 
-import { CircleStop, LoaderCircle, Plus, Search } from 'lucide-react';
+import { Check, ChevronDown, CircleStop, Ellipsis, LoaderCircle, Plus, Search } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { Menu } from '@base-ui/react/menu';
 import type {
   AtendimentoFiltroOperacional,
   AtendimentoResumo,
@@ -30,107 +32,98 @@ type Props = {
   canCloseAll?: boolean;
   closeAllLoading?: boolean;
   onCloseAll?: () => void;
+  onCloseAllTriggerReady?: (focus: () => void) => void;
 };
 
-const filters = [
+const primaryFilters = [
   { label: 'Todos', filter: 'TODOS', type: 'TODOS' },
   { label: 'IA', filter: 'TODOS', type: 'IA' },
   { label: 'Humano', filter: 'TODOS', type: 'HUMANO' },
   { label: 'Meus', filter: 'MEUS', type: 'TODOS' },
   { label: 'Não lidos', filter: 'NAO_LIDOS', type: 'TODOS' },
+] as const;
+
+const moreFilters = [
   { label: 'Aguardando', filter: 'AGUARDANDO', type: 'TODOS' },
   { label: 'Convênio', filter: 'REVISAO', type: 'TODOS' },
 ] as const;
 
 export function ChatList(props: Props) {
+  const moreActionsTriggerRef = useRef<HTMLButtonElement>(null);
+  const hasMoreActions = props.view === 'ATIVOS' && Boolean(props.canCloseAll && props.onCloseAll);
+
+  useEffect(() => {
+    props.onCloseAllTriggerReady?.(() => moreActionsTriggerRef.current?.focus());
+  }, [props.onCloseAllTriggerReady]);
+
   return (
     <aside
       aria-label="Lista de atendimentos"
       className="flex h-full w-[336px] shrink-0 flex-col border-r border-clinic-border bg-clinic-surface"
       data-testid="chat-list"
     >
-      <div className="space-y-4 border-b border-clinic-border px-4 py-5">
+      <div className="space-y-3.5 border-b border-clinic-border px-4 py-5">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-clinic-primary">CRM · WhatsApp</p>
             <h1 className="text-[19px] font-extrabold tracking-tight text-clinic-text">Atendimentos</h1>
             <p className="mt-1 text-[11px] text-clinic-muted">Conversas reais da clínica</p>
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-2">
-            <span className="rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[10px] font-bold text-clinic-primary">
-              Ao vivo
-            </span>
-            {props.canStartManual ? (
-              <button
-                type="button"
-                onClick={props.onStartManual}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-clinic-primary px-2.5 text-[10px] font-extrabold text-white hover:brightness-95"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Novo atendimento
-              </button>
-            ) : null}
-            {props.canCloseAll ? (
-              <button
+          <span className="shrink-0 rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[10px] font-bold text-clinic-primary">
+            Ao vivo
+          </span>
+        </div>
+
+        {props.canStartManual ? (
+          <button
+            type="button"
+            onClick={props.onStartManual}
+            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-clinic-primary px-3 text-[12px] font-extrabold text-white transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-primary"
+          >
+            <Plus className="h-4 w-4" />
+            Novo atendimento
+          </button>
+        ) : null}
+
+        {hasMoreActions ? (
+          <div className="flex justify-end">
+            <Menu.Root modal={false}>
+              <Menu.Trigger
+                ref={moreActionsTriggerRef}
                 type="button"
                 disabled={props.closeAllLoading}
-                onClick={props.onCloseAll}
-                aria-label="Encerrar todos os atendimentos"
-                title="Encerrar todos os atendimentos"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-clinic-danger/50 px-2.5 text-[10px] font-extrabold text-clinic-danger hover:bg-clinic-danger/10 disabled:opacity-50"
+                aria-label="Mais ações dos atendimentos"
+                title="Mais ações"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-text focus-visible:outline-2 focus-visible:outline-clinic-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {props.closeAllLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <CircleStop className="h-3.5 w-3.5" />}
-                <span className="hidden sm:inline">Encerrar todos</span>
-                <span className="sm:hidden">Encerrar</span>
-              </button>
-            ) : null}
+                {props.closeAllLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Ellipsis className="h-4 w-4" />}
+                <span className="hidden md:inline">Mais ações</span>
+              </Menu.Trigger>
+              <Menu.Portal>
+                <Menu.Positioner side="bottom" align="end" sideOffset={6} className="z-[70]">
+                  <Menu.Popup
+                    finalFocus={moreActionsTriggerRef}
+                    className="min-w-56 rounded-xl border border-clinic-border bg-clinic-surface p-1 shadow-xl outline-none"
+                  >
+                    <Menu.Item
+                      onClick={props.onCloseAll}
+                      className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-2.5 text-[11px] font-bold text-clinic-danger outline-none data-[highlighted]:bg-clinic-danger/10"
+                    >
+                      <CircleStop className="h-4 w-4" />
+                      Encerrar todos os atendimentos
+                    </Menu.Item>
+                  </Menu.Popup>
+                </Menu.Positioner>
+              </Menu.Portal>
+            </Menu.Root>
           </div>
-        </div>
-        <div
-          role="tablist"
-          aria-label="Visão dos atendimentos"
-          className="grid grid-cols-2 gap-1 rounded-xl border border-clinic-border bg-clinic-soft p-1"
-        >
-          <button
-            id="atendimentos-ativos-tab"
-            type="button"
-            role="tab"
-            aria-selected={props.view === 'ATIVOS'}
-            aria-controls="atendimentos-lista"
-            onClick={() => props.onViewChange('ATIVOS')}
-            className={`rounded-lg px-2 py-2 text-[11px] font-extrabold transition ${
-              props.view === 'ATIVOS'
-                ? 'bg-clinic-surface text-clinic-text shadow-sm'
-                : 'text-clinic-muted hover:bg-clinic-hover hover:text-clinic-text'
-            }`}
-          >
-            Em atendimento
-          </button>
-          <button
-            id="atendimentos-finalizados-tab"
-            type="button"
-            role="tab"
-            aria-selected={props.view === 'FINALIZADOS'}
-            aria-controls="atendimentos-lista"
-            onClick={() => props.onViewChange('FINALIZADOS')}
-            className={`rounded-lg px-2 py-2 text-[11px] font-extrabold transition ${
-              props.view === 'FINALIZADOS'
-                ? 'bg-clinic-surface text-clinic-text shadow-sm'
-                : 'text-clinic-muted hover:bg-clinic-hover hover:text-clinic-text'
-            }`}
-          >
-            Finalizados
-          </button>
-        </div>
-        {props.view === 'FINALIZADOS' ? (
-          <p className="text-[11px] font-medium text-clinic-muted">
-            Histórico de atendimentos encerrados
-          </p>
         ) : null}
+
         <label className="relative block" aria-busy={props.searching}>
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clinic-muted" />
           <input
             type="search"
+            aria-label={props.view === 'FINALIZADOS' ? 'Buscar no histórico' : 'Buscar paciente ou telefone'}
             value={props.search}
             onChange={(event) => props.onSearchChange(event.target.value)}
             placeholder={props.view === 'FINALIZADOS' ? 'Buscar no histórico...' : 'Buscar paciente ou telefone...'}
@@ -146,6 +139,50 @@ export function ChatList(props: Props) {
             {props.searching ? 'Pesquisando atendimentos' : ''}
           </span>
         </label>
+
+        <div
+          role="tablist"
+          aria-label="Visão dos atendimentos"
+          className="grid grid-cols-2 gap-1 rounded-xl border border-clinic-border bg-clinic-soft p-1"
+        >
+          <button
+            id="atendimentos-ativos-tab"
+            type="button"
+            role="tab"
+            aria-selected={props.view === 'ATIVOS'}
+            aria-controls="atendimentos-lista"
+            onClick={() => props.onViewChange('ATIVOS')}
+            className={`rounded-lg px-2 py-2 text-[11px] font-extrabold transition focus-visible:outline-2 focus-visible:outline-clinic-primary ${
+              props.view === 'ATIVOS'
+                ? 'bg-clinic-surface text-clinic-text shadow-sm'
+                : 'text-clinic-muted hover:bg-clinic-hover hover:text-clinic-text'
+            }`}
+          >
+            Em atendimento
+          </button>
+          <button
+            id="atendimentos-finalizados-tab"
+            type="button"
+            role="tab"
+            aria-selected={props.view === 'FINALIZADOS'}
+            aria-controls="atendimentos-lista"
+            onClick={() => props.onViewChange('FINALIZADOS')}
+            className={`rounded-lg px-2 py-2 text-[11px] font-extrabold transition focus-visible:outline-2 focus-visible:outline-clinic-primary ${
+              props.view === 'FINALIZADOS'
+                ? 'bg-clinic-surface text-clinic-text shadow-sm'
+                : 'text-clinic-muted hover:bg-clinic-hover hover:text-clinic-text'
+            }`}
+          >
+            Finalizados
+          </button>
+        </div>
+
+        {props.view === 'FINALIZADOS' ? (
+          <p className="text-[11px] font-medium text-clinic-muted">
+            Histórico de atendimentos encerrados
+          </p>
+        ) : null}
+
         {props.error ? (
           <div role="alert" className="flex items-center justify-between gap-2 rounded-lg bg-clinic-danger/10 px-2.5 py-2 text-[10px] font-semibold text-clinic-danger">
             <span className="line-clamp-2">{props.error}</span>
@@ -154,16 +191,17 @@ export function ChatList(props: Props) {
             </button>
           </div>
         ) : null}
+
         {props.view === 'ATIVOS' ? (
-          <div className="flex gap-1.5 overflow-x-auto text-[10px] font-bold hide-scrollbar" aria-label="Filtros de atendimentos ativos">
-            {filters.map((item) => {
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold" aria-label="Filtros de atendimentos ativos">
+            {primaryFilters.map((item) => {
               const active = props.filter === item.filter && props.type === item.type;
               return (
                 <button
                   type="button"
                   key={item.label}
                   onClick={() => props.onFilterChange(item.filter, item.type)}
-                  className={`shrink-0 rounded-lg border px-3 py-2 transition ${
+                  className={`shrink-0 rounded-lg border px-2.5 py-2 transition focus-visible:outline-2 focus-visible:outline-clinic-primary ${
                     active
                       ? 'border-clinic-primary bg-clinic-primary text-white shadow-sm'
                       : 'border-clinic-border bg-clinic-surface text-clinic-muted hover:border-clinic-primary/40 hover:bg-clinic-hover hover:text-clinic-text'
@@ -173,6 +211,35 @@ export function ChatList(props: Props) {
                 </button>
               );
             })}
+            <Menu.Root modal={false}>
+              <Menu.Trigger
+                type="button"
+                aria-label="Mais filtros de atendimentos"
+                className="inline-flex h-[34px] shrink-0 items-center gap-1 rounded-lg border border-clinic-border bg-clinic-surface px-2.5 text-clinic-muted transition hover:border-clinic-primary/40 hover:bg-clinic-hover hover:text-clinic-text focus-visible:outline-2 focus-visible:outline-clinic-primary"
+              >
+                Mais
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Menu.Trigger>
+              <Menu.Portal>
+                <Menu.Positioner side="bottom" align="start" sideOffset={6} className="z-[70]">
+                  <Menu.Popup className="min-w-40 rounded-xl border border-clinic-border bg-clinic-surface p-1 shadow-xl outline-none">
+                    {moreFilters.map((item) => {
+                      const active = props.filter === item.filter && props.type === item.type;
+                      return (
+                        <Menu.Item
+                          key={item.label}
+                          onClick={() => props.onFilterChange(item.filter, item.type)}
+                          className="flex h-9 cursor-pointer items-center justify-between gap-3 rounded-lg px-2.5 text-[11px] font-bold text-clinic-text outline-none data-[highlighted]:bg-clinic-hover"
+                        >
+                          {item.label}
+                          {active ? <Check className="h-4 w-4 text-clinic-primary" /> : null}
+                        </Menu.Item>
+                      );
+                    })}
+                  </Menu.Popup>
+                </Menu.Positioner>
+              </Menu.Portal>
+            </Menu.Root>
           </div>
         ) : null}
       </div>

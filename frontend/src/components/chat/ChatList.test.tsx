@@ -96,25 +96,108 @@ describe('ChatList', () => {
     expect(screen.queryByRole('button', { name: 'Novo atendimento' })).not.toBeInTheDocument();
   });
 
-  it('should_keep_manual_start_and_show_accessible_close_all_action_for_managers', () => {
+  it('should_keep_the_title_separate_from_actions_and_make_manual_start_the_full_width_primary_action', () => {
     const onStartManual = vi.fn();
-    const onCloseAll = vi.fn();
     render(
       <ChatList
         {...baseProps}
         conversations={[]}
         canStartManual
         onStartManual={onStartManual}
-        canCloseAll
-        onCloseAll={onCloseAll}
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Novo atendimento' })).toBeInTheDocument();
-    const closeAll = screen.getByRole('button', { name: 'Encerrar todos os atendimentos' });
-    expect(closeAll).toHaveAttribute('title', 'Encerrar todos os atendimentos');
+    const title = screen.getByRole('heading', { name: 'Atendimentos' });
+    const start = screen.getByRole('button', { name: 'Novo atendimento' });
+    expect(title.parentElement?.parentElement).not.toContainElement(start);
+    expect(screen.getByText('Ao vivo')).toBeVisible();
+    expect(start).toHaveClass('w-full', 'h-10');
+  });
+
+  it('should_show_close_all_inside_an_accessible_more_actions_menu_for_managers', () => {
+    const onCloseAll = vi.fn();
+    render(<ChatList {...baseProps} conversations={[]} canCloseAll onCloseAll={onCloseAll} />);
+
+    const actions = screen.getByRole('button', { name: 'Mais ações dos atendimentos' });
+    fireEvent.click(actions);
+    const closeAll = screen.getByRole('menuitem', { name: 'Encerrar todos os atendimentos' });
     fireEvent.click(closeAll);
+
     expect(onCloseAll).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('menuitem', { name: 'Encerrar todos os atendimentos' })).not.toBeInTheDocument();
+  });
+
+  it('should_close_more_actions_with_escape_and_outside_click_without_losing_search', () => {
+    const onSearchChange = vi.fn();
+    const { rerender } = render(
+      <ChatList
+        {...baseProps}
+        conversations={[]}
+        canCloseAll
+        onCloseAll={vi.fn()}
+        onSearchChange={onSearchChange}
+      />,
+    );
+
+    const search = screen.getByRole('searchbox', { name: 'Buscar paciente ou telefone' });
+    fireEvent.change(search, { target: { value: 'Maria' } });
+    expect(onSearchChange).toHaveBeenCalledWith('Maria');
+    rerender(
+      <ChatList
+        {...baseProps}
+        conversations={[]}
+        search="Maria"
+        canCloseAll
+        onCloseAll={vi.fn()}
+        onSearchChange={onSearchChange}
+      />,
+    );
+    const actions = screen.getByRole('button', { name: 'Mais ações dos atendimentos' });
+    fireEvent.click(actions);
+    expect(screen.getByRole('menuitem', { name: 'Encerrar todos os atendimentos' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menuitem', { name: 'Encerrar todos os atendimentos' })).not.toBeInTheDocument();
+    expect(search).toHaveValue('Maria');
+
+    fireEvent.click(actions);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('menuitem', { name: 'Encerrar todos os atendimentos' })).not.toBeInTheDocument();
+  });
+
+  it('should_hide_more_actions_when_the_view_or_permission_has_no_available_action', () => {
+    const { rerender } = render(<ChatList {...baseProps} conversations={[]} />);
+    expect(screen.queryByRole('button', { name: 'Mais ações dos atendimentos' })).not.toBeInTheDocument();
+
+    rerender(<ChatList {...baseProps} conversations={[]} view="FINALIZADOS" canCloseAll onCloseAll={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Mais ações dos atendimentos' })).not.toBeInTheDocument();
+  });
+
+  it('should_expose_the_more_actions_trigger_for_focus_restoration_after_confirmation', () => {
+    const onCloseAllTriggerReady = vi.fn();
+    render(
+      <ChatList
+        {...baseProps}
+        conversations={[]}
+        canCloseAll
+        onCloseAll={vi.fn()}
+        onCloseAllTriggerReady={onCloseAllTriggerReady}
+      />,
+    );
+
+    const restoreFocus = onCloseAllTriggerReady.mock.calls.at(-1)?.[0] as (() => void) | undefined;
+    restoreFocus?.();
+    expect(screen.getByRole('button', { name: 'Mais ações dos atendimentos' })).toHaveFocus();
+  });
+
+  it('should_keep_less_used_operational_filters_in_a_separate_more_filters_menu', () => {
+    const onFilterChange = vi.fn();
+    render(<ChatList {...baseProps} conversations={[]} onFilterChange={onFilterChange} />);
+
+    expect(screen.queryByRole('button', { name: 'Aguardando' })).not.toBeInTheDocument();
+    const moreFilters = screen.getByRole('button', { name: 'Mais filtros de atendimentos' });
+    fireEvent.click(moreFilters);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Aguardando' }));
+    expect(onFilterChange).toHaveBeenCalledWith('AGUARDANDO', 'TODOS');
   });
 
   const unicodeName = '𝑨𝒃𝒊𝒎𝒂𝒆𝒍 𝑴𝒐𝒖𝒓𝒂';

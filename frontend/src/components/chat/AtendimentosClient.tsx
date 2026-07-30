@@ -120,6 +120,7 @@ export function AtendimentosClient({
   const [detailLoading, setDetailLoading] = useState(false);
   const [composerDrafts, setComposerDrafts] = useState<Record<number, string>>({});
   const knownNotifications = useRef<Set<number> | null>(null);
+  const closeAllActionFocus = useRef<(() => void) | null>(null);
   const activeIdRef = useRef<number | null>(activeId);
   const viewRef = useRef<AtendimentoView>(initialView);
   const initialRequestedIdRef = useRef<number | null>(
@@ -144,6 +145,10 @@ export function AtendimentosClient({
   const canManage = user.perfil === 'GESTOR' || user.perfil === 'RECEPCIONISTA';
   const filtroDaLista: AtendimentoFilter = view === 'FINALIZADOS' ? 'FINALIZADOS' : filter;
   const tipoDaLista: 'TODOS' | 'IA' | 'HUMANO' = view === 'FINALIZADOS' ? 'TODOS' : type;
+
+  const registerCloseAllActionFocus = useCallback((focus: () => void) => {
+    closeAllActionFocus.current = focus;
+  }, []);
 
   const atualizarSelecao = useCallback((nextId: number | null, nextView = viewRef.current) => {
     activeAbortController.current?.abort();
@@ -211,6 +216,11 @@ export function AtendimentosClient({
     focusReopenDetails.current = !open;
     setDetailsOpen(open);
     window.localStorage.setItem(DETAILS_PANEL_STORAGE_KEY, String(open));
+  }
+
+  function changeCloseAllDialogOpen(open: boolean) {
+    setCloseAllDialogOpen(open);
+    if (!open) window.requestAnimationFrame(() => closeAllActionFocus.current?.());
   }
 
   const refreshList = useCallback(async () => {
@@ -702,6 +712,7 @@ export function AtendimentosClient({
         canCloseAll={canManage && view === 'ATIVOS'}
         closeAllLoading={closeAllLoading}
         onCloseAll={() => void solicitarEncerramentoTodos()}
+        onCloseAllTriggerReady={registerCloseAllActionFocus}
       />
       <div className="flex min-w-0 flex-1">
         <ChatWindow
@@ -808,7 +819,7 @@ export function AtendimentosClient({
         mode="MASSA"
         total={closeAllTotal}
         processing={busy}
-        onOpenChange={setCloseAllDialogOpen}
+        onOpenChange={changeCloseAllDialogOpen}
         onConfirm={() => void encerrarTodosAtendimentosAtivos()}
       />
     </div>
