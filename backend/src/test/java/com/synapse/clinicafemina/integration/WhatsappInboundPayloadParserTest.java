@@ -210,4 +210,67 @@ class WhatsappInboundPayloadParserTest {
         assertEquals("Paciente reagiu com \u2764\uFE0F", dados.conteudo());
         assertEquals(null, dados.mediaId());
     }
+
+    @Test
+    void should_render_reaction_removal_as_discrete_text_without_an_empty_message() {
+        WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
+                "id", "wamid-reaction-removed",
+                "type", "reaction",
+                "reaction", Map.of("message_id", "wamid-original")
+        ));
+
+        assertEquals("TEXTO", dados.tipoMedia());
+        assertEquals("Paciente removeu uma reação", dados.conteudo());
+        assertEquals(null, dados.mediaId());
+    }
+
+    @Test
+    void should_use_button_text_instead_of_technical_payload() {
+        WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
+                "id", "wamid-button",
+                "type", "button",
+                "button", Map.of("text", "Sim, podemos", "payload", "template_yes_42")
+        ));
+
+        assertEquals("TEXTO", dados.tipoMedia());
+        assertEquals("Sim, podemos", dados.conteudo());
+        assertEquals("Sim, podemos", parser.limitarPrevia(dados.conteudo()));
+    }
+
+    @Test
+    void should_use_meta_interactive_button_reply_title() {
+        WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
+                "id", "wamid-interactive-button",
+                "type", "interactive",
+                "interactive", Map.of(
+                        "type", "button_reply",
+                        "button_reply", Map.of("id", "technical-yes", "title", "Sim, podemos")
+                )
+        ));
+
+        assertEquals("TEXTO", dados.tipoMedia());
+        assertEquals("Sim, podemos", dados.conteudo());
+    }
+
+    @Test
+    void should_preserve_meta_interactive_list_title_and_description() {
+        WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
+                "id", "wamid-interactive-list",
+                "type", "interactive",
+                "interactive", Map.of(
+                        "type", "list_reply",
+                        "list_reply", Map.of("id", "technical-list", "title", "Consulta pré-natal", "description", "Quinta às 14h")
+                )
+        ));
+
+        assertEquals("TEXTO", dados.tipoMedia());
+        assertEquals("Consulta pré-natal\nQuinta às 14h", dados.conteudo());
+    }
+
+    @Test
+    void should_use_friendly_text_for_non_supported_inbound_types() {
+        assertEquals("Localização recebida", parser.extrairDados(Map.of("type", "location")).conteudo());
+        assertEquals("Contato compartilhado", parser.extrairDados(Map.of("type", "contacts")).conteudo());
+        assertEquals("Tipo de mensagem ainda não suportado", parser.extrairDados(Map.of("type", "unknown")).conteudo());
+    }
 }

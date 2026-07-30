@@ -67,6 +67,18 @@ apresentação usa `figurinha.webp`. Como defesa para histórico, o frontend ren
 mídia com MIME `image/*`, mesmo que o registro antigo esteja como `OUTRO` ou `DOCUMENTO`.
 
 Reações inbound são registradas como o evento textual `Paciente reagiu com {emoji}` e não criam
-mídia falsa. O envio de figurinhas pelo CRM não é anunciado nem implementado: os adapters atuais
-enviam WebP como imagem e não há contrato comprovado, comum e seguro dos dois providers para
-figurinhas nativas.
+mídia falsa. Emoji vazio é tratado como remoção e gera o fallback discreto `Paciente removeu uma
+reação`; o modelo atual não persiste o alvo da reação, portanto não altera uma bolha existente.
+O ID do próprio evento inbound continua sendo a chave de idempotência, sem confundi-lo com o ID da
+mensagem reagida.
+
+Respostas `button`, `interactive.button_reply` e `interactive.list_reply` são normalizadas como
+mensagens `TEXTO` de entrada. O texto visível tem prioridade sobre `payload`/`id`; respostas de
+lista incluem a descrição em uma segunda linha quando presente. O envelope comprovado da UAZAP
+também passa pelo modelo inbound comum; não há contrato distinto documentado nesta base para um
+formato alternativo de resposta interativa. Tipos fora desse escopo recebem textos amigáveis, como
+`Localização recebida`, `Contato compartilhado` ou `Tipo de mensagem ainda não suportado`, sem
+placeholders técnicos entre colchetes. Registros históricos não são reescritos.
+
+O envio de figurinhas pelo CRM não é anunciado nem implementado: os adapters atuais enviam WebP
+como imagem e não há contrato comprovado, comum e seguro dos dois providers para figurinhas nativas.

@@ -35,14 +35,24 @@ public class WhatsappInboundPayloadParser {
 
         if ("reaction".equals(tipo)) {
             Map<String, Object> reaction = (Map<String, Object>) mensagem.get("reaction");
-            String emoji = reaction == null ? "" : String.valueOf(reaction.getOrDefault("emoji", ""));
+            String emoji = reaction == null ? "" : texto(reaction.get("emoji"));
             return new DadosMensagem(
                     "TEXTO",
-                    emoji.isBlank() ? "Paciente reagiu a uma mensagem" : "Paciente reagiu com " + emoji,
+                    emoji.isBlank() ? "Paciente removeu uma reação" : "Paciente reagiu com " + emoji,
                     null,
                     "text/plain",
                     null
             );
+        }
+
+        if ("button".equals(tipo)) {
+            Map<String, Object> button = (Map<String, Object>) mensagem.get("button");
+            return mensagemTextoInterativa(button, false);
+        }
+
+        if ("interactive".equals(tipo)) {
+            Map<String, Object> interactive = (Map<String, Object>) mensagem.get("interactive");
+            return extrairRespostaInterativa(interactive);
         }
 
         Map<String, Object> media = (Map<String, Object>) mensagem.get(tipo);
@@ -59,7 +69,7 @@ public class WhatsappInboundPayloadParser {
         String mimeType = String.valueOf(media.getOrDefault("mime_type", mimePadrao(tipoMedia, tipo)));
         String nome = normalizarNomeArquivo(media.get("filename"), tipo, tipoMedia, mimeType);
         String legenda = String.valueOf(media.getOrDefault("caption", ""));
-        String conteudo = legenda.isBlank() ? "[" + tipoMedia + "] " + nome : legenda;
+        String conteudo = legenda.isBlank() ? descricaoMidia(tipo, tipoMedia, nome) : legenda;
         return new DadosMensagem(
                 tipoMedia,
                 conteudo,
@@ -112,10 +122,72 @@ public class WhatsappInboundPayloadParser {
     }
 
     private String conteudoGenerico(String tipo) {
-        if (tipo == null || tipo.isBlank() || "null".equals(tipo)) {
-            return "[MENSAGEM]";
+        return switch (tipo == null ? "" : tipo.toLowerCase(Locale.ROOT)) {
+            case "location" -> "Localização recebida";
+            case "contacts", "contact" -> "Contato compartilhado";
+            case "video" -> "Vídeo recebido";
+            case "order" -> "Pedido recebido";
+            case "button" -> "Resposta de botão não identificada";
+            case "interactive" -> "Resposta interativa não identificada";
+            case "reaction" -> "Reação não identificada";
+            default -> "Tipo de mensagem ainda não suportado";
+        };
+    }
+
+    private DadosMensagem mensagemTextoInterativa(Map<String, Object> resposta, boolean lista) {
+        String titulo = resposta == null ? "" : primeiroTexto(resposta, "title", "text");
+        String descricao = resposta == null ? "" : texto(resposta.get("description"));
+        String fallbackTecnico = resposta == null ? "" : primeiroTexto(resposta, "payload", "id");
+        String conteudo = titulo.isBlank() ? fallbackTecnico : titulo;
+        if (lista && !titulo.isBlank() && !descricao.isBlank()) {
+            conteudo += "\n" + descricao;
         }
-        return "[" + tipo.toUpperCase(Locale.ROOT) + "]";
+        if (conteudo.isBlank()) {
+            conteudo = lista ? "Resposta de lista não identificada" : "Resposta de botão não identificada";
+        }
+        return new DadosMensagem("TEXTO", conteudo, null, "text/plain", null);
+    }
+
+    @SuppressWarnings("unchecked")
+    private DadosMensagem extrairRespostaInterativa(Map<String, Object> interactive) {
+        if (interactive == null) {
+            return new DadosMensagem("TEXTO", "Resposta interativa não identificada", null, "text/plain", null);
+        }
+        String subtipo = texto(interactive.get("type")).toLowerCase(Locale.ROOT);
+        return switch (subtipo) {
+            case "button_reply" -> mensagemTextoInterativa((Map<String, Object>) interactive.get("button_reply"), false);
+            case "list_reply" -> mensagemTextoInterativa((Map<String, Object>) interactive.get("list_reply"), true);
+            default -> new DadosMensagem("TEXTO", "Resposta interativa não identificada", null, "text/plain", null);
+        };
+    }
+
+    private String descricaoMidia(String tipoPayload, String tipoMedia, String nome) {
+        return switch (tipoPayload) {
+            case "image" -> "Imagem recebida";
+            case "sticker" -> "Figurinha recebida";
+            case "audio" -> "Áudio recebido";
+            case "document" -> "Documento recebido";
+            case "video" -> "Vídeo recebido";
+            default -> tipoMedia.equals("OUTRO") ? conteudoGenerico(tipoPayload) : nome;
+        };
+    }
+
+    private String primeiroTexto(Map<String, Object> origem, String... chaves) {
+        for (String chave : chaves) {
+            String valor = texto(origem.get(chave));
+            if (!valor.isBlank()) {
+                return valor;
+            }
+        }
+        return "";
+    }
+
+    private String texto(Object valor) {
+        if (valor == null) {
+            return "";
+        }
+        String texto = String.valueOf(valor).trim();
+        return "null".equalsIgnoreCase(texto) ? "" : texto;
     }
 
     private String mimePadrao(String tipoMedia, String tipoPayload) {

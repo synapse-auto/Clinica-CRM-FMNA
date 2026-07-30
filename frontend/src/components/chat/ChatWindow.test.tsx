@@ -534,6 +534,30 @@ describe('ChatWindow', () => {
     expect(imgElement).toHaveAttribute('src', '/api/atendimentos/30/mensagens/1/midia');
   });
 
+  it('should_render_canonical_button_and_list_replies_without_technical_placeholders', () => {
+    const buttonReply = { ...makeMessage(14, 'ENTRADA'), conteudo: 'Sim, podemos', conteudoPrevia: 'Sim, podemos' };
+    const listReply = { ...makeMessage(15, 'ENTRADA'), conteudo: 'Consulta pré-natal\nQuinta às 14h', conteudoPrevia: 'Consulta pré-natal' };
+    render(<ChatWindow detail={null} messages={[buttonReply, listReply]} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
+
+    expect(screen.getByText('Sim, podemos')).toBeInTheDocument();
+    expect(screen.getByText((_, element) => (
+      element?.classList.contains('whitespace-pre-wrap') && element.textContent === listReply.conteudo
+    ))).toBeInTheDocument();
+    expect(screen.queryByText('[BUTTON]')).not.toBeInTheDocument();
+    expect(screen.queryByText('[INTERACTIVE]')).not.toBeInTheDocument();
+  });
+
+  it('should_render_reaction_and_removal_as_accessible_discrete_text_events', () => {
+    render(<ChatWindow detail={null} messages={[
+      { ...makeMessage(16, 'ENTRADA'), conteudo: 'Paciente reagiu com ❤️' },
+      { ...makeMessage(17, 'ENTRADA'), conteudo: 'Paciente removeu uma reação' },
+    ]} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
+
+    expect(screen.getByText('Paciente reagiu com ❤️')).toBeInTheDocument();
+    expect(screen.getByText('Paciente removeu uma reação')).toBeInTheDocument();
+    expect(screen.queryByText('[REACTION]')).not.toBeInTheDocument();
+  });
+
   it.each(['IMAGEM', 'OUTRO', 'DOCUMENTO'])('should_render_legacy_webp_%s_inline_as_a_sticker', (tipoMedia) => {
     const sticker: MensagemAtendimento = {
       id: 11,
@@ -673,6 +697,20 @@ describe('ChatWindow', () => {
     const docLink = screen.getByRole('link', { name: 'exame.pdf' });
     expect(docLink).toBeInTheDocument();
     expect(docLink).toHaveAttribute('href', '/api/atendimentos/30/mensagens/3/midia');
+  });
+
+  it('should_use_the_friendly_canonical_text_for_unknown_media_named_outro', () => {
+    const video: MensagemAtendimento = {
+      id: 18, direcao: 'ENTRADA', remetente: 'PACIENTE', tipoMedia: 'DOCUMENTO',
+      conteudo: 'Vídeo recebido', conteudoPrevia: 'Vídeo recebido', whatsappStatus: 'RECEBIDA', motivoFalha: null,
+      dataHora: new Date().toISOString(), entregueEm: null, lidaEm: null,
+      midia: { tipoMedia: 'OUTRO', mimeType: 'video/mp4', nomeArquivo: 'outro', tamanhoBytes: 1234, url: '/api/atendimentos/30/mensagens/18/midia' },
+      templateNome: null, templateIdioma: null,
+    };
+    render(<ChatWindow detail={null} messages={[video]} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
+
+    expect(screen.getByRole('link', { name: 'Vídeo recebido' })).toHaveAttribute('href', '/api/atendimentos/30/mensagens/18/midia');
+    expect(screen.queryByRole('link', { name: 'outro' })).not.toBeInTheDocument();
   });
 
   it('should_keep_24_hour_failure_visible_with_a_friendly_reason', () => {

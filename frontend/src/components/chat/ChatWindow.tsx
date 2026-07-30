@@ -840,6 +840,9 @@ function MediaContent({
       />
     );
   }
+  const documentLabel = media.nomeArquivo && media.nomeArquivo.toLocaleLowerCase('pt-BR') !== 'outro'
+    ? media.nomeArquivo
+    : message.conteudo ?? 'Abrir documento';
   return (
     <a
       href={media.url}
@@ -848,7 +851,7 @@ function MediaContent({
       className="flex items-center gap-2 font-semibold underline"
     >
       <FileText className="h-4 w-4" />
-      {media.nomeArquivo ?? 'Abrir documento'}
+      {documentLabel}
     </a>
   );
 }
