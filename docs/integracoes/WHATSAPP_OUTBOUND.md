@@ -53,3 +53,20 @@ Para novo tipo de envio:
 - aguardar webhook para `ENTREGUE`, `LIDA` ou `FALHA`;
 - registrar somente IDs e telefones mascarados nos logs;
 - adicionar testes para chat ID confirmado e telefone cadastrado.
+
+## Mensagens inbound: Unicode, figurinhas e reações
+
+O envelope inbound comum de Meta e UAZAP preserva `text.body` como Unicode UTF-8, sem
+normalização por caractere. Isso mantém pares surrogate, ZWJ, variation selector, modificadores de
+tom de pele, bandeiras e keycaps desde o webhook até o DTO do chat. As prévias também são cortadas
+por *code point*, nunca por unidade UTF-16.
+
+O tipo inbound `sticker` é classificado canonicamente como `IMAGEM`, preservando o MIME recebido
+(por exemplo, `image/webp`). O nome de arquivo genérico `outro` não define o tipo: para esse caso a
+apresentação usa `figurinha.webp`. Como defesa para histórico, o frontend renderiza inline toda
+mídia com MIME `image/*`, mesmo que o registro antigo esteja como `OUTRO` ou `DOCUMENTO`.
+
+Reações inbound são registradas como o evento textual `Paciente reagiu com {emoji}` e não criam
+mídia falsa. O envio de figurinhas pelo CRM não é anunciado nem implementado: os adapters atuais
+enviam WebP como imagem e não há contrato comprovado, comum e seguro dos dois providers para
+figurinhas nativas.

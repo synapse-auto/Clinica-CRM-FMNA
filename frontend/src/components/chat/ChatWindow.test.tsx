@@ -534,6 +534,65 @@ describe('ChatWindow', () => {
     expect(imgElement).toHaveAttribute('src', '/api/atendimentos/30/mensagens/1/midia');
   });
 
+  it.each(['IMAGEM', 'OUTRO', 'DOCUMENTO'])('should_render_legacy_webp_%s_inline_as_a_sticker', (tipoMedia) => {
+    const sticker: MensagemAtendimento = {
+      id: 11,
+      direcao: 'ENTRADA',
+      remetente: 'PACIENTE',
+      tipoMedia: 'IMAGEM',
+      conteudo: '[IMAGEM] figurinha.webp',
+      conteudoPrevia: '[IMAGEM] figurinha.webp',
+      whatsappStatus: 'RECEBIDA',
+      motivoFalha: null,
+      dataHora: new Date().toISOString(),
+      entregueEm: null,
+      lidaEm: null,
+      midia: {
+        tipoMedia,
+        mimeType: 'image/webp',
+        nomeArquivo: 'outro',
+        tamanhoBytes: 1234,
+        url: '/api/atendimentos/30/mensagens/11/midia',
+      },
+      templateNome: null,
+      templateIdioma: null,
+    };
+
+    render(<ChatWindow detail={null} messages={[sticker]} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
+
+    const image = screen.getByRole('img', { name: 'Figurinha recebida' });
+    expect(image.closest('a')).toHaveAttribute('href', '/api/atendimentos/30/mensagens/11/midia');
+    expect(screen.queryByRole('link', { name: 'outro' })).not.toBeInTheDocument();
+  });
+
+  it('should_show_a_sticker_specific_error_without_replacing_the_original_link', () => {
+    const sticker: MensagemAtendimento = {
+      id: 12, direcao: 'ENTRADA', remetente: 'PACIENTE', tipoMedia: 'IMAGEM',
+      conteudo: '[IMAGEM]', conteudoPrevia: '[IMAGEM]', whatsappStatus: 'RECEBIDA', motivoFalha: null,
+      dataHora: new Date().toISOString(), entregueEm: null, lidaEm: null,
+      midia: { tipoMedia: 'OUTRO', mimeType: 'image/webp', nomeArquivo: 'outro', tamanhoBytes: 1234, url: '/api/atendimentos/30/mensagens/12/midia' },
+      templateNome: null, templateIdioma: null,
+    };
+    render(<ChatWindow detail={null} messages={[sticker]} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
+
+    fireEvent.error(screen.getByRole('img', { name: 'Figurinha recebida' }));
+    expect(screen.getByText('Figurinha indisponível')).toBeInTheDocument();
+  });
+
+  it('should_preserve_composed_emoji_when_sending_and_use_the_native_emoji_font_stack', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    const unicode = 'Família \u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466} ❤️ \u{1F44D}\u{1F3FD}';
+    render(<ChatWindow detail={detail} messages={[{ ...makeMessage(13, 'ENTRADA'), conteudo: unicode }]} quickMessages={[]} busy={false} error={null} onSend={onSend} onAttach={async () => undefined} />);
+
+    const composer = screen.getByPlaceholderText('Digite uma mensagem...');
+    expect((composer as HTMLElement).style.fontFamily).toContain('Segoe UI Emoji');
+    expect((screen.getByText(unicode) as HTMLElement).style.fontFamily).toContain('Segoe UI Emoji');
+    await user.type(composer, unicode);
+    await user.keyboard('{Enter}');
+    expect(onSend).toHaveBeenCalledWith(unicode);
+  });
+
   it('should_render_audio_using_bff_endpoint', () => {
     const mockAudioMessage: MensagemAtendimento = {
       id: 2,

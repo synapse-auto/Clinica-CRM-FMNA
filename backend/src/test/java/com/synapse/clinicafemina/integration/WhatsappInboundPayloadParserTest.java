@@ -164,4 +164,50 @@ class WhatsappInboundPayloadParserTest {
 
         assertEquals(texto, dados.conteudo());
     }
+
+    @Test
+    @DisplayName("Meta e UAZAP preservam Unicode completo no envelope inbound comum")
+    void should_preserve_complete_unicode_from_meta_and_uazap_payloads() {
+        String unicode = "\uD83D\uDE02 \u2764\uFE0F \uD83D\uDC4D\uD83C\uDFFD \uD83E\uDEC6 "
+                + "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66 "
+                + "\uD83C\uDFF3\uFE0F\u200D\uD83C\uDF08 \uD83C\uDDE7\uD83C\uDDF7 1\uFE0F\u20E3 \u263A\uFE0F";
+
+        for (String provider : new String[]{"Meta", "UAZAP"}) {
+            WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
+                    "id", provider + "-unicode",
+                    "type", "text",
+                    "text", Map.of("body", unicode)
+            ));
+
+            assertEquals(unicode, dados.conteudo());
+            assertFalse(dados.conteudo().contains("\uFFFD"));
+        }
+    }
+
+    @Test
+    void should_classify_sticker_as_image_and_ignore_generic_filename() {
+        WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
+                "id", "wamid-sticker",
+                "type", "sticker",
+                "sticker", Map.of("id", "media-sticker", "mime_type", "image/webp", "filename", "outro")
+        ));
+
+        assertEquals("IMAGEM", dados.tipoMedia());
+        assertEquals("image/webp", dados.mimeType());
+        assertEquals("figurinha.webp", dados.nomeArquivo());
+        assertEquals("media-sticker", dados.mediaId());
+    }
+
+    @Test
+    void should_render_reaction_as_text_without_creating_fake_media() {
+        WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
+                "id", "wamid-reaction",
+                "type", "reaction",
+                "reaction", Map.of("emoji", "\u2764\uFE0F", "message_id", "wamid-original")
+        ));
+
+        assertEquals("TEXTO", dados.tipoMedia());
+        assertEquals("Paciente reagiu com \u2764\uFE0F", dados.conteudo());
+        assertEquals(null, dados.mediaId());
+    }
 }

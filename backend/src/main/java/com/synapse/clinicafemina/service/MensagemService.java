@@ -504,11 +504,13 @@ public class MensagemService {
     }
 
     private String limitarPrevia(String conteudo) {
-        if (conteudo.length() <= TAMANHO_MAXIMO_PREVIA) {
+        int totalCodePoints = conteudo.codePointCount(0, conteudo.length());
+        if (totalCodePoints <= TAMANHO_MAXIMO_PREVIA) {
             return conteudo;
         }
-        int tamanhoTexto = TAMANHO_MAXIMO_PREVIA - SUFIXO_PREVIA_TRUNCADA.length();
-        return conteudo.substring(0, tamanhoTexto) + SUFIXO_PREVIA_TRUNCADA;
+        int tamanhoSufixo = SUFIXO_PREVIA_TRUNCADA.codePointCount(0, SUFIXO_PREVIA_TRUNCADA.length());
+        int fimSeguro = conteudo.offsetByCodePoints(0, TAMANHO_MAXIMO_PREVIA - tamanhoSufixo);
+        return conteudo.substring(0, fimSeguro) + SUFIXO_PREVIA_TRUNCADA;
     }
 
     private MensagemDTO toDTO(Mensagem mensagem) {

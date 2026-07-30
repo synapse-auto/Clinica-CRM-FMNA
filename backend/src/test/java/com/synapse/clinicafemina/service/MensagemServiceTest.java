@@ -35,6 +35,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -351,6 +352,24 @@ class MensagemServiceTest {
                 assertEquals("ATENDENTE", mensagem.getRemetente()));
         mensagemCaptor.getAllValues().forEach(mensagem ->
                 assertEquals(99L, mensagem.getRemetenteUsuario().getId()));
+    }
+
+    @Test
+    void should_send_and_persist_unicode_emoji_without_changing_the_content() {
+        String unicode = "Fam\u00edlia \uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66 \u2764\uFE0F \uD83D\uDC4D\uD83C\uDFFD";
+        when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L)).thenReturn(Optional.of(remetente));
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(whatsappOutboundClient.enviarTextoComResultado("5544999990000", unicode))
+                .thenReturn(metaResult("wamid-unicode"));
+
+        service.enviar(30L, 9L, new EnviarMensagemRequest("TEXTO", unicode), 99L);
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository, atLeastOnce()).save(mensagemCaptor.capture());
+        assertEquals(unicode, mensagemCaptor.getAllValues().getFirst().getConteudo());
+        assertFalse(mensagemCaptor.getAllValues().getFirst().getConteudo().contains("\uFFFD"));
+        verify(whatsappOutboundClient).enviarTextoComResultado("5544999990000", unicode);
     }
 
     @Test

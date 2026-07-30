@@ -796,7 +796,7 @@ class WhatsappInboundMapperTest {
     }
 
     @Test
-    void should_persist_unknown_meta_message_type_and_emit_original_payload_to_n8n() {
+    void should_persist_meta_sticker_as_image_and_emit_original_payload_to_n8n() {
         clinica.setSlug("ultramedical");
         clinica.setUsaN8n(true);
         clinica.setN8nWebhookUrl("https://n8n.example/webhook");
@@ -845,7 +845,7 @@ class WhatsappInboundMapperTest {
         ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
         verify(mensagemRepository).save(mensagemCaptor.capture());
         N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
-        assertEquals("OUTRO", mensagemCaptor.getValue().getTipoMedia());
+        assertEquals("IMAGEM", mensagemCaptor.getValue().getTipoMedia());
         assertEquals(40L, evento.contexto().mensagemId());
         assertTrue(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-sticker\""));
         assertFalse(new String(evento.payloadMetaOriginal(), StandardCharsets.UTF_8).contains("\"wamid-1\""));
@@ -1293,6 +1293,41 @@ class WhatsappInboundMapperTest {
         Paciente salvo = pacienteCaptor.getAllValues().getFirst();
         assertEquals("Ayumi Soluções Em Tecnologia", salvo.getNome());
         assertEquals("AYUMI SOLUÇÕES EM TECNOLOGIA", salvo.getNomeBusca());
+    }
+
+    @Test
+    void should_persist_sticker_as_image_with_its_webp_mime_type() {
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-sticker"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.save(any(Paciente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(atendimentoRepository.findAtivo(2L, null)).thenReturn(Optional.empty());
+        when(atendimentoRepository.existeEncerradoDesde(any(), any(), any())).thenReturn(false);
+        when(atendimentoRepository.save(any(Atendimento.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(midiaMensagemRepository.save(any(MidiaMensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mapper.processarMensagemTexto(Map.of(
+                "metadata", Map.of("phone_number_id", "phone-ultra"),
+                "contacts", List.of(Map.of("wa_id", "5511999990000", "profile", Map.of("name", "Paciente Teste"))),
+                "messages", List.of(Map.of(
+                        "id", "wamid-sticker",
+                        "timestamp", "1781455200",
+                        "type", "sticker",
+                        "sticker", Map.of("id", "media-sticker", "mime_type", "image/webp", "filename", "outro")
+                ))
+        ));
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        ArgumentCaptor<MidiaMensagem> midiaCaptor = ArgumentCaptor.forClass(MidiaMensagem.class);
+        verify(mensagemRepository).save(mensagemCaptor.capture());
+        verify(midiaMensagemRepository).save(midiaCaptor.capture());
+        assertEquals("IMAGEM", mensagemCaptor.getValue().getTipoMedia());
+        assertEquals("IMAGEM", midiaCaptor.getValue().getTipoMedia());
+        assertEquals("image/webp", midiaCaptor.getValue().getMimeType());
+        assertEquals("figurinha.webp", midiaCaptor.getValue().getNomeArquivo());
     }
 
     private Map<String, Object> validValuePayload(String phoneNumberId) {

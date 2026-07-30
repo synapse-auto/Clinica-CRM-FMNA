@@ -33,6 +33,18 @@ public class WhatsappInboundPayloadParser {
             );
         }
 
+        if ("reaction".equals(tipo)) {
+            Map<String, Object> reaction = (Map<String, Object>) mensagem.get("reaction");
+            String emoji = reaction == null ? "" : String.valueOf(reaction.getOrDefault("emoji", ""));
+            return new DadosMensagem(
+                    "TEXTO",
+                    emoji.isBlank() ? "Paciente reagiu a uma mensagem" : "Paciente reagiu com " + emoji,
+                    null,
+                    "text/plain",
+                    null
+            );
+        }
+
         Map<String, Object> media = (Map<String, Object>) mensagem.get(tipo);
         if (media == null || media.get("id") == null) {
             return new DadosMensagem(
@@ -44,14 +56,15 @@ public class WhatsappInboundPayloadParser {
             );
         }
         String tipoMedia = mapearTipoMedia(tipo);
-        String nome = String.valueOf(media.getOrDefault("filename", tipoMedia.toLowerCase()));
+        String mimeType = String.valueOf(media.getOrDefault("mime_type", mimePadrao(tipoMedia, tipo)));
+        String nome = normalizarNomeArquivo(media.get("filename"), tipo, tipoMedia, mimeType);
         String legenda = String.valueOf(media.getOrDefault("caption", ""));
         String conteudo = legenda.isBlank() ? "[" + tipoMedia + "] " + nome : legenda;
         return new DadosMensagem(
                 tipoMedia,
                 conteudo,
                 String.valueOf(media.get("id")),
-                String.valueOf(media.getOrDefault("mime_type", mimePadrao(tipoMedia))),
+                mimeType,
                 nome
         );
     }
@@ -91,7 +104,7 @@ public class WhatsappInboundPayloadParser {
 
     private String mapearTipoMedia(String tipo) {
         return switch (tipo) {
-            case "image" -> "IMAGEM";
+            case "image", "sticker" -> "IMAGEM";
             case "audio" -> "AUDIO";
             case "document" -> "DOCUMENTO";
             default -> "OUTRO";
@@ -105,12 +118,26 @@ public class WhatsappInboundPayloadParser {
         return "[" + tipo.toUpperCase(Locale.ROOT) + "]";
     }
 
-    private String mimePadrao(String tipoMedia) {
+    private String mimePadrao(String tipoMedia, String tipoPayload) {
+        if ("sticker".equals(tipoPayload)) {
+            return "image/webp";
+        }
         return switch (tipoMedia) {
             case "IMAGEM" -> "image/jpeg";
             case "AUDIO" -> "audio/ogg";
             default -> "application/octet-stream";
         };
+    }
+
+    private String normalizarNomeArquivo(Object nomeRecebido, String tipoPayload, String tipoMedia, String mimeType) {
+        String nome = nomeRecebido == null ? "" : String.valueOf(nomeRecebido).trim();
+        if (!nome.isBlank() && !"outro".equalsIgnoreCase(nome)) {
+            return nome;
+        }
+        if ("sticker".equals(tipoPayload) || "image/webp".equalsIgnoreCase(mimeType)) {
+            return "figurinha.webp";
+        }
+        return tipoMedia.toLowerCase(Locale.ROOT);
     }
 
     public record DadosMensagem(

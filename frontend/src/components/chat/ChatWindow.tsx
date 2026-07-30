@@ -56,6 +56,7 @@ type Props = {
 };
 
 const NEAR_BOTTOM_THRESHOLD = 96;
+const EMOJI_FONT_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
 // Largura fluida do conteúdo do chat: ocupa toda a área útil e só limita em telas
 // ultrawide (>1600px de coluna) para evitar linhas de leitura exageradas. Usada em
 // mensagens, aviso de janela, seletor rápido e composer para manter alinhamento vertical.
@@ -571,6 +572,7 @@ export function ChatWindow({
                 onKeyDown={handleComposerKeyDown}
                 placeholder="Digite uma mensagem..."
                 rows={1}
+                style={{ fontFamily: EMOJI_FONT_STACK }}
                 className="min-h-11 max-h-[132px] min-w-0 flex-1 resize-none rounded-xl border border-clinic-border bg-clinic-input px-4 py-3 text-[12px] text-clinic-text outline-none placeholder:text-clinic-muted focus:border-clinic-primary focus:ring-4 focus:ring-clinic-primary/10 disabled:opacity-50 custom-scrollbar"
               />
               <button
@@ -709,7 +711,7 @@ function MessageBubble({
             {message.templateIdioma ? <span className="opacity-70">· {message.templateIdioma}</span> : null}
           </div>
         ) : null}
-        <div className="whitespace-pre-wrap">{message.midia ? (
+        <div className="whitespace-pre-wrap" style={{ fontFamily: EMOJI_FONT_STACK }}>{message.midia ? (
           <MediaContent message={message} onLayoutChanged={onMediaLayoutChanged} />
         ) : message.conteudo}</div>
       </div>
@@ -796,9 +798,14 @@ function MediaContent({
   const [error, setError] = useState(false);
 
   if (!media) return null;
+  const mimeType = media.mimeType?.toLowerCase() ?? '';
+  const visualMedia = media.tipoMedia === 'IMAGEM' || mimeType.startsWith('image/');
+  const sticker = mimeType === 'image/webp';
 
   if (error) {
-    const errorText = media.tipoMedia === 'IMAGEM'
+    const errorText = sticker
+      ? 'Figurinha indisponível'
+      : visualMedia
       ? 'Imagem indisponível'
       : media.tipoMedia === 'AUDIO'
         ? 'Áudio indisponível'
@@ -806,15 +813,17 @@ function MediaContent({
     return <span className="italic text-clinic-muted">{errorText}</span>;
   }
 
-  if (media.tipoMedia === 'IMAGEM') {
+  if (visualMedia) {
     return (
       <a href={media.url} target="_blank" rel="noreferrer">
         <img
           src={media.url}
-          alt={media.nomeArquivo ?? 'Imagem recebida'}
+          alt={sticker ? 'Figurinha recebida' : media.nomeArquivo ?? 'Imagem recebida'}
           onLoad={onLayoutChanged}
           onError={() => setError(true)}
-          className="max-h-56 w-auto max-w-full rounded-lg object-contain"
+          className={sticker
+            ? 'max-h-[220px] w-auto max-w-[220px] object-contain'
+            : 'max-h-56 w-auto max-w-full rounded-lg object-contain'}
         />
       </a>
     );
