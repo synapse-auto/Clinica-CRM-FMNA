@@ -54,7 +54,6 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const [atendimentosBadge, setAtendimentosBadge] = useState(0);
-  const compactable = pathname === '/atendimentos' || pathname.startsWith('/atendimentos/');
   const initials = user.nome
     .split(/\s+/)
     .filter(Boolean)
@@ -89,27 +88,21 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
     router.refresh();
   }
 
-  // Em /atendimentos o trilho fica sempre compacto (64px) no desktop e expande
+  // A sidebar permanece compacta (64px) no desktop e expande
   // temporariamente como overlay apenas no hover/focus, sem mover o chat, sem botão
   // de fixar e sem preferência persistida. No mobile (max-md) volta ao padrão estático.
-  const railWidthClass = compactable ? 'w-[256px] md:w-16' : 'w-[256px]';
-  const sidebarWidthClass = compactable
-    ? 'w-[256px] md:w-16 md:hover:w-[256px] md:focus-within:w-[256px]'
-    : 'w-[256px]';
-  const temporaryLabelClass = compactable
-    ? 'opacity-0 transition-opacity group-hover/sidebar:opacity-100 group-focus-within/sidebar:opacity-100 max-md:opacity-100'
-    : '';
+  const compactLabelClass = 'opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100 group-focus-within/sidebar:opacity-100 max-md:opacity-100';
 
   return (
     <div
-      className={`relative h-screen shrink-0 transition-[width] duration-150 ${railWidthClass}`}
+      className="relative h-screen w-[256px] shrink-0 transition-[width] duration-150 md:w-16"
       data-testid="sidebar-rail"
     >
     <aside
-      className={`${compactable ? 'group/sidebar absolute inset-y-0 left-0 z-40 overflow-hidden transition-[width] duration-150 hover:shadow-2xl focus-within:shadow-2xl max-md:static' : ''} flex h-screen shrink-0 flex-col bg-sidebar text-sidebar-foreground ${sidebarWidthClass}`}
+      className="group/sidebar absolute inset-y-0 left-0 z-40 flex h-screen w-[256px] shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground transition-[width,box-shadow] duration-150 hover:shadow-2xl focus-within:shadow-2xl md:w-16 md:hover:w-[256px] md:focus-within:w-[256px] max-md:static"
       data-testid="main-sidebar"
     >
-      <div className={`flex h-[84px] items-center gap-3 border-b border-sidebar-border ${compactable ? 'px-2' : 'px-6'}`}>
+      <div className="flex h-[84px] items-center gap-3 border-b border-sidebar-border px-2">
         <div className="flex h-11 w-11 items-center justify-center">
           {publicBranding.logoUrl ? (
             <Image src={publicBranding.logoUrl} alt={clinic.nome} width={44} height={44} priority className="h-11 w-11 object-contain" />
@@ -119,14 +112,14 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
             </span>
           )}
         </div>
-        <div className={`min-w-0 ${temporaryLabelClass}`}>
+        <div className={`min-w-0 ${compactLabelClass}`}>
           <p className="truncate text-[15px] font-bold leading-tight text-white">{clinic.nome}</p>
           <p className="text-xs text-sidebar-foreground/65">CRM</p>
         </div>
       </div>
 
-      <div className={`flex-1 overflow-y-auto py-5 custom-scrollbar ${compactable ? 'px-2' : 'px-4'}`}>
-        <p className={`mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/55 ${temporaryLabelClass}`}>
+      <div className="custom-scrollbar flex-1 overflow-y-auto px-2 py-5">
+        <p className={`mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/55 ${compactLabelClass}`}>
           Menu
         </p>
         <nav className="space-y-1">
@@ -138,8 +131,8 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                title={compactable ? item.name : undefined}
-                className={`group relative flex h-[46px] items-center justify-between rounded-xl px-3 text-[14px] font-semibold transition ${compactable ? 'min-w-[240px]' : ''} ${
+                title={item.name}
+                className={`group relative flex h-[46px] min-w-[240px] items-center justify-between rounded-xl px-3 text-[14px] font-semibold transition ${
                   active
                     ? 'bg-sidebar-accent text-white shadow-sm'
                     : 'text-sidebar-foreground hover:bg-sidebar-accent/55 hover:text-white'
@@ -147,10 +140,10 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
               >
                 <span className="flex min-w-0 items-center gap-3">
                   <Icon className={`h-5 w-5 shrink-0 ${active ? 'text-sidebar-primary' : 'text-sidebar-foreground/60'}`} />
-                  <span className={`truncate ${temporaryLabelClass}`}>{item.name}</span>
+                  <span className={`truncate ${compactLabelClass}`}>{item.name}</span>
                 </span>
                 {badge ? (
-                  <span className="min-w-5 rounded-full bg-clinic-danger px-1.5 py-0.5 text-center text-[11px] font-bold text-white">
+                  <span className="absolute right-3 top-1/2 min-w-5 -translate-y-1/2 rounded-full bg-clinic-danger px-1.5 py-0.5 text-center text-[11px] font-bold text-white md:left-8 md:right-auto md:top-2 md:translate-y-0 md:group-hover/sidebar:left-auto md:group-hover/sidebar:right-3 md:group-hover/sidebar:top-1/2 md:group-hover/sidebar:-translate-y-1/2 md:group-focus-within/sidebar:left-auto md:group-focus-within/sidebar:right-3 md:group-focus-within/sidebar:top-1/2 md:group-focus-within/sidebar:-translate-y-1/2">
                     {badge}
                   </span>
                 ) : active ? (
@@ -162,27 +155,27 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
         </nav>
       </div>
 
-      <div className={`border-t border-sidebar-border ${compactable ? 'p-2' : 'p-4'}`}>
+      <div className="border-t border-sidebar-border p-2">
         <button
           type="button"
           onClick={toggleTheme}
           aria-label={`Ativar tema ${theme === 'dark' ? 'claro' : 'escuro'}`}
-          title={compactable ? `Tema ${theme === 'dark' ? 'claro' : 'escuro'}` : undefined}
-          className={`mb-3 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-semibold text-sidebar-foreground transition hover:bg-sidebar-accent/55 hover:text-white ${compactable ? 'min-w-[240px]' : ''}`}
+          title={`Tema ${theme === 'dark' ? 'claro' : 'escuro'}`}
+          className="mb-3 flex h-11 min-w-[240px] w-full items-center gap-3 rounded-xl px-3 text-left text-[14px] font-semibold text-sidebar-foreground transition hover:bg-sidebar-accent/55 hover:text-white"
         >
           {theme === 'dark' ? (
             <Sun className="h-4 w-4 text-sidebar-foreground/65" />
           ) : (
             <Moon className="h-4 w-4 text-sidebar-foreground/65" />
           )}
-          <span className={temporaryLabelClass}>Tema {theme === 'dark' ? 'Claro' : 'Escuro'}</span>
+          <span className={compactLabelClass}>Tema {theme === 'dark' ? 'Claro' : 'Escuro'}</span>
         </button>
-        <div className={`flex items-center justify-between gap-2 rounded-xl p-2 transition hover:bg-sidebar-accent/55 ${compactable ? 'min-w-[240px]' : ''}`}>
-          <Link href="/minha-conta" className="flex min-w-0 flex-1 items-center gap-3 rounded-md focus:outline-none focus:ring-2 focus:ring-sidebar-primary/45">
+        <div className="flex min-w-[240px] items-center justify-between gap-2 rounded-xl p-2 transition hover:bg-sidebar-accent/55">
+          <Link href="/minha-conta" title="Minha conta" className="flex min-w-0 flex-1 items-center gap-3 rounded-md focus:outline-none focus:ring-2 focus:ring-sidebar-primary/45">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-sm font-bold text-sidebar-primary-foreground ring-2 ring-sidebar-primary/20">
               {initials}
             </div>
-            <div className={`min-w-0 ${temporaryLabelClass}`}>
+            <div className={`min-w-0 ${compactLabelClass}`}>
               <p className="truncate text-[14px] font-bold text-white">{user.nome}</p>
               <p className="truncate text-xs text-sidebar-foreground/65">{formatProfile(user.perfil)}</p>
             </div>
@@ -190,6 +183,7 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
           <button
             type="button"
             aria-label="Sair"
+            title="Sair"
             onClick={logout}
             className="rounded-md p-1.5 text-sidebar-foreground/55 transition hover:bg-sidebar-accent hover:text-white"
           >

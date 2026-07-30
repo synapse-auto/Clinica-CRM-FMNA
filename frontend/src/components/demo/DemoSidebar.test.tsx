@@ -1,10 +1,12 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { act } from 'react';
 import { beforeEach, vi } from 'vitest';
 import { DemoSidebar } from './DemoSidebar';
 
 const replaceMock = vi.fn();
 const refreshMock = vi.fn();
+const toggleThemeMock = vi.fn();
 const navigation = vi.hoisted(() => ({ pathname: '/dashboard' }));
 
 vi.mock('next/navigation', () => ({
@@ -18,7 +20,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/theme/ThemeProvider', () => ({
   useTheme: () => ({
     theme: 'dark',
-    toggleTheme: vi.fn(),
+    toggleTheme: toggleThemeMock,
   }),
 }));
 
@@ -34,6 +36,7 @@ describe('DemoSidebar', () => {
   beforeEach(() => {
     navigation.pathname = '/dashboard';
     window.localStorage.clear();
+    toggleThemeMock.mockClear();
   });
 
   it('should_not_render_whatsapp_demo_shortcuts', () => {
@@ -129,7 +132,7 @@ describe('DemoSidebar', () => {
     // Trilho sempre compacto (64px) no desktop, largura total (256px) no mobile.
     expect(rail).toHaveClass('w-[256px]', 'md:w-16');
     // Expansão temporária como overlay por hover/focus, sem mexer no trilho.
-    expect(sidebar).toHaveClass('md:w-16', 'md:hover:w-[256px]', 'md:focus-within:w-[256px]');
+    expect(sidebar).toHaveClass('absolute', 'z-40', 'md:w-16', 'md:hover:w-[256px]', 'md:focus-within:w-[256px]');
     // Ícones sempre presentes; labels só aparecem no hover/focus (opacity-0 -> 100).
     expect(screen.getByRole('link', { name: /Atendimentos/ })).toBeInTheDocument();
     expect(screen.getByText('Atendimentos')).toHaveClass(
@@ -175,11 +178,61 @@ describe('DemoSidebar', () => {
 
     const rail = screen.getByTestId('sidebar-rail');
     const sidebar = screen.getByTestId('main-sidebar');
-    expect(rail).toHaveClass('w-[256px]');
-    expect(rail).not.toHaveClass('md:w-16');
-    expect(sidebar).not.toHaveClass('md:hover:w-[256px]');
-    // Rotas normais mantêm labels sempre visíveis (sem esconder por hover).
-    expect(screen.getByText('Atendimentos')).not.toHaveClass('opacity-0');
+    expect(rail).toHaveClass('w-[256px]', 'md:w-16');
+    expect(sidebar).toHaveClass('md:hover:w-[256px]', 'md:focus-within:w-[256px]');
+    // Em todas as rotas, labels são reveladas apenas no hover ou foco no desktop.
+    expect(screen.getByText('Atendimentos')).toHaveClass('opacity-0', 'group-hover/sidebar:opacity-100');
+  });
+
+  it('should_keep_the_rail_width_and_update_the_active_item_after_navigation', () => {
+    const sidebarUser = { id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR' as const, clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: false };
+    const { rerender } = render(<DemoSidebar clinic={clinic} user={sidebarUser} />);
+
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveClass('bg-sidebar-accent');
+
+    navigation.pathname = '/pacientes';
+    rerender(<DemoSidebar clinic={clinic} user={sidebarUser} />);
+
+    expect(screen.getByTestId('sidebar-rail')).toHaveClass('md:w-16');
+    expect(screen.getByRole('link', { name: 'Pacientes' })).toHaveClass('bg-sidebar-accent');
+  });
+
+  it.each(['/pacientes', '/equipe'])(
+    'should_keep_the_compact_rail_on_%s',
+    (pathname) => {
+      navigation.pathname = pathname;
+      render(
+        <DemoSidebar
+          clinic={clinic}
+          user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: false }}
+        />,
+      );
+
+      expect(screen.getByTestId('sidebar-rail')).toHaveClass('md:w-16');
+      expect(screen.getByTestId('main-sidebar')).toHaveClass('md:hover:w-[256px]');
+    },
+  );
+
+  it('should_keep_titles_badge_and_theme_control_accessible_in_the_compact_rail', async () => {
+    const user = userEvent.setup();
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false, podeGerenciarUsuarios: false }}
+      />,
+    );
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('atendimentos:badge', { detail: 3 }));
+    });
+
+    expect(screen.getByTitle('Atendimentos')).toBeInTheDocument();
+    expect(screen.getAllByTitle('Minha conta')).not.toHaveLength(0);
+    expect(screen.getByText('3')).toHaveClass('md:left-8', 'md:group-hover/sidebar:right-3');
+
+    await user.click(screen.getByRole('button', { name: /Ativar tema claro/i }));
+
+    expect(toggleThemeMock).toHaveBeenCalledOnce();
   });
 
   it('should_not_depend_on_hover_for_the_mobile_layout_on_atendimentos', () => {
