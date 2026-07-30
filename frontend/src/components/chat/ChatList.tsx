@@ -189,15 +189,15 @@ export function ChatList(props: Props) {
                 {props.search.trim()
                   ? 'Nenhum resultado encontrado.'
                   : props.view === 'FINALIZADOS'
-                    ? 'Nenhum atendimento finalizado encontrado.'
-                    : 'Nenhum atendimento em andamento encontrado.'}
+                    ? 'Nenhum atendimento finalizado.'
+                    : 'Nenhum atendimento ativo encontrado.'}
               </p>
               <p className="mt-1 text-[11px] text-clinic-muted">
                 {props.search.trim()
                   ? 'Ajuste a busca para localizar outro atendimento.'
                   : props.view === 'FINALIZADOS'
-                    ? 'Os atendimentos encerrados aparecerão neste histórico.'
-                    : 'Ajuste o filtro ou inicie um novo atendimento.'}
+                    ? 'Os atendimentos encerrados aparecerão aqui.'
+                    : 'Ajuste os filtros ou aguarde uma nova conversa.'}
               </p>
             </div>
         ) : props.conversations.map((chat) => {

@@ -67,7 +67,15 @@ describe('ChatList', () => {
   it('should_show_a_history_specific_empty_state', () => {
     render(<ChatList {...baseProps} view="FINALIZADOS" conversations={[]} />);
 
-    expect(screen.getByText('Nenhum atendimento finalizado encontrado.')).toBeInTheDocument();
+    expect(screen.getByText('Nenhum atendimento finalizado.')).toBeInTheDocument();
+    expect(screen.getByText('Os atendimentos encerrados aparecerão aqui.')).toBeInTheDocument();
+  });
+
+  it('should_show_an_active_specific_empty_state', () => {
+    render(<ChatList {...baseProps} conversations={[]} />);
+
+    expect(screen.getByText('Nenhum atendimento ativo encontrado.')).toBeInTheDocument();
+    expect(screen.getByText('Ajuste os filtros ou aguarde uma nova conversa.')).toBeInTheDocument();
   });
 
   it('should_show_manual_start_only_when_the_authenticated_profile_can_use_it', () => {
