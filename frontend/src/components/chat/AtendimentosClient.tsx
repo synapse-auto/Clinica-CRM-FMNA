@@ -147,6 +147,7 @@ export function AtendimentosClient({
   const drainingTextQueues = useRef(new Set<number>());
   const outboxMessagesRef = useRef<Record<number, MensagemAtendimento[]>>({});
   const failedTextContents = useRef(new Map<number, { atendimentoId: number; conteudo: string }>());
+  const messageRenderKeys = useRef(new Map<number, string>());
   const nextClientMessageId = useRef(-1);
   const debouncedSearch = useDebouncedValue(search, 300);
   const searchKey = isSearchableTerm(debouncedSearch)
@@ -495,9 +496,6 @@ export function AtendimentosClient({
     const next = { ...outboxMessagesRef.current, [atendimentoId]: nextMessages };
     outboxMessagesRef.current = next;
     setOutboxMessages(next);
-    if (activeIdRef.current === atendimentoId) {
-      setMessages((current) => mergeOutboxMessages(atendimentoId, current));
-    }
   }
 
   function createLocalTextMessage(item: TextQueueItem, whatsappStatus: string, motivoFalha: string | null = null): MensagemAtendimento {
@@ -532,7 +530,21 @@ export function AtendimentosClient({
     updateOutboxMessages(item.atendimentoId, (current) => current.map((message) => (
       message.id === item.clientId ? failure : message
     )));
-    if (activeIdRef.current === item.atendimentoId) setError(errorMessage(cause));
+    if (activeIdRef.current === item.atendimentoId) {
+      setMessages((current) => current.map((message) => message.id === item.clientId ? failure : message));
+      setError(errorMessage(cause));
+    }
+  }
+
+  function resolvePendingMessage(atendimentoId: number, clientId: number, sentMessage: MensagemAtendimento) {
+    updateOutboxMessages(atendimentoId, (current) => current.filter((message) => message.id !== clientId));
+    messageRenderKeys.current.set(sentMessage.id, `local-${clientId}`);
+    if (activeIdRef.current !== atendimentoId) return;
+    setMessages((current) => {
+      const pendingIndex = current.findIndex((message) => message.id === clientId);
+      if (pendingIndex < 0) return mergeMensagem(current, sentMessage);
+      return current.map((message) => message.id === clientId ? sentMessage : message);
+    });
   }
 
   async function drainTextQueue(atendimentoId: number) {
@@ -545,15 +557,12 @@ export function AtendimentosClient({
         if (!item) continue;
         try {
           const sentMessage = await enviarMensagem(item.atendimentoId, item.conteudo);
-          removeOutboxMessage(item.atendimentoId, item.clientId);
+          resolvePendingMessage(item.atendimentoId, item.clientId, sentMessage);
           if (sentMessage.whatsappStatus === 'FALHA') {
             failedTextContents.current.set(sentMessage.id, { atendimentoId: item.atendimentoId, conteudo: item.conteudo });
             if (activeIdRef.current === item.atendimentoId) {
-              setMessages((current) => mergeMensagem(current, sentMessage));
               setError(mensagemFalhaAmigavel(sentMessage.motivoFalha));
             }
-          } else if (activeIdRef.current === item.atendimentoId) {
-            setMessages((current) => mergeMensagem(current, sentMessage));
           }
         } catch (cause) {
           markQueuedMessageAsFailed(item, cause);
@@ -577,6 +586,9 @@ export function AtendimentosClient({
       clientId: nextClientMessageId.current--,
     };
     updateOutboxMessages(atendimentoId, (current) => [...current, createLocalTextMessage(item, 'PENDENTE')]);
+    if (activeIdRef.current === atendimentoId) {
+      setMessages((current) => mergeMensagem(current, createLocalTextMessage(item, 'PENDENTE')));
+    }
     const queue = textQueues.current.get(atendimentoId) ?? [];
     queue.push(item);
     textQueues.current.set(atendimentoId, queue);
@@ -858,6 +870,7 @@ export function AtendimentosClient({
           }}
           onRetryFailedMessage={retryFailedTextMessage}
           canRetryFailedMessage={(messageId) => failedTextContents.current.has(messageId)}
+          getMessageRenderKey={(message) => messageRenderKeys.current.get(message.id) ?? (message.id < 0 ? `local-${message.id}` : `message-${message.id}`)}
           onAttach={(file) => activeId
             ? runAction(() => enviarAnexo(activeId, file), { propagate: true, targetId: activeId })
             : Promise.resolve()}

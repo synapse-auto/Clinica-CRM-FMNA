@@ -46,6 +46,7 @@ type Props = {
   pendingTextMessageCount?: number;
   onRetryFailedMessage?: (messageId: number) => void;
   canRetryFailedMessage?: (messageId: number) => boolean;
+  getMessageRenderKey?: (message: MensagemAtendimento) => string;
 };
 
 const NEAR_BOTTOM_THRESHOLD = 96;
@@ -69,6 +70,7 @@ export function ChatWindow({
   pendingTextMessageCount = 0,
   onRetryFailedMessage,
   canRetryFailedMessage,
+  getMessageRenderKey,
 }: Props) {
   const [content, setContent] = useState('');
   const [quickOpen, setQuickOpen] = useState(false);
@@ -84,6 +86,7 @@ export function ChatWindow({
   const messageScrollContainer = useRef<HTMLDivElement>(null);
   const previousConversationId = useRef<number | null>(null);
   const previousMessageIds = useRef<number[]>([]);
+  const previousMessages = useRef<MensagemAtendimento[]>([]);
   const previousScrollHeight = useRef(0);
   const previousScrollTop = useRef(0);
   const isNearBottom = useRef(true);
@@ -128,6 +131,7 @@ export function ChatWindow({
     if (!currentConversationId || !container) {
       previousConversationId.current = null;
       previousMessageIds.current = [];
+      previousMessages.current = [];
       previousScrollHeight.current = 0;
       previousScrollTop.current = 0;
       isNearBottom.current = true;
@@ -139,10 +143,13 @@ export function ChatWindow({
       scrollToLastMessage('auto');
     } else {
       const previousIds = previousMessageIds.current;
+      const acknowledgementReplacement = isAcknowledgementReplacement(previousMessages.current, messages);
       const prepended = isPrependedSequence(previousIds, currentMessageIds);
       const appended = isAppendedSequence(previousIds, currentMessageIds);
 
-      if (prepended) {
+      if (acknowledgementReplacement || sameSequence(previousIds, currentMessageIds)) {
+        // A confirmação apenas resolve uma bolha otimista já visível: preserva a leitura.
+      } else if (prepended) {
         const addedHeight = Math.max(0, container.scrollHeight - previousScrollHeight.current);
         container.scrollTop = previousScrollTop.current + addedHeight;
         isNearBottom.current = isContainerNearBottom(container);
@@ -154,8 +161,6 @@ export function ChatWindow({
         } else {
           setShowNewMessagesNotice(true);
         }
-      } else if (sameSequence(previousIds, currentMessageIds)) {
-        // Atualizações de status não alteram a posição de leitura.
       } else {
         isNearBottom.current = isContainerNearBottom(container);
       }
@@ -163,6 +168,7 @@ export function ChatWindow({
 
     previousConversationId.current = currentConversationId;
     previousMessageIds.current = currentMessageIds;
+    previousMessages.current = messages;
     previousScrollTop.current = container.scrollTop;
     previousScrollHeight.current = container.scrollHeight;
   }, [detail?.id, messages, scrollToLastMessage]);
@@ -361,7 +367,7 @@ export function ChatWindow({
             Ainda não há mensagens nesta conversa.
           </p>
         ) : messages.map((message) => (
-          <div key={message.id}>
+          <div key={getMessageRenderKey?.(message) ?? String(message.id)}>
             <MessageBubble
               message={message}
               enforcesCustomerCareWindow={enforcesCustomerCareWindow}
@@ -556,11 +562,15 @@ export function ChatWindow({
                 <Send className="ml-0.5 h-4 w-4" />
               </button>
             </div>
-            {pendingTextMessageCount > 0 ? (
-              <p className="mt-2 text-right text-[10px] font-semibold text-clinic-muted" aria-live="polite">
-                Enviando {pendingTextMessageCount} mensagem{pendingTextMessageCount === 1 ? '' : 'ens'}…
-              </p>
-            ) : null}
+            <div
+              className="mt-2 min-h-4 text-right text-[10px] font-semibold text-clinic-muted"
+              aria-live="polite"
+              data-testid="pending-text-status"
+            >
+              {pendingTextMessageCount > 0
+                ? `Enviando ${pendingTextMessageCount} mensagem${pendingTextMessageCount === 1 ? '' : 'ens'}…`
+                : null}
+            </div>
           </div>
         )}
       </div>
@@ -807,6 +817,20 @@ function sameSequence(previousIds: number[], currentIds: number[]) {
 function isAppendedSequence(previousIds: number[], currentIds: number[]) {
   return currentIds.length > previousIds.length
     && previousIds.every((id, index) => id === currentIds[index]);
+}
+
+function isAcknowledgementReplacement(previous: MensagemAtendimento[], current: MensagemAtendimento[]) {
+  if (previous.length !== current.length || previous.length === 0) return false;
+  let replacements = 0;
+  for (let index = 0; index < previous.length; index += 1) {
+    const before = previous[index];
+    const after = current[index];
+    if (before.id === after.id) continue;
+    if (before.id >= 0 || after.id <= 0 || before.direcao !== 'SAIDA' || after.direcao !== 'SAIDA') return false;
+    if (before.conteudo !== after.conteudo) return false;
+    replacements += 1;
+  }
+  return replacements === 1;
 }
 
 function isPrependedSequence(previousIds: number[], currentIds: number[]) {

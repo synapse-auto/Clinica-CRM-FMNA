@@ -104,6 +104,74 @@ beforeEach(() => {
   });
 });
 
+describe('ChatWindow estabilidade visual do envio', () => {
+  it('should_keep_a_fixed_status_area_when_pending_messages_change', () => {
+    const { rerender } = render(
+      <ChatWindow
+        detail={detail}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        pendingTextMessageCount={0}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    const status = screen.getByTestId('pending-text-status');
+    expect(status).toHaveClass('min-h-4', 'mt-2');
+    expect(status).toBeEmptyDOMElement();
+
+    rerender(
+      <ChatWindow
+        detail={detail}
+        messages={[]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        pendingTextMessageCount={1}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByTestId('pending-text-status')).toHaveClass('min-h-4', 'mt-2');
+    expect(screen.getByTestId('pending-text-status')).toHaveTextContent('Enviando 1 mensagem');
+  });
+
+  it('should_not_scroll_when_an_optimistic_message_is_acknowledged_in_place', () => {
+    const pending = { ...makeMessage(-1, 'SAIDA'), conteudo: 'Mensagem pendente', conteudoPrevia: 'Mensagem pendente', whatsappStatus: 'PENDENTE' };
+    const confirmed = { ...pending, id: 101, whatsappStatus: 'ENVIADA' };
+    const { rerender } = render(
+      <ChatWindow
+        detail={detail}
+        messages={[pending]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    scrollToMock.mockClear();
+    rerender(
+      <ChatWindow
+        detail={detail}
+        messages={[confirmed]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(scrollToMock).not.toHaveBeenCalled();
+  });
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
