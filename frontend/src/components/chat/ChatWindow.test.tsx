@@ -243,8 +243,36 @@ describe('ChatWindow', () => {
     );
 
     expect(screen.getByText('Mensagem 1')).toBeInTheDocument();
-    expect(screen.getByText('Horário indisponível')).toBeInTheDocument();
+    expect(screen.getByText('Data e horário indisponíveis')).toBeInTheDocument();
     expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument();
+  });
+
+  it('should_render_date_and_time_below_received_and_sent_messages', () => {
+    render(
+      <ChatWindow
+        detail={detail}
+        messages={[
+          { ...makeMessage(1, 'ENTRADA'), dataHora: '2026-07-31T15:54:00-03:00' },
+          {
+            ...makeMessage(2, 'SAIDA'),
+            remetente: 'ATENDENTE',
+            whatsappStatus: 'ENVIADA',
+            dataHora: '2026-07-31T16:01:00-03:00',
+          },
+        ]}
+        quickMessages={[]}
+        busy={false}
+        error={null}
+        onSend={async () => undefined}
+        onAttach={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText('31/07 15:54')).toBeInTheDocument();
+    expect(screen.getByText('31/07 16:01')).toBeInTheDocument();
+    expect(document.querySelector('time[dateTime="2026-07-31T16:01:00-03:00"]')).toHaveTextContent('31/07 16:01');
+    expect(screen.getByText('Atendente')).toBeInTheDocument();
+    expect(screen.getAllByTestId('status-icon')).toHaveLength(1);
   });
 
   it('should_render_closed_attendance_as_read_only_without_sending_controls', () => {
@@ -1740,6 +1768,7 @@ describe('ChatWindow', () => {
       ...makeMessage(12, 'SISTEMA'),
       remetente: 'IA',
       tipoMedia: 'AI_HANDOFF_SUMMARY',
+      dataHora: '2026-07-31T15:54:00-03:00',
       conteudo: 'Paciente pediu retorno com a recepção.',
       conteudoPrevia: 'Paciente pediu retorno com a recepção.',
       whatsappStatus: 'INTERNO',
@@ -1760,6 +1789,7 @@ describe('ChatWindow', () => {
     expect(screen.getByTestId('ai-handoff-summary')).toBeInTheDocument();
     expect(screen.getByText('Resumo da IA para o atendimento')).toBeInTheDocument();
     expect(screen.getByText('Paciente pediu retorno com a recepção.')).toBeInTheDocument();
+    expect(screen.getByText('31/07 15:54')).toBeInTheDocument();
     expect(screen.queryByText('Falha no envio')).not.toBeInTheDocument();
   });
 

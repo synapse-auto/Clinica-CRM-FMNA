@@ -55,3 +55,19 @@ export function formatChatMessageTime(value: string): string {
     minute: '2-digit',
   }).format(date);
 }
+
+export function formatChatMessageDateTime(value: string | Date): string {
+  const date = toValidDate(value);
+  if (!date) return 'Data e horário indisponíveis';
+
+  const datePart = new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+  }).format(date);
+  const timePart = new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+
+  return `${datePart} ${timePart}`;
+}

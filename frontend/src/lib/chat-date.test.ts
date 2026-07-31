@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatChatDateLabel, formatChatMessageTime, getChatDateKey } from './chat-date';
+import {
+  formatChatDateLabel,
+  formatChatMessageDateTime,
+  formatChatMessageTime,
+  getChatDateKey,
+} from './chat-date';
 
 describe('chat-date', () => {
   const now = new Date(2026, 6, 30, 0, 10);
@@ -17,5 +22,10 @@ describe('chat-date', () => {
   it('should_return_safe_fallbacks_for_invalid_dates', () => {
     expect(getChatDateKey('invalid')).toBeNull();
     expect(formatChatMessageTime('invalid')).toBe('Horário indisponível');
+    expect(formatChatMessageDateTime('invalid')).toBe('Data e horário indisponíveis');
+  });
+
+  it('should_format_message_date_and_time_without_the_locale_comma', () => {
+    expect(formatChatMessageDateTime('2026-07-31T15:54:00-03:00')).toBe('31/07 15:54');
   });
 });

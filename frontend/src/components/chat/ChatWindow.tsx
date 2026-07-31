@@ -33,7 +33,7 @@ import {
 import {
   formatChatDateAccessibleLabel,
   formatChatDateLabel,
-  formatChatMessageTime,
+  formatChatMessageDateTime,
   getChatDateKey,
 } from '@/lib/chat-date';
 
@@ -717,7 +717,9 @@ function MessageBubble({
       </div>
       <div className="mt-1 flex items-center gap-1 text-[10px] text-clinic-muted">
         {outbound ? <MessageAuthor message={message} /> : null}
-        {formatChatMessageTime(message.dataHora)}
+        <time dateTime={message.dataHora}>
+          {formatChatMessageDateTime(message.dataHora)}
+        </time>
         {outbound ? <StatusIcon status={message.whatsappStatus} /> : null}
         {message.whatsappStatus === 'FALHA' ? (
           <span className="font-semibold text-clinic-danger">
@@ -772,8 +774,8 @@ function AiHandoffSummaryMessage({ message }: { message: MensagemAtendimento }) 
       <p className="mt-3 whitespace-pre-wrap break-words text-[12px] leading-5 text-clinic-text">
         {message.conteudo}
       </p>
-      <time className="mt-2 block text-right text-[10px] text-clinic-muted">
-        {formatChatMessageTime(message.dataHora)}
+      <time dateTime={message.dataHora} className="mt-2 block text-right text-[10px] text-clinic-muted">
+        {formatChatMessageDateTime(message.dataHora)}
       </time>
     </article>
   );
