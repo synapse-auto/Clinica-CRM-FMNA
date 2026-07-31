@@ -32,6 +32,7 @@ APP_CLINIC_NAME=FMNA
 APP_CLINIC_EXTERNAL_PROVIDER=DARWIN
 APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-fmna>
 WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-fmna>
+SPRING_FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/migration-valores-consulta-medico
 DARWIN_API_URL=<url-darwin>
 DARWIN_API_TOKEN=<token-read-only-darwin>
 ```
@@ -56,6 +57,7 @@ APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-ultra-quando-cadastrado>
 SPRING_DATASOURCE_URL=<jdbc-postgresql-ultramedical>
 SPRING_DATASOURCE_USERNAME=<usuario-banco>
 SPRING_DATASOURCE_PASSWORD=<senha-banco-fora-do-git>
+SPRING_FLYWAY_LOCATIONS=classpath:db/migration
 MEDWARE_API_URL=<url-publica-medware-ultramedical>/api
 MEDWARE_USERNAME=<usuario-api-medware>
 MEDWARE_PASSWORD=<senha-ou-hash-fora-do-git>
@@ -127,6 +129,30 @@ docker compose --profile test up -d postgres-test
 ```
 
 Nunca use reset destrutivo em producao.
+
+## Hotfix de compatibilidade das locations Flyway
+
+As migrations de `classpath:db/migration` sao comuns aos dois deploys. A V42
+`V42__adicionar_atende_convenio_em_clinica_valores_consulta_medico.sql` pertence
+ao modulo opcional da FMNA e fica somente em
+`classpath:db/migration-valores-consulta-medico`. O arquivo preserva o mesmo nome,
+conteudo e checksum ja registrados pela FMNA.
+
+Ordem segura para restaurar os deploys:
+
+1. Manter a UltraMedical no ultimo deploy estavel.
+2. Configurar `SPRING_FLYWAY_LOCATIONS` da FMNA com as duas locations antes de atualizar seu backend.
+3. Confirmar que a FMNA encontra a V42 na location adicional.
+4. Publicar o hotfix de codigo.
+5. Implantar o backend UltraMedical somente com `classpath:db/migration`.
+6. Confirmar a inicializacao da UltraMedical e o estado do Flyway.
+7. Implantar a FMNA com as duas locations.
+8. Confirmar que a validacao da V42 usa o checksum ja registrado.
+9. Somente depois reativar o auto-deploy.
+
+Nunca coloque migration especifica na pasta comum, nunca edite uma migration
+aplicada e nao use `repair`, `outOfOrder` ou alteracao manual do historico. A
+configuracao das locations deve anteceder o deploy do artefato que as utiliza.
 
 ## Validar Flyway
 

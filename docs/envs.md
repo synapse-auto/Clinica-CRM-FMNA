@@ -13,6 +13,28 @@ SPRING_FLYWAY_ENABLED=true
 SPRING_JPA_HIBERNATE_DDL_AUTO=validate
 ```
 
+### Locations Flyway por deploy
+
+As migrations comuns ficam em `classpath:db/migration`. Migrations de um modulo
+opcional ficam em uma location irma e nunca devem ser colocadas na pasta comum.
+
+UltraMedical, que nao possui o modulo de valores de consulta medica:
+
+```text
+SPRING_FLYWAY_LOCATIONS=classpath:db/migration
+```
+
+FMNA, que possui `clinica_valores_consulta_medico` e ja aplicou a V42:
+
+```text
+SPRING_FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/migration-valores-consulta-medico
+```
+
+A selecao e exclusiva da configuracao do deploy. Nao condicione migrations por
+`CLINIC_SLUG`, `clinicId` ou logica Java. Uma migration aplicada deve manter nome,
+conteudo e checksum; nunca use `repair` ou altere `flyway_schema_history` para
+compensar uma location incorreta.
+
 ## JWT
 
 ```text

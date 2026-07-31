@@ -3,6 +3,10 @@ spring:
     url: jdbc:postgresql://localhost:5432/clinica_auto
     username: postgres
     password: changeme
+  flyway:
+    # UltraMedical: somente migrations comuns.
+    # FMNA: classpath:db/migration,classpath:db/migration-valores-consulta-medico
+    locations: "${SPRING_FLYWAY_LOCATIONS:classpath:db/migration}"
 
 springdoc:
   api-docs:
