@@ -13,6 +13,7 @@ import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.service.AtendimentoNotificationService;
+import com.synapse.clinicafemina.service.AtendimentoService;
 import com.synapse.clinicafemina.service.HorarioIaService;
 import com.synapse.clinicafemina.service.N8nEventService;
 import com.synapse.clinicafemina.service.RealtimeBroadcastService;
@@ -63,6 +64,10 @@ class UazapInboundPipelineIntegrationTest {
             "messages":[{"from":"5543988887777","id":"UZ-100","timestamp":"1781455200","type":"text","text":{"body":"Olá FMNA"}}]}}]}]}
             """;
 
+    private static final String UAZAP_RESET_RAW = UAZAP_RAW
+            .replace("\"UZ-100\"", "\"UZ-RESET-1\"")
+            .replace("\"Olá FMNA\"", "\"#RESET\"");
+
     // Fixture Meta/UltraMedical (regressão): mesmo pipeline, wamid.
     private static final String META_RAW = """
             {"object":"whatsapp_business_account","entry":[{"id":"WABA","changes":[{"field":"messages","value":{
@@ -81,6 +86,7 @@ class UazapInboundPipelineIntegrationTest {
     @Mock private N8nEventService n8nEventService;
     @Mock private HorarioIaService horarioIaService;
     @Mock private AtendimentoNotificationService notificationService;
+    @Mock private AtendimentoService atendimentoService;
     @Mock private Environment environment;
     @Mock private WhatsappOutboundClient whatsappOutboundClient;
     @Mock private RealtimeBroadcastService broadcastService;
@@ -107,7 +113,8 @@ class UazapInboundPipelineIntegrationTest {
                 eventPublisher,
                 whatsappProperties,
                 new com.synapse.clinicafemina.service.WhatsappPhoneIdentityService(
-                        pacienteRepository, atendimentoRepository, mensagemRepository));
+                        pacienteRepository, atendimentoRepository, mensagemRepository),
+                atendimentoService);
         listener = new WhatsappInboundListener(mapper, new ObjectMapper(), broadcastService);
         lenient().when(horarioIaService.avaliar(any(Clinica.class)))
                 .thenReturn(new HorarioIaService.HorarioIaStatus(true, HorarioIaService.DENTRO_HORARIO));
@@ -257,6 +264,36 @@ class UazapInboundPipelineIntegrationTest {
         verify(mensagemRepository).save(any(Mensagem.class));
         verify(eventPublisher, never()).publishEvent(any(N8nMensagemRecebidaEvent.class));
         verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("#reset UAZAP ativa IA antes de publicar o envelope comum ao N8N")
+    void uazapReset_activatesAi_beforePublishingToN8n() {
+        Clinica clinica = clinicaFmna();
+        Paciente paciente = paciente(clinica);
+        Atendimento atendimento = atendimento(clinica, paciente, false);
+        atendimento.setStatus("ATIVO");
+        stubHappyPath(clinica, paciente, atendimento, "UZ-RESET-1");
+        when(atendimentoService.ativarModoIa(
+                30L, 5L, AtendimentoService.OrigemAtivacaoModoIa.COMANDO_RESET
+        )).thenAnswer(invocation -> {
+            atendimento.setTratadoPorIa(true);
+            atendimento.setAtendentePrincipal(null);
+            atendimento.setHumanoDesde(null);
+            return new AtendimentoService.AtivacaoModoIaResultado(true, false, false);
+        });
+
+        listener.processarMensagem(UAZAP_RESET_RAW.getBytes(StandardCharsets.UTF_8));
+
+        verify(atendimentoService).ativarModoIa(
+                30L, 5L, AtendimentoService.OrigemAtivacaoModoIa.COMANDO_RESET
+        );
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository).save(mensagemCaptor.capture());
+        assertEquals("#RESET", mensagemCaptor.getValue().getConteudo());
+        N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
+        assertTrue(evento.contexto().iaAtiva());
+        assertEquals("UZ-RESET-1", evento.contexto().whatsappMessageId());
     }
 
     @Test

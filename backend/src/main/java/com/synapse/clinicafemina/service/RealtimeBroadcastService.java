@@ -10,6 +10,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -86,6 +87,16 @@ public class RealtimeBroadcastService {
         );
         messagingTemplate.convertAndSendToUser(
                 atendenteId.toString(), "/queue/status-mensagem", payload);
+    }
+
+    public void broadcastAtendimentoModoIa(Long clinicaId, Long atendimentoId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("codigo", "ATENDIMENTO_ATUALIZADO");
+        payload.put("atendimentoId", atendimentoId);
+        payload.put("tratadoPorIa", true);
+        payload.put("atendentePrincipalId", null);
+        payload.put("status", "ATIVO");
+        messagingTemplate.convertAndSend("/topic/dashboard/" + clinicaId, payload);
     }
 
     /**

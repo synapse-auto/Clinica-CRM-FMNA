@@ -21,6 +21,9 @@ import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.service.AtendimentoNotificationService;
+import com.synapse.clinicafemina.service.AtendimentoService;
+import com.synapse.clinicafemina.service.AtendimentoService.AtivacaoModoIaResultado;
+import com.synapse.clinicafemina.service.AtendimentoService.OrigemAtivacaoModoIa;
 import com.synapse.clinicafemina.service.HorarioIaService;
 import com.synapse.clinicafemina.service.N8nEventPayload;
 import com.synapse.clinicafemina.service.N8nEventService;
@@ -73,6 +76,7 @@ public class WhatsappInboundMapper {
     private final ApplicationEventPublisher eventPublisher;
     private final WhatsappProperties whatsappProperties;
     private final WhatsappPhoneIdentityService phoneIdentityService;
+    private final AtendimentoService atendimentoService;
 
     /**
      * Auto-referência para que {@link #processarEntradaIsolada} passe pelo proxy transacional do
@@ -203,6 +207,10 @@ public class WhatsappInboundMapper {
         if (dados.mediaId() != null) {
             midiaRepository.save(criarMidia(mensagem, dados, resolvida.phoneNumberId()));
         }
+
+        AtivacaoModoIaResultado ativacaoReset = ativarModoIaPorComandoSeNecessario(
+                clinica, atendimento, dados
+        );
  
         atualizarConversa(atendimento, paciente, mensagem);
         // Notificação (escrita no banco) ANTES do N8N: assim todas as escritas de banco desta
@@ -211,7 +219,34 @@ public class WhatsappInboundMapper {
         // dentro do N8nEventService (nunca provoca rollback da mensagem persistida).
         notificationService.notificarNovaMensagem(atendimento, mensagem);
         emitirEventos(clinica, pacienteResolvido, atendimento, paciente, mensagem, resolvida.payloadMetaN8n());
+        if (ativacaoReset != null) {
+            log.info(
+                    "Comando reset inbound concluido. atendimentoId={} clinicaId={} provider={} estadoAnterior={} estadoAtual={} alterado={} publicadoN8n={} whatsappMessageId={}",
+                    atendimento.getId(),
+                    clinica.getId(),
+                    whatsappProperties.resolveProvider(),
+                    ativacaoReset.estadoAnteriorIa() ? "IA" : "HUMANO",
+                    ativacaoReset.atendimentoEncerrado() ? "ENCERRADO" : "IA",
+                    ativacaoReset.alterado(),
+                    !ativacaoReset.atendimentoEncerrado() && Boolean.TRUE.equals(clinica.getUsaN8n()),
+                    maskId(mensagem.getWhatsappMessageId()));
+        }
         log.info("Mensagem inbound processada com sucesso: atendimento={}", atendimento.getId());
+    }
+
+    private AtivacaoModoIaResultado ativarModoIaPorComandoSeNecessario(
+            Clinica clinica,
+            Atendimento atendimento,
+            DadosMensagem dados
+    ) {
+        if (!dados.comandoReset()) {
+            return null;
+        }
+        return atendimentoService.ativarModoIa(
+                atendimento.getId(),
+                clinica.getId(),
+                OrigemAtivacaoModoIa.COMANDO_RESET
+        );
     }
  
     @Transactional
@@ -551,7 +586,7 @@ public class WhatsappInboundMapper {
             Mensagem mensagem,
             byte[] payloadMetaOriginal
     ) {
-        if (!iaAtiva(atendimento)) {
+        if (!"ATIVO".equalsIgnoreCase(atendimento.getStatus()) || !iaAtiva(atendimento)) {
             log.info(
                     "Payload Meta para N8N bloqueado por atendimento humano: atendimento={}, paciente={}, mensagem={}, tipoMedia={}, whatsappMessageId={}, atendimentoOrigem={}, atendimentoModo={}, iaAtiva={}, horarioMotivo={}",
                     atendimento.getId(),

@@ -9,6 +9,7 @@ import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.service.AtendimentoNotificationService;
+import com.synapse.clinicafemina.service.AtendimentoService;
 import com.synapse.clinicafemina.service.HorarioIaService;
 import com.synapse.clinicafemina.service.N8nEventService;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +41,7 @@ class WhatsappInboundIdempotencyTest {
     private final N8nEventService n8nEventService = mock(N8nEventService.class);
     private final HorarioIaService horarioIaService = mock(HorarioIaService.class);
     private final AtendimentoNotificationService notificationService = mock(AtendimentoNotificationService.class);
+    private final AtendimentoService atendimentoService = mock(AtendimentoService.class);
     private final WhatsappInboundPayloadParser payloadParser = mock(WhatsappInboundPayloadParser.class);
     private final Environment environment = mock(Environment.class);
     private final WhatsappOutboundClient whatsappOutboundClient = mock(WhatsappOutboundClient.class);
@@ -54,7 +56,8 @@ class WhatsappInboundIdempotencyTest {
                 mock(org.springframework.context.ApplicationEventPublisher.class),
                 new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties(),
                 new com.synapse.clinicafemina.service.WhatsappPhoneIdentityService(
-                        pacienteRepository, atendimentoRepository, mensagemRepository));
+                        pacienteRepository, atendimentoRepository, mensagemRepository),
+                atendimentoService);
     }
 
     @Test

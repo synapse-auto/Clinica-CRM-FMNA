@@ -12,6 +12,7 @@ import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
 import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.service.AtendimentoNotificationService;
+import com.synapse.clinicafemina.service.AtendimentoService;
 import com.synapse.clinicafemina.service.HorarioIaService;
 import com.synapse.clinicafemina.service.N8nEventService;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,6 +70,7 @@ class WhatsappInboundUazapN8nDeliveryTest {
     @Mock private N8nEventService n8nEventService;
     @Mock private HorarioIaService horarioIaService;
     @Mock private AtendimentoNotificationService notificationService;
+    @Mock private AtendimentoService atendimentoService;
     @Mock private Environment environment;
     @Mock private WhatsappOutboundClient whatsappOutboundClient;
     @Mock private ApplicationEventPublisher eventPublisher;
@@ -95,7 +97,8 @@ class WhatsappInboundUazapN8nDeliveryTest {
                                 whatsappProperties)),
                 eventPublisher, whatsappProperties,
                 new com.synapse.clinicafemina.service.WhatsappPhoneIdentityService(
-                        pacienteRepository, atendimentoRepository, mensagemRepository));
+                        pacienteRepository, atendimentoRepository, mensagemRepository),
+                atendimentoService);
 
         clinica = new Clinica();
         clinica.setId(5L);

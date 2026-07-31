@@ -24,12 +24,14 @@ public class WhatsappInboundPayloadParser {
         String tipo = String.valueOf(mensagem.getOrDefault("type", "text"));
         if ("text".equals(tipo)) {
             Map<String, Object> texto = (Map<String, Object>) mensagem.get("text");
+            String conteudo = texto == null ? "" : String.valueOf(texto.getOrDefault("body", ""));
             return new DadosMensagem(
                     "TEXTO",
-                    texto == null ? "" : String.valueOf(texto.getOrDefault("body", "")),
+                    conteudo,
                     null,
                     "text/plain",
-                    null
+                    null,
+                    "#reset".equalsIgnoreCase(conteudo.trim())
             );
         }
 
@@ -41,7 +43,8 @@ public class WhatsappInboundPayloadParser {
                     emoji.isBlank() ? "Paciente removeu uma reação" : "Paciente reagiu com " + emoji,
                     null,
                     "text/plain",
-                    null
+                    null,
+                    false
             );
         }
 
@@ -62,7 +65,8 @@ public class WhatsappInboundPayloadParser {
                     conteudoGenerico(tipo),
                     null,
                     "application/octet-stream",
-                    null
+                    null,
+                    false
             );
         }
         String tipoMedia = mapearTipoMedia(tipo);
@@ -75,7 +79,8 @@ public class WhatsappInboundPayloadParser {
                 conteudo,
                 String.valueOf(media.get("id")),
                 mimeType,
-                nome
+                nome,
+                false
         );
     }
 
@@ -145,19 +150,19 @@ public class WhatsappInboundPayloadParser {
         if (conteudo.isBlank()) {
             conteudo = lista ? "Resposta de lista não identificada" : "Resposta de botão não identificada";
         }
-        return new DadosMensagem("TEXTO", conteudo, null, "text/plain", null);
+        return new DadosMensagem("TEXTO", conteudo, null, "text/plain", null, false);
     }
 
     @SuppressWarnings("unchecked")
     private DadosMensagem extrairRespostaInterativa(Map<String, Object> interactive) {
         if (interactive == null) {
-            return new DadosMensagem("TEXTO", "Resposta interativa não identificada", null, "text/plain", null);
+            return new DadosMensagem("TEXTO", "Resposta interativa não identificada", null, "text/plain", null, false);
         }
         String subtipo = texto(interactive.get("type")).toLowerCase(Locale.ROOT);
         return switch (subtipo) {
             case "button_reply" -> mensagemTextoInterativa((Map<String, Object>) interactive.get("button_reply"), false);
             case "list_reply" -> mensagemTextoInterativa((Map<String, Object>) interactive.get("list_reply"), true);
-            default -> new DadosMensagem("TEXTO", "Resposta interativa não identificada", null, "text/plain", null);
+            default -> new DadosMensagem("TEXTO", "Resposta interativa não identificada", null, "text/plain", null, false);
         };
     }
 
@@ -217,7 +222,8 @@ public class WhatsappInboundPayloadParser {
             String conteudo,
             String mediaId,
             String mimeType,
-            String nomeArquivo
+            String nomeArquivo,
+            boolean comandoReset
     ) {
     }
 }

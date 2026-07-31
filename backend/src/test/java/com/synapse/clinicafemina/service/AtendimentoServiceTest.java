@@ -792,6 +792,8 @@ class AtendimentoServiceTest {
         atendimento.setAtendentePrincipal(atendente);
         atendimento.setTratadoPorIa(false);
 
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L))
+                .thenReturn(Optional.of(atendimento));
         when(atendimentoRepository.findByIdAndClinicaId(3L, 1L))
                 .thenReturn(Optional.of(atendimento));
         when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -826,6 +828,8 @@ class AtendimentoServiceTest {
         OffsetDateTime now = OffsetDateTime.parse("2026-07-05T10:00:00Z");
         when(atendimentoRepository.findHumanosParaRetornoIa(now.minusHours(24)))
                 .thenReturn(List.of(atendimento));
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L))
+                .thenReturn(Optional.of(atendimento));
         when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         int total = service.retornarHumanosExpiradosParaIa(now);
@@ -835,6 +839,63 @@ class AtendimentoServiceTest {
         assertNull(atendimento.getAtendentePrincipal());
         assertNull(atendimento.getHumanoDesde());
         verify(atendimentoRepository).save(atendimento);
+    }
+
+    @Test
+    void should_keep_ai_mode_idempotent_without_saving_or_broadcasting_again() {
+        atendimento.setTratadoPorIa(true);
+        atendimento.setAtendentePrincipal(null);
+        atendimento.setHumanoDesde(null);
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L))
+                .thenReturn(Optional.of(atendimento));
+
+        var resultado = service.ativarModoIa(
+                3L, 1L, AtendimentoService.OrigemAtivacaoModoIa.COMANDO_RESET
+        );
+
+        assertFalse(resultado.alterado());
+        assertTrue(resultado.estadoAnteriorIa());
+        assertFalse(resultado.atendimentoEncerrado());
+        verify(atendimentoRepository, never()).save(any());
+        verify(broadcastService, never()).broadcastAtendimentoModoIa(anyLong(), anyLong());
+    }
+
+    @Test
+    void should_not_reopen_closed_atendimento_for_reset_command() {
+        atendimento.setStatus("ENCERRADO");
+        atendimento.setTratadoPorIa(false);
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L))
+                .thenReturn(Optional.of(atendimento));
+
+        var resultado = service.ativarModoIa(
+                3L, 1L, AtendimentoService.OrigemAtivacaoModoIa.COMANDO_RESET
+        );
+
+        assertTrue(resultado.atendimentoEncerrado());
+        assertEquals("ENCERRADO", atendimento.getStatus());
+        assertFalse(atendimento.getTratadoPorIa());
+        verify(atendimentoRepository, never()).save(any());
+    }
+
+    @Test
+    void should_broadcast_ai_mode_only_after_transaction_commit() {
+        atendimento.setTratadoPorIa(false);
+        when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L))
+                .thenReturn(Optional.of(atendimento));
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.ativarModoIa(3L, 1L, AtendimentoService.OrigemAtivacaoModoIa.COMANDO_RESET);
+
+            verify(broadcastService, never()).broadcastAtendimentoModoIa(anyLong(), anyLong());
+            List<TransactionSynchronization> synchronizations =
+                    TransactionSynchronizationManager.getSynchronizations();
+            assertEquals(1, synchronizations.size());
+            synchronizations.getFirst().afterCommit();
+            verify(broadcastService).broadcastAtendimentoModoIa(1L, 3L);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

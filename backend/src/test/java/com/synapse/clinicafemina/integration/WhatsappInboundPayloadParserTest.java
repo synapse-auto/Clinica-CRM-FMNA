@@ -36,6 +36,50 @@ class WhatsappInboundPayloadParserTest {
         return false;
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"#reset", "#RESET", "  #reset", "#Reset  "})
+    void should_recognize_exact_reset_command_ignoring_case_and_outer_spaces(String conteudo) {
+        WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
+                "type", "text",
+                "text", Map.of("body", conteudo)
+        ));
+
+        assertTrue(dados.comandoReset());
+        assertEquals(conteudo, dados.conteudo());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"oi #reset", "#reset agora", "teste#reset", "/#reset", "#reseta", "#resetar"})
+    void should_not_recognize_similar_text_as_reset_command(String conteudo) {
+        assertFalse(parser.extrairDados(Map.of(
+                "type", "text",
+                "text", Map.of("body", conteudo)
+        )).comandoReset());
+    }
+
+    @Test
+    void should_not_recognize_media_reaction_button_or_list_as_reset_command() {
+        assertFalse(parser.extrairDados(Map.of(
+                "type", "image",
+                "image", Map.of("id", "media-1", "caption", "#reset")
+        )).comandoReset());
+        assertFalse(parser.extrairDados(Map.of(
+                "type", "reaction",
+                "reaction", Map.of("emoji", "#reset")
+        )).comandoReset());
+        assertFalse(parser.extrairDados(Map.of(
+                "type", "button",
+                "button", Map.of("text", "#reset")
+        )).comandoReset());
+        assertFalse(parser.extrairDados(Map.of(
+                "type", "interactive",
+                "interactive", Map.of(
+                        "type", "list_reply",
+                        "list_reply", Map.of("title", "#reset")
+                )
+        )).comandoReset());
+    }
+
     @Test
     void should_extract_long_text_body_without_truncation() {
         String textoLongo = """

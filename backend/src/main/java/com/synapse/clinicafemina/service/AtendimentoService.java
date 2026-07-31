@@ -76,6 +76,18 @@ public class AtendimentoService {
             int posicaoSelecionada
     ) {}
 
+    public enum OrigemAtivacaoModoIa {
+        MANUAL,
+        COMANDO_RESET,
+        EXPIRACAO_24H
+    }
+
+    public record AtivacaoModoIaResultado(
+            boolean alterado,
+            boolean estadoAnteriorIa,
+            boolean atendimentoEncerrado
+    ) {}
+
     private record ResumoTransferencia(Mensagem mensagem, boolean registrado) {}
 
     private final AtendimentoRepository atendimentoRepository;
@@ -344,32 +356,77 @@ public class AtendimentoService {
 
     @Transactional
     public AtendimentoDetalheDTO ativarModoIa(Long id, Long clinicaId) {
-        Atendimento atendimento = buscarOuFalhar(id, clinicaId);
+        ativarModoIa(id, clinicaId, OrigemAtivacaoModoIa.MANUAL);
+        return toDetalheDTO(buscarOuFalhar(id, clinicaId));
+    }
+
+    @Transactional
+    public AtivacaoModoIaResultado ativarModoIa(
+            Long id,
+            Long clinicaId,
+            OrigemAtivacaoModoIa origem
+    ) {
+        Atendimento atendimento = atendimentoRepository.findByIdAndClinicaIdForUpdate(id, clinicaId)
+                .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
+        boolean estadoAnteriorIa = Boolean.TRUE.equals(atendimento.getTratadoPorIa());
         if ("ENCERRADO".equals(atendimento.getStatus())) {
+            if (origem == OrigemAtivacaoModoIa.COMANDO_RESET) {
+                log.info("Comando reset não alterou atendimento encerrado. atendimentoId={} clinicaId={}",
+                        id, clinicaId);
+                return new AtivacaoModoIaResultado(false, estadoAnteriorIa, true);
+            }
             throw new IllegalStateException("Nao e possivel ativar IA em um atendimento encerrado");
+        }
+        boolean alterado = !estadoAnteriorIa
+                || atendimento.getAtendentePrincipal() != null
+                || atendimento.getHumanoDesde() != null
+                || !"ATIVO".equals(atendimento.getStatus());
+        if (!alterado) {
+            return new AtivacaoModoIaResultado(false, true, false);
         }
         atendimento.setAtendentePrincipal(null);
         atendimento.setTratadoPorIa(true);
         atendimento.setHumanoDesde(null);
         atendimento.setStatus("ATIVO");
-        Atendimento salvo = atendimentoRepository.save(atendimento);
-        log.info("Atendimento {} retornado para IA", id);
-        return toDetalheDTO(salvo);
+        atendimentoRepository.save(atendimento);
+        agendarBroadcastModoIaAposCommit(atendimento);
+        log.info("Atendimento retornado para IA. atendimentoId={} clinicaId={} origem={} estadoAnterior={} estadoAtual=IA",
+                id, clinicaId, origem, estadoAnteriorIa ? "IA" : "HUMANO");
+        return new AtivacaoModoIaResultado(true, estadoAnteriorIa, false);
     }
 
     @Transactional
     public int retornarHumanosExpiradosParaIa(OffsetDateTime agora) {
         OffsetDateTime limite = agora.minusHours(24);
         List<Atendimento> expirados = atendimentoRepository.findHumanosParaRetornoIa(limite);
+        int alterados = 0;
         for (Atendimento atendimento : expirados) {
-            atendimento.setAtendentePrincipal(null);
-            atendimento.setTratadoPorIa(true);
-            atendimento.setHumanoDesde(null);
-            atendimentoRepository.save(atendimento);
-            log.info("Atendimento {} retornado automaticamente para IA apos 24h em modo humano",
-                    atendimento.getId());
+            AtivacaoModoIaResultado resultado = ativarModoIa(
+                    atendimento.getId(),
+                    atendimento.getClinica().getId(),
+                    OrigemAtivacaoModoIa.EXPIRACAO_24H
+            );
+            if (resultado.alterado()) {
+                alterados++;
+            }
         }
-        return expirados.size();
+        return alterados;
+    }
+
+    private void agendarBroadcastModoIaAposCommit(Atendimento atendimento) {
+        Long atendimentoId = atendimento.getId();
+        Long clinicaId = atendimento.getClinica().getId();
+        Runnable broadcast = () -> broadcastService.broadcastAtendimentoModoIa(clinicaId, atendimentoId);
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            log.debug("Broadcast de modo IA não agendado sem transação sincronizada. atendimentoId={}", atendimentoId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                broadcast.run();
+            }
+        });
     }
 
     @Transactional

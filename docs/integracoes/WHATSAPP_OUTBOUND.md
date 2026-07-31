@@ -82,3 +82,23 @@ placeholders técnicos entre colchetes. Registros históricos não são reescrit
 
 O envio de figurinhas pelo CRM não é anunciado nem implementado: os adapters atuais enviam WebP
 como imagem e não há contrato comprovado, comum e seguro dos dois providers para figurinhas nativas.
+
+## Comando inbound `#reset`
+
+Meta e UAZAP reconhecem o comando no parser inbound canônico somente quando o tipo original é
+`text` e `text.body`, após `trim`, é exatamente `#reset` sem diferença entre maiúsculas e
+minúsculas. Legendas de mídia, reações, botões, listas e textos que apenas contêm essa sequência
+não acionam o comando. O conteúdo original, inclusive espaços e caixa, continua persistido e
+visível no histórico.
+
+Depois de persistir a mensagem e antes de decidir o encaminhamento ao N8N, o atendimento ativo é
+bloqueado por clínica e passa atomicamente para IA: `tratadoPorIa=true`,
+`atendentePrincipal=null`, `humanoDesde=null` e `status=ATIVO`. A mesma mensagem segue pelo evento
+N8N já existente, executado depois do commit. Se o atendimento já estiver em IA, o estado não é
+salvo novamente, mas uma nova mensagem com outro `whatsappMessageId` continua chegando ao N8N.
+O retry do mesmo ID é descartado pela deduplicação anterior à detecção do comando.
+
+Clínicas sem N8N ainda concluem a mudança para IA; o listener existente ignora o envio externo de
+forma segura. Um atendimento encerrado por corrida não é reaberto pelo comando. A atualização de
+modo é propagada após o commit pelo tópico existente do dashboard e o polling atual do CRM também
+revalida lista, detalhe e histórico, mantendo a bolha `#reset`.

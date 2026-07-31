@@ -7,6 +7,7 @@ import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Mensagem;
 import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.domain.Paciente;
+import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient.MidiaBaixada;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
@@ -17,6 +18,7 @@ import com.synapse.clinicafemina.repository.PacienteRepository;
 import com.synapse.clinicafemina.service.N8nEventService;
 import com.synapse.clinicafemina.service.HorarioIaService;
 import com.synapse.clinicafemina.service.AtendimentoNotificationService;
+import com.synapse.clinicafemina.service.AtendimentoService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -81,6 +83,9 @@ class WhatsappInboundMapperTest {
     private AtendimentoNotificationService notificationService;
 
     @Mock
+    private AtendimentoService atendimentoService;
+
+    @Mock
     private Environment environment;
 
     @Mock
@@ -113,7 +118,8 @@ class WhatsappInboundMapperTest {
                 eventPublisher,
                 new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties(),
                 new com.synapse.clinicafemina.service.WhatsappPhoneIdentityService(
-                        pacienteRepository, atendimentoRepository, mensagemRepository)
+                        pacienteRepository, atendimentoRepository, mensagemRepository),
+                atendimentoService
         );
 
         clinica = new Clinica();
@@ -342,6 +348,73 @@ class WhatsappInboundMapperTest {
         verify(mensagemRepository).save(any(Mensagem.class));
         verificarNenhumEventoN8nPublicado();
         verify(n8nEventService, never()).criarPayloadMensagemRecebida(any(), any(), any(), any());
+    }
+
+    @Test
+    void should_persist_reset_activate_ai_before_n8n_and_preserve_original_content() {
+        clinica.setSlug("ultramedical");
+        clinica.setUsaN8n(true);
+        clinica.setN8nWebhookUrl("https://n8n.example/webhook");
+        Paciente paciente = new Paciente();
+        paciente.setId(20L);
+        paciente.setClinica(clinica);
+        paciente.setNomeBusca("PACIENTE");
+        paciente.setTelefoneNormalizado("5511999990000");
+        Recepcionista atendente = new Recepcionista();
+        atendente.setId(10L);
+        Atendimento atendimento = new Atendimento();
+        atendimento.setId(30L);
+        atendimento.setClinica(clinica);
+        atendimento.setPaciente(paciente);
+        atendimento.setStatus("ATIVO");
+        atendimento.setNaoLidas(0);
+        atendimento.setTratadoPorIa(false);
+        atendimento.setAtendentePrincipal(atendente);
+        atendimento.setHumanoDesde(OffsetDateTime.parse("2026-07-30T12:00:00Z"));
+
+        when(clinicaRepository.findByWhatsappPhoneNumberId("phone-ultra")).thenReturn(Optional.of(clinica));
+        when(mensagemRepository.findByClinicaIdAndWhatsappMessageId(2L, "wamid-reset-1"))
+                .thenReturn(Optional.empty());
+        when(pacienteRepository.findByClinicaIdAndTelefoneNormalizado(2L, "5511999990000"))
+                .thenReturn(Optional.of(paciente));
+        when(atendimentoRepository.findAtivo(2L, 20L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(40L);
+            return mensagem;
+        });
+        when(atendimentoRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pacienteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(atendimentoService.ativarModoIa(
+                30L, 2L, AtendimentoService.OrigemAtivacaoModoIa.COMANDO_RESET
+        )).thenAnswer(invocation -> {
+            atendimento.setTratadoPorIa(true);
+            atendimento.setAtendentePrincipal(null);
+            atendimento.setHumanoDesde(null);
+            return new AtendimentoService.AtivacaoModoIaResultado(true, false, false);
+        });
+
+        mapper.processarMensagemTexto(
+                valuePayloadSingleMessage("phone-ultra", "wamid-reset-1", "  #RESET "),
+                fullMetaPayload("phone-ultra").getBytes(StandardCharsets.UTF_8)
+        );
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        InOrder ordem = inOrder(mensagemRepository, atendimentoService, eventPublisher);
+        ordem.verify(mensagemRepository).save(mensagemCaptor.capture());
+        ordem.verify(atendimentoService).ativarModoIa(
+                30L, 2L, AtendimentoService.OrigemAtivacaoModoIa.COMANDO_RESET
+        );
+        ordem.verify(eventPublisher).publishEvent(any(N8nMensagemRecebidaEvent.class));
+        assertEquals("  #RESET ", mensagemCaptor.getValue().getConteudo());
+        assertTrue(atendimento.getTratadoPorIa());
+        assertNull(atendimento.getAtendentePrincipal());
+        assertNull(atendimento.getHumanoDesde());
+        assertEquals("ATIVO", atendimento.getStatus());
+        N8nMensagemRecebidaEvent evento = capturarUnicoEventoN8n();
+        assertTrue(evento.contexto().iaAtiva());
+        assertEquals("IA", evento.contexto().atendimentoModo());
+        assertEquals("wamid-reset-1", evento.contexto().whatsappMessageId());
     }
 
     @Test
