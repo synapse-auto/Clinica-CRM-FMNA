@@ -5,7 +5,7 @@ import { useState } from 'react';
 type Props = {
   name: string;
   url?: string | null;
-  variant?: 'list' | 'details';
+  variant?: 'list' | 'details' | 'sidebar';
 };
 
 export function ContactAvatar({ name, url, variant = 'list' }: Props) {
@@ -14,12 +14,15 @@ export function ContactAvatar({ name, url, variant = 'list' }: Props) {
   const [failedImageKey, setFailedImageKey] = useState<string | null>(null);
   const showImage = imageKey !== null && imageKey !== failedImageKey;
   const details = variant === 'details';
+  const sidebar = variant === 'sidebar';
 
   return (
     <div
       className={details
         ? 'relative mx-auto mb-3 flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-clinic-primary/15 text-xl font-extrabold text-clinic-primary ring-4 ring-clinic-soft'
-        : 'relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-clinic-primary/15 text-sm font-extrabold text-clinic-primary'}
+        : sidebar
+          ? 'relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-clinic-primary/15 text-sm font-extrabold text-clinic-primary'
+          : 'relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-clinic-primary/15 text-sm font-extrabold text-clinic-primary'}
     >
       {showImage && safeUrl ? (
         <img
@@ -27,7 +30,7 @@ export function ContactAvatar({ name, url, variant = 'list' }: Props) {
           alt={avatarAlt(name)}
           loading="lazy"
           decoding="async"
-          className="absolute inset-0 h-full w-full rounded-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover"
           onError={() => setFailedImageKey(imageKey)}
         />
       ) : (

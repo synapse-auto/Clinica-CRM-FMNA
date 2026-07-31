@@ -1,6 +1,15 @@
 'use client';
 
-import { Check, ChevronDown, CircleStop, Ellipsis, LoaderCircle, Plus, Search } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  CircleStop,
+  Ellipsis,
+  LoaderCircle,
+  MessageCircle,
+  Plus,
+  Search,
+} from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Menu } from '@base-ui/react/menu';
 import type {
@@ -59,65 +68,58 @@ export function ChatList(props: Props) {
   return (
     <aside
       aria-label="Lista de atendimentos"
-      className="flex h-full w-[336px] shrink-0 flex-col border-r border-clinic-border bg-clinic-surface"
+      className="flex h-full w-[352px] max-w-[calc(100vw-58px)] shrink-0 flex-col border-r border-clinic-border bg-clinic-surface"
       data-testid="chat-list"
     >
-      <div className="space-y-3.5 border-b border-clinic-border px-4 py-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-clinic-primary">CRM · WhatsApp</p>
-            <h1 className="text-[19px] font-extrabold tracking-tight text-clinic-text">Atendimentos</h1>
-            <p className="mt-1 text-[11px] text-clinic-muted">Conversas reais da clínica</p>
-          </div>
-          <span className="shrink-0 rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[10px] font-bold text-clinic-primary">
-            Ao vivo
-          </span>
-        </div>
-
-        {props.canStartManual ? (
-          <button
-            type="button"
-            onClick={props.onStartManual}
-            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-clinic-primary px-3 text-[12px] font-extrabold text-white transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-primary"
-          >
-            <Plus className="h-4 w-4" />
-            Novo atendimento
-          </button>
-        ) : null}
-
-        {hasMoreActions ? (
-          <div className="flex justify-end">
-            <Menu.Root modal={false}>
-              <Menu.Trigger
-                ref={moreActionsTriggerRef}
-                type="button"
-                disabled={props.closeAllLoading}
-                aria-label="Mais ações dos atendimentos"
-                title="Mais ações"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-text focus-visible:outline-2 focus-visible:outline-clinic-primary disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {props.closeAllLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Ellipsis className="h-4 w-4" />}
-                <span className="hidden md:inline">Mais ações</span>
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Positioner side="bottom" align="end" sideOffset={6} className="z-[70]">
-                  <Menu.Popup
-                    finalFocus={moreActionsTriggerRef}
-                    className="min-w-56 rounded-xl border border-clinic-border bg-clinic-surface p-1 shadow-xl outline-none"
-                  >
-                    <Menu.Item
-                      onClick={props.onCloseAll}
-                      className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-2.5 text-[11px] font-bold text-clinic-danger outline-none data-[highlighted]:bg-clinic-danger/10"
+      <div className="space-y-3 border-b border-clinic-border px-4 pb-3.5 pt-4">
+        <div className="flex min-h-9 items-center justify-between gap-3">
+          <h1 className="min-w-0 truncate text-[19px] font-extrabold tracking-tight text-clinic-text">
+            Atendimentos
+          </h1>
+          <div className="flex shrink-0 items-center gap-2">
+            {hasMoreActions ? (
+              <Menu.Root modal={false}>
+                <Menu.Trigger
+                  ref={moreActionsTriggerRef}
+                  type="button"
+                  disabled={props.closeAllLoading}
+                  aria-label="Mais ações dos atendimentos"
+                  title="Mais ações"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-clinic-border bg-clinic-surface text-clinic-muted shadow-sm transition hover:border-clinic-primary/30 hover:bg-clinic-hover hover:text-clinic-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {props.closeAllLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Ellipsis className="h-4 w-4" />}
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Positioner side="bottom" align="end" sideOffset={6} className="z-[70]">
+                    <Menu.Popup
+                      finalFocus={moreActionsTriggerRef}
+                      className="min-w-56 rounded-xl border border-clinic-border bg-clinic-surface p-1 shadow-xl outline-none"
                     >
-                      <CircleStop className="h-4 w-4" />
-                      Encerrar todos os atendimentos
-                    </Menu.Item>
-                  </Menu.Popup>
-                </Menu.Positioner>
-              </Menu.Portal>
-            </Menu.Root>
+                      <Menu.Item
+                        onClick={props.onCloseAll}
+                        className="flex h-9 cursor-pointer items-center gap-2 rounded-lg px-2.5 text-[11px] font-bold text-clinic-danger outline-none data-[highlighted]:bg-clinic-danger/10"
+                      >
+                        <CircleStop className="h-4 w-4" />
+                        Encerrar todos os atendimentos
+                      </Menu.Item>
+                    </Menu.Popup>
+                  </Menu.Positioner>
+                </Menu.Portal>
+              </Menu.Root>
+            ) : null}
+            {props.canStartManual ? (
+              <button
+                type="button"
+                onClick={props.onStartManual}
+                aria-label="Novo atendimento"
+                title="Novo atendimento"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-clinic-primary text-white shadow-sm transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-primary"
+              >
+                <Plus className="h-[18px] w-[18px]" />
+              </button>
+            ) : null}
           </div>
-        ) : null}
+        </div>
 
         <label className="relative block" aria-busy={props.searching}>
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clinic-muted" />
@@ -143,7 +145,7 @@ export function ChatList(props: Props) {
         <div
           role="tablist"
           aria-label="Visão dos atendimentos"
-          className="grid grid-cols-2 gap-1 rounded-xl border border-clinic-border bg-clinic-soft p-1"
+          className="grid grid-cols-2 gap-1 rounded-xl bg-clinic-soft p-1"
         >
           <button
             id="atendimentos-ativos-tab"
@@ -154,7 +156,7 @@ export function ChatList(props: Props) {
             onClick={() => props.onViewChange('ATIVOS')}
             className={`rounded-lg px-2 py-2 text-[11px] font-extrabold transition focus-visible:outline-2 focus-visible:outline-clinic-primary ${
               props.view === 'ATIVOS'
-                ? 'bg-clinic-surface text-clinic-text shadow-sm'
+                ? 'bg-clinic-surface text-clinic-primary shadow-sm ring-1 ring-clinic-primary/15'
                 : 'text-clinic-muted hover:bg-clinic-hover hover:text-clinic-text'
             }`}
           >
@@ -169,7 +171,7 @@ export function ChatList(props: Props) {
             onClick={() => props.onViewChange('FINALIZADOS')}
             className={`rounded-lg px-2 py-2 text-[11px] font-extrabold transition focus-visible:outline-2 focus-visible:outline-clinic-primary ${
               props.view === 'FINALIZADOS'
-                ? 'bg-clinic-surface text-clinic-text shadow-sm'
+                ? 'bg-clinic-surface text-clinic-primary shadow-sm ring-1 ring-clinic-primary/15'
                 : 'text-clinic-muted hover:bg-clinic-hover hover:text-clinic-text'
             }`}
           >
@@ -178,7 +180,7 @@ export function ChatList(props: Props) {
         </div>
 
         {props.view === 'FINALIZADOS' ? (
-          <p className="text-[11px] font-medium text-clinic-muted">
+          <p className="text-[10px] font-medium text-clinic-muted">
             Histórico de atendimentos encerrados
           </p>
         ) : null}
@@ -193,7 +195,7 @@ export function ChatList(props: Props) {
         ) : null}
 
         {props.view === 'ATIVOS' ? (
-          <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold" aria-label="Filtros de atendimentos ativos">
+          <div className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 pb-1 text-[10px] font-bold hide-scrollbar" aria-label="Filtros de atendimentos ativos">
             {primaryFilters.map((item) => {
               const active = props.filter === item.filter && props.type === item.type;
               return (
@@ -201,10 +203,10 @@ export function ChatList(props: Props) {
                   type="button"
                   key={item.label}
                   onClick={() => props.onFilterChange(item.filter, item.type)}
-                  className={`shrink-0 rounded-lg border px-2.5 py-2 transition focus-visible:outline-2 focus-visible:outline-clinic-primary ${
+                  className={`shrink-0 rounded-lg border px-2.5 py-1.5 transition focus-visible:outline-2 focus-visible:outline-clinic-primary ${
                     active
-                      ? 'border-clinic-primary bg-clinic-primary text-white shadow-sm'
-                      : 'border-clinic-border bg-clinic-surface text-clinic-muted hover:border-clinic-primary/40 hover:bg-clinic-hover hover:text-clinic-text'
+                      ? 'border-clinic-primary/20 bg-clinic-soft text-clinic-primary'
+                      : 'border-transparent bg-transparent text-clinic-muted hover:bg-clinic-hover hover:text-clinic-text'
                   }`}
                 >
                   {item.label}
@@ -215,7 +217,7 @@ export function ChatList(props: Props) {
               <Menu.Trigger
                 type="button"
                 aria-label="Mais filtros de atendimentos"
-                className="inline-flex h-[34px] shrink-0 items-center gap-1 rounded-lg border border-clinic-border bg-clinic-surface px-2.5 text-clinic-muted transition hover:border-clinic-primary/40 hover:bg-clinic-hover hover:text-clinic-text focus-visible:outline-2 focus-visible:outline-clinic-primary"
+                className="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-lg border border-transparent bg-transparent px-2.5 text-clinic-muted transition hover:bg-clinic-hover hover:text-clinic-text focus-visible:outline-2 focus-visible:outline-clinic-primary"
               >
                 Mais
                 <ChevronDown className="h-3.5 w-3.5" />
@@ -248,10 +250,10 @@ export function ChatList(props: Props) {
         id="atendimentos-lista"
         role="tabpanel"
         aria-labelledby={props.view === 'ATIVOS' ? 'atendimentos-ativos-tab' : 'atendimentos-finalizados-tab'}
-        className="flex-1 overflow-y-auto custom-scrollbar"
+        className="flex-1 overflow-y-auto bg-clinic-surface p-2.5 custom-scrollbar"
       >
         {props.conversations.length === 0 ? (
-            <div className="m-4 rounded-xl border border-dashed border-clinic-border bg-clinic-surface-muted px-4 py-10 text-center">
+            <div className="m-1.5 rounded-xl border border-dashed border-clinic-border bg-clinic-surface-muted px-4 py-10 text-center">
               <p className="text-[12px] font-bold text-clinic-text">
                 {props.search.trim()
                   ? 'Nenhum resultado encontrado.'
@@ -270,20 +272,23 @@ export function ChatList(props: Props) {
         ) : props.conversations.map((chat) => {
           const active = chat.id === props.activeId;
           const attendanceLabel = getAttendanceLabel(chat, props.view);
-          const visibleTags = chat.tags.slice(0, 2);
+          const visibleTags = chat.tags.slice(0, 1);
           const hiddenTags = Math.max(chat.tags.length - visibleTags.length, 0);
           return (
             <button
               type="button"
               key={chat.id}
               onClick={() => props.onSelect(chat.id)}
-              className={`relative block w-full border-b border-clinic-border/70 px-4 py-4 text-left transition hover:bg-clinic-hover ${
-                active ? 'bg-clinic-soft' : 'bg-clinic-surface'
+              aria-current={active ? 'true' : undefined}
+              className={`relative mb-1.5 block w-full overflow-hidden rounded-2xl border px-3 py-3 text-left transition last:mb-0 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-clinic-primary ${
+                active
+                  ? 'border-clinic-primary/25 bg-clinic-soft shadow-sm'
+                  : 'border-transparent bg-clinic-surface hover:border-clinic-border hover:bg-clinic-hover'
               }`}
             >
-              {active ? <span className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-clinic-primary" /> : null}
+              {active ? <span className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-clinic-primary" /> : null}
               <div className="flex gap-3">
-                <ContactAvatar name={chat.paciente.nomeBusca} url={chat.paciente.fotoUrl} />
+                <ContactAvatar name={chat.paciente.nomeBusca} url={chat.paciente.fotoUrl} variant="sidebar" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <h2 className="truncate text-[13px] font-extrabold text-clinic-text">
@@ -293,48 +298,45 @@ export function ChatList(props: Props) {
                       {formatTime(chat.ultimaMensagemEm)}
                     </span>
                   </div>
+                  <p className="mt-0.5 truncate text-[10px] font-medium text-clinic-muted">
+                    {attendanceLabel}
+                  </p>
                   <p className="mt-1 truncate text-[11px] leading-4 text-clinic-muted">
                     {chat.ultimaMensagemPrevia || 'Sem mensagens'}
                   </p>
-                  <p className="mt-1 truncate text-[10px] font-semibold text-clinic-muted">
-                    {attendanceLabel}
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
-                    <span className="rounded-full bg-clinic-blue/10 px-2 py-1 font-bold text-clinic-blue">
+                  <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px]">
+                    <MessageCircle aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-clinic-success" />
+                    <span className="shrink-0 rounded-full bg-clinic-blue/10 px-2 py-1 font-bold text-clinic-blue">
                       {props.view === 'FINALIZADOS' ? 'Finalizado' : chat.tratadoPorIa ? 'IA' : 'Humano'}
                     </span>
+                    {visibleTags.map((tag) => (
+                      <span
+                        key={tag.id}
+                        className="inline-flex min-w-0 max-w-[94px] items-center gap-1 rounded-full bg-clinic-soft px-2 py-1 font-bold text-clinic-text"
+                      >
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: tag.cor ?? 'var(--clinic-muted)' }}
+                        />
+                        <span className="truncate">{tag.nome}</span>
+                      </span>
+                    ))}
+                    {hiddenTags > 0 ? (
+                      <span className="shrink-0 rounded-full bg-clinic-soft px-1.5 py-1 font-bold text-clinic-muted">
+                        +{hiddenTags}
+                      </span>
+                    ) : null}
                     {chat.requerRevisao ? (
-                      <span className="rounded-full bg-clinic-warning/10 px-2 py-1 font-bold text-clinic-warning">
+                      <span className="shrink-0 rounded-full bg-clinic-warning/10 px-2 py-1 font-bold text-clinic-warning">
                         Convênio
                       </span>
                     ) : null}
                     {chat.naoLidas > 0 ? (
-                      <span className="ml-auto min-w-5 rounded-full bg-clinic-primary px-1.5 py-1 text-center font-bold text-white">
+                      <span className="ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-clinic-primary px-1.5 text-center font-bold text-white">
                         {chat.naoLidas}
                       </span>
                     ) : null}
                   </div>
-                  {visibleTags.length > 0 ? (
-                    <div className="mt-2 flex max-w-full flex-wrap gap-1.5 overflow-hidden">
-                      {visibleTags.map((tag) => (
-                        <span
-                          key={tag.id}
-                          className="inline-flex max-w-[112px] items-center gap-1 rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[10px] font-bold text-clinic-text"
-                        >
-                          <span
-                            className="h-2 w-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: tag.cor ?? 'var(--clinic-muted)' }}
-                          />
-                          <span className="truncate">{tag.nome}</span>
-                        </span>
-                      ))}
-                      {hiddenTags > 0 ? (
-                        <span className="rounded-full border border-clinic-border bg-clinic-soft px-2 py-1 text-[10px] font-bold text-clinic-muted">
-                          +{hiddenTags}
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
                 </div>
               </div>
             </button>
@@ -347,7 +349,7 @@ export function ChatList(props: Props) {
 
 function getAttendanceLabel(chat: AtendimentoResumo, view: AtendimentoView) {
   if (view === 'FINALIZADOS') {
-    return chat.tratadoPorIa ? 'Encerrado · Atendido por IA' : 'Encerrado · Atendimento humano';
+    return chat.tratadoPorIa ? 'Atendido por IA' : 'Atendimento humano';
   }
   if (chat.tratadoPorIa) return 'Atendido por IA';
   if (chat.atendentePrincipal) return `Atendido por ${chat.atendentePrincipal.nome}`;

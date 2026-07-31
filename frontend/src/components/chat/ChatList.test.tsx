@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ChatList } from './ChatList';
 import type { AtendimentoResumo } from '@/types/atendimento';
@@ -61,7 +61,7 @@ describe('ChatList', () => {
     expect(screen.getByPlaceholderText('Buscar no histórico...')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Todos' })).not.toBeInTheDocument();
     expect(screen.getByText('Finalizado')).toBeInTheDocument();
-    expect(screen.getByText('Encerrado · Atendido por IA')).toBeInTheDocument();
+    expect(screen.getByText('Atendido por IA')).toBeInTheDocument();
   });
 
   it('should_show_a_history_specific_empty_state', () => {
@@ -96,7 +96,7 @@ describe('ChatList', () => {
     expect(screen.queryByRole('button', { name: 'Novo atendimento' })).not.toBeInTheDocument();
   });
 
-  it('should_keep_the_title_separate_from_actions_and_make_manual_start_the_full_width_primary_action', () => {
+  it('should_group_compact_actions_with_the_title_without_redundant_header_copy', () => {
     const onStartManual = vi.fn();
     render(
       <ChatList
@@ -109,9 +109,10 @@ describe('ChatList', () => {
 
     const title = screen.getByRole('heading', { name: 'Atendimentos' });
     const start = screen.getByRole('button', { name: 'Novo atendimento' });
-    expect(title.parentElement?.parentElement).not.toContainElement(start);
-    expect(screen.getByText('Ao vivo')).toBeVisible();
-    expect(start).toHaveClass('w-full', 'h-10');
+    expect(title.parentElement).toContainElement(start);
+    expect(screen.queryByText('Ao vivo')).not.toBeInTheDocument();
+    expect(screen.queryByText('CRM · WhatsApp')).not.toBeInTheDocument();
+    expect(start).toHaveClass('h-9', 'w-9');
   });
 
   it('should_show_close_all_inside_an_accessible_more_actions_menu_for_managers', () => {
@@ -221,9 +222,48 @@ describe('ChatList', () => {
     );
 
     expect(screen.getByText('Retorno')).toBeInTheDocument();
-    expect(screen.getByText('Particular')).toBeInTheDocument();
+    expect(screen.queryByText('Particular')).not.toBeInTheDocument();
     expect(screen.queryByText('Pre-natal')).not.toBeInTheDocument();
-    expect(screen.getByText('+2')).toBeInTheDocument();
+    expect(screen.getByText('+3')).toBeInTheDocument();
+  });
+
+  it('should_highlight_the_selected_conversation_and_keep_selection_clickable', () => {
+    const onSelect = vi.fn();
+    render(
+      <ChatList
+        {...baseProps}
+        activeId={baseConversation.id}
+        conversations={[
+          baseConversation,
+          {
+            ...baseConversation,
+            id: 2,
+            paciente: { ...baseConversation.paciente, id: 11, nomeBusca: 'OUTRA PACIENTE' },
+          },
+        ]}
+        onSelect={onSelect}
+      />,
+    );
+
+    const selected = screen.getByRole('button', { name: /PACIENTE TESTE/ });
+    const unselected = screen.getByRole('button', { name: /OUTRA PACIENTE/ });
+    expect(selected).toHaveAttribute('aria-current', 'true');
+    expect(unselected).not.toHaveAttribute('aria-current');
+
+    fireEvent.click(unselected);
+    expect(onSelect).toHaveBeenCalledWith(2);
+  });
+
+  it('should_keep_the_unread_counter_visible_in_the_conversation_card', () => {
+    render(
+      <ChatList
+        {...baseProps}
+        conversations={[{ ...baseConversation, naoLidas: 3 }]}
+      />,
+    );
+
+    const conversation = screen.getByRole('button', { name: /PACIENTE TESTE/ });
+    expect(within(conversation).getByText('3')).toHaveClass('bg-clinic-primary', 'rounded-full');
   });
 
   it('should_show_ai_and_human_attendance_labels', () => {
