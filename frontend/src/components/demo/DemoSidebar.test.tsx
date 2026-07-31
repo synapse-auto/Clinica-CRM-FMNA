@@ -8,6 +8,15 @@ const replaceMock = vi.fn();
 const refreshMock = vi.fn();
 const toggleThemeMock = vi.fn();
 const navigation = vi.hoisted(() => ({ pathname: '/dashboard' }));
+const brandingMock = vi.hoisted(() => ({
+  logoUrl: null as string | null,
+  logoBorderRadius: 0,
+}));
+
+vi.mock('@/config/public-branding', () => ({
+  publicBranding: brandingMock,
+  brandingInitials: (name: string) => name.slice(0, 2).toUpperCase(),
+}));
 
 vi.mock('next/navigation', () => ({
   usePathname: () => navigation.pathname,
@@ -37,6 +46,8 @@ describe('DemoSidebar', () => {
     navigation.pathname = '/dashboard';
     window.localStorage.clear();
     toggleThemeMock.mockClear();
+    brandingMock.logoUrl = null;
+    brandingMock.logoBorderRadius = 0;
   });
 
   it('should_not_render_whatsapp_demo_shortcuts', () => {
@@ -116,6 +127,24 @@ describe('DemoSidebar', () => {
 
     expect(screen.getByLabelText('Clinica Femina sem logotipo')).toBeInTheDocument();
     expect(screen.queryByAltText('UltraMedical')).not.toBeInTheDocument();
+  });
+
+  it('should_apply_the_configured_border_radius_only_to_the_sidebar_logo', () => {
+    brandingMock.logoUrl = '/fmna-logo.png';
+    brandingMock.logoBorderRadius = 12;
+
+    render(
+      <DemoSidebar
+        clinic={clinic}
+        user={{ id: 1, nome: 'Gestora', email: 'gestora@clinica.local', perfil: 'GESTOR', clinicaId: 7, mustChangePassword: false }}
+      />,
+    );
+
+    const logo = screen.getByAltText('Clinica Femina');
+    const frame = screen.getByTestId('brand-logo-frame');
+    expect(frame).toHaveStyle({ borderRadius: '12px' });
+    expect(frame).toHaveClass('overflow-hidden', 'h-11', 'w-11');
+    expect(logo).toHaveClass('object-contain');
   });
 
   it('should_keep_a_fixed_64px_rail_that_expands_on_hover_focus_without_a_pin_control', () => {

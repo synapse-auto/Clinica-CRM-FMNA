@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildDocumentTitle, publicFavicon, publicLogo } from './public-branding';
+import {
+  buildDocumentTitle,
+  publicFavicon,
+  publicLogo,
+  publicLogoBorderRadius,
+} from './public-branding';
 
 describe('public branding document title', () => {
   it('uses the configured clinic name', () => {
@@ -49,6 +54,19 @@ describe('publicLogo', () => {
   });
 });
 
+describe('publicLogoBorderRadius', () => {
+  it.each([
+    ['12', 12],
+    ['0', 0],
+    [undefined, 0],
+    ['-5', 0],
+    ['abc', 0],
+    ['999', 64],
+  ])('normalizes %s to %s pixels', (value, expected) => {
+    expect(publicLogoBorderRadius(value)).toBe(expected);
+  });
+});
+
 describe('favicon assets and metadata', () => {
   const publicDirectory = resolve(process.cwd(), 'public');
 
@@ -79,5 +97,16 @@ describe('favicon assets and metadata', () => {
     expect(layout).toContain('icon: publicBranding.faviconUrl');
     expect(layout).toContain('shortcut: publicBranding.faviconUrl');
     expect(layout).toContain('apple: publicBranding.faviconUrl');
+  });
+
+  it('applies the shared logo radius in login and sidebar without changing favicon metadata', () => {
+    const login = readFileSync(resolve(process.cwd(), 'src/app/login/page.tsx'), 'utf8');
+    const sidebar = readFileSync(resolve(process.cwd(), 'src/components/demo/DemoSidebar.tsx'), 'utf8');
+
+    for (const component of [login, sidebar]) {
+      expect(component).toContain('<BrandLogo');
+      expect(component).toContain('borderRadius={publicBranding.logoBorderRadius}');
+      expect(component).not.toContain("clinicName === 'FMNA'");
+    }
   });
 });

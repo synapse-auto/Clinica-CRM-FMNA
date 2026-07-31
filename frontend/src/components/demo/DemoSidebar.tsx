@@ -22,7 +22,7 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import Image from 'next/image';
+import { BrandLogo } from '@/components/branding/BrandLogo';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { brandingInitials, publicBranding } from '@/config/public-branding';
 import { menuItemsForProfile } from '@/lib/auth/permissions';
@@ -146,7 +146,14 @@ export function DemoSidebar({ clinic, user }: DemoSidebarProps) {
       <div className="flex h-[84px] items-center gap-3 border-b border-sidebar-border px-2">
         <div className="flex h-11 w-11 items-center justify-center">
           {publicBranding.logoUrl ? (
-            <Image src={publicBranding.logoUrl} alt={clinic.nome} width={44} height={44} priority className="h-11 w-11 object-contain" />
+            <BrandLogo
+              src={publicBranding.logoUrl}
+              alt={clinic.nome}
+              size={44}
+              borderRadius={publicBranding.logoBorderRadius}
+              priority
+              className="h-11 w-11"
+            />
           ) : (
             <span aria-label={`${clinic.nome} sem logotipo`} className="flex h-10 w-10 items-center justify-center rounded-xl bg-sidebar-primary text-xs font-extrabold text-sidebar-primary-foreground">
               {brandingInitials(clinic.nome)}

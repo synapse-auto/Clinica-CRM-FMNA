@@ -31,9 +31,16 @@ export function publicFavicon(value = process.env.NEXT_PUBLIC_CLINIC_FAVICON) {
   return isLocalPublicPath(path) ? path : '/favicon.ico';
 }
 
+export function publicLogoBorderRadius(value?: string) {
+  const radius = Number(value?.trim());
+  if (!Number.isFinite(radius) || radius < 0) return 0;
+  return Math.min(radius, 64);
+}
+
 export const publicBranding = {
   clinicName: publicValue('NEXT_PUBLIC_CLINIC_NAME', DEFAULT_BRANDING.clinicName),
   logoUrl: publicLogo(),
+  logoBorderRadius: publicLogoBorderRadius(process.env.NEXT_PUBLIC_CLINIC_LOGO_BORDER_RADIUS),
   faviconUrl: publicFavicon(),
   headline: publicValue('NEXT_PUBLIC_LOGIN_HEADLINE', DEFAULT_BRANDING.headline),
   description: publicValue('NEXT_PUBLIC_LOGIN_DESCRIPTION', DEFAULT_BRANDING.description),

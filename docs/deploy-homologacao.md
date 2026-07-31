@@ -38,6 +38,7 @@ DARWIN_API_TOKEN=<token-read-only-darwin>
 NEXT_PUBLIC_CLINIC_NAME=FMNA
 NEXT_PUBLIC_CLINIC_LOGO=/fmna-logo.png
 NEXT_PUBLIC_CLINIC_FAVICON=/fmna-favicon.png
+NEXT_PUBLIC_CLINIC_LOGO_BORDER_RADIUS=12
 ```
 
 Validacoes:
@@ -76,6 +77,7 @@ WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-ultra-quando-cadastrado>
 NEXT_PUBLIC_CLINIC_NAME=UltraMedical
 NEXT_PUBLIC_CLINIC_LOGO=/ultramedical-logo.png
 NEXT_PUBLIC_CLINIC_FAVICON=/ultramedical-favicon.png
+NEXT_PUBLIC_CLINIC_LOGO_BORDER_RADIUS=0
 ```
 
 Validacoes:
@@ -88,7 +90,8 @@ Validacoes:
 
 As variaveis `NEXT_PUBLIC_*` sao incorporadas no build do Next.js. Configure o conjunto
 da clinica antes de compilar/publicar cada frontend; mudar apenas o ambiente de uma
-instancia ja compilada nao troca a logo nem o favicon.
+instancia ja compilada nao troca a logo, o raio nem o favicon. O raio da logo e informado
+em pixels, tem padrao `0` e e limitado ao intervalo de `0` a `64`.
 
 ### Status do banco UltraMedical
 

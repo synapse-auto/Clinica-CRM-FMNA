@@ -1,7 +1,7 @@
-import Image from 'next/image';
 import { redirect } from 'next/navigation';
 import { Activity, MessageCircle, ShieldCheck } from 'lucide-react';
 import { LoginForm } from '@/components/auth/LoginForm';
+import { BrandLogo } from '@/components/branding/BrandLogo';
 import { brandingInitials, publicBranding, publicDocumentTitle } from '@/config/public-branding';
 import { routeAfterAuthentication } from '@/lib/auth/permissions';
 import { getSession } from '@/lib/auth/session';
@@ -17,7 +17,14 @@ export default async function LoginPage() {
         <header className={styles.brandHeader}>
           <div className={styles.brandMark}>
             {publicBranding.logoUrl ? (
-              <Image src={publicBranding.logoUrl} alt={publicBranding.clinicName} width={48} height={48} priority />
+              <BrandLogo
+                src={publicBranding.logoUrl}
+                alt={publicBranding.clinicName}
+                size={48}
+                borderRadius={publicBranding.logoBorderRadius}
+                priority
+                className="h-full w-full"
+              />
             ) : (
               <span aria-hidden="true">{brandingInitials(publicBranding.clinicName)}</span>
             )}

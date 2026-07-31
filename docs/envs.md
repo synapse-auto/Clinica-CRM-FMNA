@@ -130,11 +130,14 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 NEXT_PUBLIC_CLINIC_NAME=FMNA
 NEXT_PUBLIC_CLINIC_LOGO=/fmna-logo.png
 NEXT_PUBLIC_CLINIC_FAVICON=/fmna-favicon.png
+NEXT_PUBLIC_CLINIC_LOGO_BORDER_RADIUS=12
 ```
 
 O nome e os assets publicos de branding sao definidos no build de cada frontend pelas
 variaveis `NEXT_PUBLIC_CLINIC_*`. No deploy da UltraMedical, use
 `NEXT_PUBLIC_CLINIC_NAME=UltraMedical`, `NEXT_PUBLIC_CLINIC_LOGO=/ultramedical-logo.png`
-e `NEXT_PUBLIC_CLINIC_FAVICON=/ultramedical-favicon.png`. Alterar essas variaveis exige
-novo build/deploy do frontend. Dados operacionais e flags da clinica continuam vindo de
+e `NEXT_PUBLIC_CLINIC_FAVICON=/ultramedical-favicon.png`, com
+`NEXT_PUBLIC_CLINIC_LOGO_BORDER_RADIUS=0`. O raio e informado em pixels, usa `0` por
+padrao e aceita valores de `0` a `64`. Alterar essas variaveis exige novo build/deploy
+do frontend. Dados operacionais e flags da clinica continuam vindo de
 `/api/configuracoes/clinica-atual`.
