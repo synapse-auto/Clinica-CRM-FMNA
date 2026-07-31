@@ -17,14 +17,18 @@ function publicValue(name: string, fallback: string) {
   return value || fallback;
 }
 
-function publicLogo() {
-  const value = process.env.NEXT_PUBLIC_CLINIC_LOGO?.trim();
-  return value?.startsWith('/') ? value : DEFAULT_BRANDING.logoUrl;
+function isLocalPublicPath(value: string | undefined): value is string {
+  return Boolean(value?.startsWith('/') && !value.startsWith('//'));
+}
+
+export function publicLogo(value = process.env.NEXT_PUBLIC_CLINIC_LOGO) {
+  const path = value?.trim();
+  return isLocalPublicPath(path) ? path : DEFAULT_BRANDING.logoUrl;
 }
 
 export function publicFavicon(value = process.env.NEXT_PUBLIC_CLINIC_FAVICON) {
   const path = value?.trim();
-  return path?.startsWith('/') && !path.startsWith('//') ? path : '/favicon.ico';
+  return isLocalPublicPath(path) ? path : '/favicon.ico';
 }
 
 export const publicBranding = {

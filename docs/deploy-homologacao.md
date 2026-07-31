@@ -35,6 +35,9 @@ WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-fmna>
 SPRING_FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/migration-valores-consulta-medico
 DARWIN_API_URL=<url-darwin>
 DARWIN_API_TOKEN=<token-read-only-darwin>
+NEXT_PUBLIC_CLINIC_NAME=FMNA
+NEXT_PUBLIC_CLINIC_LOGO=/fmna-logo.png
+NEXT_PUBLIC_CLINIC_FAVICON=/fmna-favicon.png
 ```
 
 Validacoes:
@@ -70,6 +73,9 @@ WHATSAPP_ACCESS_TOKEN=<token-meta-fora-do-git>
 WHATSAPP_BUSINESS_ACCOUNT_ID=<business-account-id-meta>
 WHATSAPP_VERIFY_TOKEN=<verify-token-fora-do-git>
 WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-ultra-quando-cadastrado>
+NEXT_PUBLIC_CLINIC_NAME=UltraMedical
+NEXT_PUBLIC_CLINIC_LOGO=/ultramedical-logo.png
+NEXT_PUBLIC_CLINIC_FAVICON=/ultramedical-favicon.png
 ```
 
 Validacoes:
@@ -79,6 +85,10 @@ Validacoes:
 - `MedwareProvider` permanece read-only: autentica, le pacientes, agendamentos e catalogos auxiliares, sem escrita no Medware;
 - dashboard nao chama Medware diretamente;
 - `usa_cirurgias_na_agenda=false` para nao exibir cirurgias na experiencia de ultrassonografia.
+
+As variaveis `NEXT_PUBLIC_*` sao incorporadas no build do Next.js. Configure o conjunto
+da clinica antes de compilar/publicar cada frontend; mudar apenas o ambiente de uma
+instancia ja compilada nao troca a logo nem o favicon.
 
 ### Status do banco UltraMedical
 

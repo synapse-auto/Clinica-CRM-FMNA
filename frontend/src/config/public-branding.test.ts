@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildDocumentTitle, publicFavicon } from './public-branding';
+import { buildDocumentTitle, publicFavicon, publicLogo } from './public-branding';
 
 describe('public branding document title', () => {
   it('uses the configured clinic name', () => {
@@ -19,6 +19,7 @@ describe('public branding document title', () => {
 describe('publicFavicon', () => {
   it('accepts local public paths', () => {
     expect(publicFavicon('/ultramedical-favicon.png')).toBe('/ultramedical-favicon.png');
+    expect(publicFavicon('/fmna-favicon.png')).toBe('/fmna-favicon.png');
     expect(publicFavicon('/favicon.ico')).toBe('/favicon.ico');
     expect(publicFavicon('/branding/fmna.png')).toBe('/branding/fmna.png');
   });
@@ -35,20 +36,41 @@ describe('publicFavicon', () => {
   });
 });
 
+describe('publicLogo', () => {
+  it('selects each clinic logo from a local public path', () => {
+    expect(publicLogo('/fmna-logo.png')).toBe('/fmna-logo.png');
+    expect(publicLogo('/ultramedical-logo.png')).toBe('/ultramedical-logo.png');
+  });
+
+  it('does not accept external or protocol-relative logo paths', () => {
+    expect(publicLogo()).toBeNull();
+    expect(publicLogo('//host/logo.png')).toBeNull();
+    expect(publicLogo('https://host/logo.png')).toBeNull();
+  });
+});
+
 describe('favicon assets and metadata', () => {
   const publicDirectory = resolve(process.cwd(), 'public');
 
-  it('keeps the favicon assets public and verifies the PNG properties', () => {
+  it('keeps the clinic assets public and verifies the PNG properties', () => {
     const fallback = readFileSync(resolve(publicDirectory, 'favicon.ico'));
-    const favicon = readFileSync(resolve(publicDirectory, 'ultramedical-favicon.png'));
+    const ultramedicalFavicon = readFileSync(resolve(publicDirectory, 'ultramedical-favicon.png'));
+    const ultramedicalLogo = readFileSync(resolve(publicDirectory, 'ultramedical-logo.png'));
+    const fmnaFavicon = readFileSync(resolve(publicDirectory, 'fmna-favicon.png'));
+    const fmnaLogo = readFileSync(resolve(publicDirectory, 'fmna-logo.png'));
 
     expect(fallback.length).toBeGreaterThan(0);
-    expect(favicon.subarray(0, 8)).toEqual(
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    );
-    expect(favicon.readUInt32BE(16)).toBe(512);
-    expect(favicon.readUInt32BE(20)).toBe(512);
-    expect(favicon[25]).toBe(6);
+    for (const asset of [ultramedicalFavicon, ultramedicalLogo, fmnaFavicon, fmnaLogo]) {
+      expect(asset.subarray(0, 8)).toEqual(
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      );
+    }
+    expect(ultramedicalFavicon.readUInt32BE(16)).toBe(512);
+    expect(ultramedicalFavicon.readUInt32BE(20)).toBe(512);
+    expect(fmnaFavicon.readUInt32BE(16)).toBe(512);
+    expect(fmnaFavicon.readUInt32BE(20)).toBe(512);
+    expect(fmnaLogo.readUInt32BE(16)).toBe(1024);
+    expect(fmnaLogo.readUInt32BE(20)).toBe(1024);
   });
 
   it('uses the shared branding favicon for every metadata icon type', () => {
