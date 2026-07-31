@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Hidden;
  
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -37,6 +38,7 @@ import java.util.HexFormat;
 @RestController
 @RequestMapping("/api/webhooks/whatsapp")
 @RequiredArgsConstructor
+@Hidden
 public class WhatsappWebhookController {
  
     @Value("${app.whatsapp.enabled:false}")

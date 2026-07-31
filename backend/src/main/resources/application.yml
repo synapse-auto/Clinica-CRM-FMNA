@@ -20,12 +20,26 @@ spring:
     baseline-on-migrate: true
   servlet:
     multipart:
-      max-file-size: 16MB
-      max-request-size: 16MB
+      max-file-size: 5MB
+      max-request-size: 5MB
   quartz:
     job-store-type: memory
     properties:
       "[org.quartz.threadPool.threadCount]": 2
+
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:false}
+    path: /swagger-ui.html
+    persist-authorization: false
+    display-request-duration: true
+    operations-sorter: method
+    tags-sorter: alpha
+  paths-to-exclude:
+    - /api/webhooks/**
+    - /ws/**
 
 resilience4j:
   retry:

@@ -33,6 +33,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 /**
  * Endpoints de leitura de pacientes e importação CSV controlada.
@@ -43,6 +46,8 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/pacientes")
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('GESTOR', 'MEDICO', 'RECEPCIONISTA')")
+@Tag(name = "Pacientes", description = "Consultas e importação CSV restritas à clínica autenticada.")
+@SecurityRequirement(name = "bearerAuth")
 public class PacienteController {
 
     private final ClinicaConfigService clinicaConfigService;
@@ -56,6 +61,7 @@ public class PacienteController {
      * Lista todos os pacientes ativos da clínica (sem paginação — volume clínico típico &lt; 5k).
      */
     @GetMapping
+    @Operation(summary = "Listar pacientes")
     public List<PacienteResumoDTO> listar() {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
         return pacienteService.listar(clinica);
@@ -74,6 +80,7 @@ public class PacienteController {
     }
 
     @PostMapping(value = "/importacoes/csv/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Pré-visualizar importação CSV", description = "multipart/form-data com file e mapping opcional; aceita CSV UTF-8 (com ou sem BOM) ou Windows-1252, separado por vírgula ou ponto e vírgula, de até 5 MB. Devolve amostra, hash e linhas inválidas sem persistir.")
     @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public ImportacaoCsvContatoPreview previewImportacaoCsv(
             @RequestPart("file") MultipartFile file,
@@ -85,6 +92,7 @@ public class PacienteController {
     }
 
     @PostMapping(value = "/importacoes/csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Confirmar importação CSV", description = "multipart/form-data com file, expectedFileHash e mapping. Requer os dados validados no preview; os erros de linha retornam sem expor valores de nome ou telefone.")
     @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     @ResponseStatus(HttpStatus.CREATED)
     public ImportacaoCsvContatoResultado importarCsv(
@@ -104,6 +112,7 @@ public class PacienteController {
      * Retorna um paciente específico da clínica.
      */
     @GetMapping("/{id}")
+    @Operation(summary = "Consultar paciente")
     public PacienteResumoDTO buscarPorId(@PathVariable Long id) {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
         return pacienteService.buscarPorId(id, clinica);

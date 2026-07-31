@@ -4,6 +4,17 @@ spring:
     username: postgres
     password: changeme
 
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:false}
+
+# Variáveis de ambiente para a documentação. Não reutilize credenciais do CRM, JWT ou integrações.
+# API_DOCS_ENABLED=false
+# API_DOCS_USERNAME=
+# API_DOCS_PASSWORD=
+
 resilience4j:
   retry:
     instances:

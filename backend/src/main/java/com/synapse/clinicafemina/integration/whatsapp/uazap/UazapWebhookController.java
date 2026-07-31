@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Hidden;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -35,6 +36,7 @@ import java.security.MessageDigest;
 @Slf4j
 @RestController
 @RequestMapping("/api/webhooks/whatsapp/uazap")
+@Hidden
 public class UazapWebhookController {
 
     /** Limite defensivo de tamanho do payload (evita processamento de corpos abusivos). */

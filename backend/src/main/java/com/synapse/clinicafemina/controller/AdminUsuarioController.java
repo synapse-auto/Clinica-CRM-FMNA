@@ -14,6 +14,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 import java.util.List;
 
@@ -21,18 +24,22 @@ import java.util.List;
 @RequestMapping("/api/admin/usuarios")
 @RequiredArgsConstructor
 @PreAuthorize("@usuarioPermissionService.podeGerenciarUsuarios(authentication)")
+@Tag(name = "Equipe", description = "Administração de usuários por quem possui permissão de gerenciamento.")
+@SecurityRequirement(name = "bearerAuth")
 public class AdminUsuarioController {
 
     private final AdminUsuarioService adminUsuarioService;
     private final UsuarioPermissionService usuarioPermissionService;
 
     @GetMapping
+    @Operation(summary = "Listar usuários administrativos")
     public List<EquipeUsuarioResponse> listar(Authentication authentication) {
         Clinica clinica = clinicaAutenticada(authentication);
         return adminUsuarioService.listar(clinica);
     }
 
     @PostMapping
+    @Operation(summary = "Criar usuário administrativo")
     @ResponseStatus(HttpStatus.CREATED)
     public EquipeUsuarioResponse criarUsuario(
             @RequestBody @Valid EquipeUsuarioCreateRequest request,
@@ -43,6 +50,7 @@ public class AdminUsuarioController {
     }
 
     @PatchMapping("/{id}/status")
+    @Operation(summary = "Ativar ou desativar usuário")
     public EquipeUsuarioResponse alterarStatus(
             @PathVariable Long id,
             @RequestBody @Valid StatusRequest request,
@@ -53,6 +61,7 @@ public class AdminUsuarioController {
     }
 
     @PatchMapping("/{id}/resetar-senha")
+    @Operation(summary = "Redefinir senha temporária")
     public EquipeUsuarioResponse resetarSenha(
             @PathVariable Long id,
             @RequestBody @Valid ResetPasswordRequest request,

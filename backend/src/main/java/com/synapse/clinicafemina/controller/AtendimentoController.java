@@ -40,11 +40,16 @@ import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 @RestController
 @RequestMapping("/api/atendimentos")
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('GESTOR', 'MEDICO', 'RECEPCIONISTA')")
+@Tag(name = "Atendimentos", description = "Operações isoladas à clínica do usuário autenticado.")
+@SecurityRequirement(name = "bearerAuth")
 public class AtendimentoController {
 
     private final AtendimentoService atendimentoService;
@@ -57,6 +62,7 @@ public class AtendimentoController {
     private final IniciarAtendimentoService iniciarAtendimentoService;
 
     @GetMapping
+    @Operation(summary = "Listar atendimentos")
     public Page<AtendimentoResumoDTO> listar(
             @RequestParam(required = false) String status,
             @RequestParam(required = false, defaultValue = "TODOS") String tipo,
@@ -90,6 +96,7 @@ public class AtendimentoController {
     }
 
     @GetMapping("/{id}")
+    @Operation(summary = "Consultar atendimento")
     public AtendimentoDetalheDTO buscar(@PathVariable Long id) {
         return atendimentoService.buscarPorId(id, clinicaId());
     }
@@ -148,6 +155,7 @@ public class AtendimentoController {
     }
 
     @GetMapping("/{id}/mensagens")
+    @Operation(summary = "Listar histórico de mensagens")
     public Page<MensagemDTO> mensagens(
             @PathVariable Long id,
             @PageableDefault(size = 100, sort = "dataHora") Pageable pageable
@@ -199,6 +207,7 @@ public class AtendimentoController {
     }
 
     @PostMapping("/{id}/encerrar")
+    @Operation(summary = "Encerrar atendimento", description = "Permitido para Gestor e Recepcionista.")
     @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public AtendimentoDetalheDTO encerrar(
             @PathVariable Long id,
@@ -208,12 +217,14 @@ public class AtendimentoController {
     }
 
     @GetMapping("/ativos/contagem")
+    @Operation(summary = "Contar atendimentos ativos", description = "Permitido para Gestor e Recepcionista.")
     @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public AtendimentosAtivosContagemResponse contarAtivos() {
         return atendimentoEncerramentoEmMassaService.contarAtivos(clinicaId());
     }
 
     @PostMapping("/encerrar-todos")
+    @Operation(summary = "Encerrar todos os atendimentos", description = "Operação destrutiva, permitida para Gestor e Recepcionista.")
     @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public EncerramentoEmMassaResponse encerrarTodos(
             @RequestBody @Valid EncerramentoEmMassaRequest request

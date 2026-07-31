@@ -16,25 +16,32 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Tag(name = "Autenticação", description = "Login público e dados da sessão JWT do CRM.")
 public class AuthController {
 
     private final AuthService authService;
 
     @PostMapping("/login")
+    @Operation(summary = "Autenticar no CRM", description = "Endpoint público que retorna o JWT do CRM.")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
     }
 
     @GetMapping("/me")
+    @Operation(summary = "Consultar sessão atual", security = @SecurityRequirement(name = "bearerAuth"))
     public AuthUserResponse me(@AuthenticationPrincipal Usuario usuario) {
         return AuthUserResponse.from(usuario);
     }
 
     @PatchMapping("/change-password")
+    @Operation(summary = "Alterar senha", security = @SecurityRequirement(name = "bearerAuth"))
     public LoginResponse changePassword(
             @AuthenticationPrincipal Usuario usuario,
             @Valid @RequestBody ChangePasswordRequest request

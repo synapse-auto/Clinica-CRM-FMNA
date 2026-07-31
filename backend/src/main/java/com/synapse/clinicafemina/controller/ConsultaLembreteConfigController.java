@@ -20,10 +20,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 @RestController
 @RequestMapping("/api/consulta-lembrete/config")
 @RequiredArgsConstructor
+@Tag(name = "Lembretes", description = "Configuração de lembretes, disponível somente para Gestor.")
+@SecurityRequirement(name = "bearerAuth")
 public class ConsultaLembreteConfigController {
 
     private final ClinicaConfigService clinicaConfigService;

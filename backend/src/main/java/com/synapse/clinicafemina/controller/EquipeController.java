@@ -22,23 +22,30 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 @RestController
 @RequestMapping("/api/equipe")
 @RequiredArgsConstructor
 @PreAuthorize("@usuarioPermissionService.podeGerenciarUsuarios(authentication)")
+@Tag(name = "Equipe", description = "Gestão de usuários limitada a quem possui permissão de gerenciamento.")
+@SecurityRequirement(name = "bearerAuth")
 public class EquipeController {
 
     private final EquipeService equipeService;
     private final UsuarioPermissionService usuarioPermissionService;
 
     @GetMapping
+    @Operation(summary = "Listar equipe")
     public EquipeResponse listar(Authentication authentication) {
         Clinica clinica = clinicaAutenticada(authentication);
         return equipeService.listar(clinica);
     }
 
     @PostMapping("/usuarios")
+    @Operation(summary = "Criar usuário da equipe")
     @ResponseStatus(HttpStatus.CREATED)
     public EquipeUsuarioResponse criarUsuario(
             @RequestBody @Valid EquipeUsuarioCreateRequest request,
@@ -49,6 +56,7 @@ public class EquipeController {
     }
 
     @PatchMapping("/usuarios/{usuarioId}/permissao-gerenciamento")
+    @Operation(summary = "Alterar permissão de gerenciamento")
     public EquipeUsuarioResponse alterarPermissaoGerenciamento(
             @PathVariable Long usuarioId,
             @RequestBody @Valid PermissaoGerenciamentoRequest request,

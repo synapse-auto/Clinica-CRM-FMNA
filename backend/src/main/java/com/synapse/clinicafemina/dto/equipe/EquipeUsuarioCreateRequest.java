@@ -2,6 +2,7 @@ package com.synapse.clinicafemina.dto.equipe;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 public record EquipeUsuarioCreateRequest(
         @NotBlank(message = "Nome é obrigatório.")
@@ -17,6 +18,6 @@ public record EquipeUsuarioCreateRequest(
         String telefone,
 
         @NotBlank(message = "Senha temporária é obrigatória.")
-        String senhaTemporaria
+        @Schema(accessMode = Schema.AccessMode.WRITE_ONLY, format = "password") String senhaTemporaria
 ) {
 }

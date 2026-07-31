@@ -28,11 +28,15 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Slf4j
 @RestController
 @RequestMapping("/api/n8n/atendimentos")
 @RequiredArgsConstructor
+@Tag(name = "N8N", description = "Callbacks internos autorizados pelo contrato X-N8N-SECRET, isolados por clínica.")
 public class N8nAtendimentoController {
 
     private final MensagemService mensagemService;
@@ -41,15 +45,19 @@ public class N8nAtendimentoController {
     private final ObjectMapper objectMapper;
 
     @GetMapping("/atendentes-transferencia")
+    @Operation(summary = "Listar atendentes elegíveis para transferência", description = "Exige X-N8N-SECRET; não usa JWT do CRM.")
     public List<AtendenteOptionDTO> listarAtendentesTransferencia(
+            @Parameter(name = "X-N8N-SECRET", description = "Segredo do callback N8N.", required = true)
             @RequestHeader(value = "X-N8N-SECRET", required = false) String secret
     ) {
         return atendimentoService.listarAtendentes(authorizationService.autorizarClinica(secret).getId());
     }
 
     @PostMapping("/{atendimentoId}/responder")
+    @Operation(summary = "Registrar resposta da IA", description = "Exige X-N8N-SECRET; a resposta é isolada pela clínica do atendimento.")
     public ResponseEntity<MensagemDTO> responder(
             @PathVariable Long atendimentoId,
+            @Parameter(name = "X-N8N-SECRET", description = "Segredo do callback N8N.", required = true)
             @RequestHeader(value = "X-N8N-SECRET", required = false) String secret,
             @RequestBody @Valid N8nResponderRequest request
     ) {
@@ -65,8 +73,10 @@ public class N8nAtendimentoController {
     }
 
     @PostMapping("/{atendimentoId}/transferir-humano")
+    @Operation(summary = "Transferir atendimento para humano", description = "Exige X-N8N-SECRET e respeita o isolamento por clínica.")
     public ResponseEntity<Map<String, Object>> transferirHumano(
             @PathVariable Long atendimentoId,
+            @Parameter(name = "X-N8N-SECRET", description = "Segredo do callback N8N.", required = true)
             @RequestHeader(value = "X-N8N-SECRET", required = false) String secret,
             @RequestBody N8nTransferirHumanoRequest request
     ) {
@@ -92,9 +102,12 @@ public class N8nAtendimentoController {
     }
 
     @PostMapping("/{atendimentoId}/transferir-proximo-humano")
+    @Operation(summary = "Transferir para o próximo humano", description = "Exige X-N8N-SECRET e Idempotency-Key; atendentesIds é um array JSON.")
     public ResponseEntity<Map<String, Object>> transferirProximoHumano(
             @PathVariable Long atendimentoId,
+            @Parameter(name = "X-N8N-SECRET", description = "Segredo do callback N8N.", required = true)
             @RequestHeader(value = "X-N8N-SECRET", required = false) String secret,
+            @Parameter(name = "Idempotency-Key", description = "Chave obrigatória para repetição idempotente da transferência.", required = true)
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestBody N8nTransferirProximoHumanoRequest request
     ) {
@@ -124,8 +137,10 @@ public class N8nAtendimentoController {
     }
 
     @PatchMapping("/{atendimentoId}/modo-ia")
+    @Operation(summary = "Retornar atendimento ao modo IA", description = "Exige X-N8N-SECRET e respeita o isolamento por clínica.")
     public ResponseEntity<AtendimentoDetalheDTO> ativarModoIa(
             @PathVariable Long atendimentoId,
+            @Parameter(name = "X-N8N-SECRET", description = "Segredo do callback N8N.", required = true)
             @RequestHeader(value = "X-N8N-SECRET", required = false) String secret
     ) {
         N8nCallbackAuthorizationService.Autorizacao autorizacao =

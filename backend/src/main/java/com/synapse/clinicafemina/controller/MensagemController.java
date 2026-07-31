@@ -19,6 +19,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 /**
  * Controller REST para envio de mensagens outbound.
@@ -33,6 +36,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/atendimentos/{atendimentoId}")
 @RequiredArgsConstructor
+@Tag(name = "Mensagens", description = "Envio de mensagens e mídia dentro de um atendimento.")
+@SecurityRequirement(name = "bearerAuth")
 public class MensagemController {
 
     private final MensagemService mensagemService;
@@ -43,6 +48,7 @@ public class MensagemController {
      * Envia uma mensagem outbound para o paciente via WhatsApp.
      */
     @PostMapping("/mensagens")
+    @Operation(summary = "Enviar mensagem ao paciente", description = "Exige perfil Gestor, Médico ou Recepcionista e respeita a janela do WhatsApp.")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('GESTOR', 'MEDICO', 'RECEPCIONISTA')")
     public MensagemDTO enviar(
