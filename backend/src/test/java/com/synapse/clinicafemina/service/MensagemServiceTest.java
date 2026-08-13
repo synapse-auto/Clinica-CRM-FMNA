@@ -1,5 +1,6 @@
 package com.synapse.clinicafemina.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Mensagem;
@@ -8,6 +9,7 @@ import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
+import com.synapse.clinicafemina.dto.MensagemInterativaDTO;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderResolver;
@@ -28,9 +30,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -91,7 +96,8 @@ class MensagemServiceTest {
                 whatsappOutboundClient,
                 rabbitTemplate,
                 whatsappWindowService,
-                new WhatsappRecipientService(whatsappProviderResolver, atendimentoRepository)
+                new WhatsappRecipientService(whatsappProviderResolver, atendimentoRepository),
+                new ObjectMapper().findAndRegisterModules()
         );
 
         Clinica clinica = new Clinica();
@@ -192,6 +198,111 @@ class MensagemServiceTest {
         verify(whatsappOutboundClient, never()).validarConfiguracao();
         verify(whatsappOutboundClient, never()).enviarTextoComResultado(any(), any());
         verify(whatsappWindowService, never()).exigirAberta(any(), any());
+    }
+
+    @Test
+    void should_persist_and_return_interactive_options_from_n8n_callback() {
+        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
+        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> {
+            Mensagem mensagem = invocation.getArgument(0);
+            mensagem.setId(77L);
+            return mensagem;
+        });
+        MensagemInterativaDTO interacao = new MensagemInterativaDTO(
+                "BOTOES",
+                "Escolher opcao",
+                java.util.List.of(
+                        new MensagemInterativaDTO.OpcaoDTO("agendar", "Agendar consulta", null),
+                        new MensagemInterativaDTO.OpcaoDTO("atendente", "Falar com atendente", null)
+                )
+        );
+
+        MensagemService.RespostaIaResultado resultado = service.responderIa(
+                30L,
+                9L,
+                new N8nResponderRequest(
+                        20L,
+                        "O que voce gostaria?",
+                        "TEXTO",
+                        "N8N",
+                        false,
+                        META_WAMID_LONGO,
+                        OffsetDateTime.parse("2026-07-03T12:00:00Z"),
+                        interacao
+                )
+        );
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository, atLeastOnce()).save(mensagemCaptor.capture());
+        assertEquals("BOTOES", resultado.mensagem().interacao().tipo());
+        assertEquals("Agendar consulta", resultado.mensagem().interacao().opcoes().getFirst().titulo());
+        org.junit.jupiter.api.Assertions.assertTrue(
+                mensagemCaptor.getValue().getConteudoInterativo().contains("\"id\":\"agendar\"")
+        );
+        verify(whatsappOutboundClient, never()).enviarTextoComResultado(any(), any());
+    }
+
+    @Test
+    void should_rebuild_interactive_options_from_persisted_history() {
+        Mensagem persistida = new Mensagem();
+        persistida.setId(77L);
+        persistida.setAtendimento(atendimento);
+        persistida.setDirecao("SAIDA");
+        persistida.setRemetente("IA");
+        persistida.setTipoMedia("TEXTO");
+        persistida.setConteudo("O que voce gostaria?");
+        persistida.setConteudoPrevia("O que voce gostaria?");
+        persistida.setWhatsappStatus("REGISTRADA");
+        persistida.setDataHora(OffsetDateTime.parse("2026-07-03T12:00:00Z"));
+        persistida.setConteudoInterativo("""
+                {"tipo":"BOTOES","textoAcao":"Escolher opcao","opcoes":[
+                  {"id":"agendar","titulo":"Agendar consulta","descricao":null},
+                  {"id":"atendente","titulo":"Falar com atendente","descricao":"Atendimento humano"}
+                ]}
+                """);
+        PageRequest pagina = PageRequest.of(0, 100);
+
+        when(mensagemRepository.findByAtendimentoIdAndClinicaId(30L, 9L, pagina))
+                .thenReturn(new PageImpl<>(List.of(persistida), pagina, 1));
+        when(midiaMensagemRepository.findByMensagemId(77L)).thenReturn(Optional.empty());
+
+        var historico = service.listarHistorico(30L, 9L, pagina);
+
+        assertEquals(1, historico.getTotalElements());
+        assertEquals("BOTOES", historico.getContent().getFirst().interacao().tipo());
+        assertEquals("Escolher opcao", historico.getContent().getFirst().interacao().textoAcao());
+        assertEquals("Agendar consulta", historico.getContent().getFirst().interacao().opcoes().getFirst().titulo());
+        assertEquals(
+                "Atendimento humano",
+                historico.getContent().getFirst().interacao().opcoes().get(1).descricao()
+        );
+    }
+
+    @Test
+    void should_reject_interactive_callback_when_backend_would_send_only_text() {
+        MensagemInterativaDTO interacao = new MensagemInterativaDTO(
+                "BOTOES",
+                "Escolher opcao",
+                java.util.List.of(new MensagemInterativaDTO.OpcaoDTO("agendar", "Agendar consulta", null))
+        );
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> service.responderIa(
+                        30L,
+                        9L,
+                        new N8nResponderRequest(
+                                20L, "Escolha", "TEXTO", "N8N", true,
+                                null, null, interacao
+                        )
+                )
+        );
+
+        assertEquals(
+                "Mensagem interativa deve ser enviada pelo workflow e registrada com enviarWhatsapp=false",
+                exception.getMessage()
+        );
+        verify(mensagemRepository, never()).save(any());
     }
 
     @Test

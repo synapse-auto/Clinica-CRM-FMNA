@@ -15,6 +15,7 @@ import com.synapse.clinicafemina.exception.DarwinNotAvailableException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.security.JwtService;
 import com.synapse.clinicafemina.service.AgendaService;
+import com.synapse.clinicafemina.service.CancelamentoAgendamentoService;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +55,9 @@ class AgendaControllerTest {
 
     @MockBean
     private AgendaService agendaService;
+
+    @MockBean
+    private CancelamentoAgendamentoService cancelamentoAgendamentoService;
 
     @MockBean
     private JwtService jwtService;

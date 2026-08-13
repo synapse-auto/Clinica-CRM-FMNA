@@ -3,6 +3,49 @@
 Os endpoints `/api/n8n/**` são integrações servidor a servidor. Eles não usam
 JWT de usuário e exigem o segredo configurado no backend.
 
+## Registrar resposta da IA no atendimento
+
+`POST /api/n8n/atendimentos/{atendimentoId}/responder`
+
+O callback aceita mensagens de texto comuns e, opcionalmente, a representação normalizada
+de uma mensagem interativa já enviada pelo workflow ao WhatsApp. O CRM não recebe payload bruto
+da Meta: recebe apenas os dados necessários para persistir e reconstruir o histórico.
+
+### Exemplo com botões
+
+```json
+{
+  "pacienteId": 20,
+  "mensagem": "O que você gostaria?",
+  "tipoMedia": "TEXTO",
+  "origem": "N8N",
+  "enviarWhatsapp": false,
+  "whatsappMessageId": "wamid.EXEMPLO",
+  "enviadoEm": "2026-08-13T15:00:00Z",
+  "interacao": {
+    "tipo": "BOTOES",
+    "textoAcao": "Escolher opção",
+    "opcoes": [
+      { "id": "agendar", "titulo": "Agendar consulta", "descricao": null },
+      { "id": "atendente", "titulo": "Falar com atendente", "descricao": null }
+    ]
+  }
+}
+```
+
+`interacao` é opcional. `tipo` aceita `BOTOES` (de 1 a 3 opções) ou `LISTA`
+(de 1 a 10 opções). Cada opção preserva seu `id` para correlação interna, mas o CRM
+apresenta `titulo` e `descricao` aos usuários.
+
+O workflow continua responsável por enviar a estrutura interativa ao provider. Depois do aceite,
+deve registrar no callback o mesmo texto, as opções normalizadas e o ID externo, usando
+`enviarWhatsapp=false`. O backend rejeita `interacao` com `enviarWhatsapp=true`, pois os adapters
+atuais do CRM enviam somente texto nesse endpoint e isso criaria divergência com o WhatsApp.
+
+Mensagens comuns permanecem compatíveis sem o campo `interacao`. Respostas inbound
+`button_reply` e `list_reply` são normalizadas pelo webhook e persistidas com o título visível
+escolhido pelo paciente, nunca apenas com o ID interno.
+
 ## Transferir para o próximo humano
 
 `POST /api/n8n/atendimentos/{atendimentoId}/transferir-proximo-humano`

@@ -1,5 +1,7 @@
 package com.synapse.clinicafemina.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.config.RabbitMQConfig;
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Mensagem;
@@ -7,6 +9,7 @@ import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.dto.MensagemDTO;
+import com.synapse.clinicafemina.dto.MensagemInterativaDTO;
 import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
@@ -53,6 +56,7 @@ public class MensagemService {
     private final RabbitTemplate rabbitTemplate;
     private final WhatsappWindowService whatsappWindowService;
     private final WhatsappRecipientService whatsappRecipientService;
+    private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public Page<MensagemDTO> listarHistorico(Long atendimentoId, Long clinicaId, Pageable pageable) {
@@ -120,6 +124,7 @@ public class MensagemService {
                 conteudo,
                 limitarPrevia(conteudo)
         );
+        mensagem.setConteudoInterativo(serializarInteracao(request.interacao()));
         mensagem.setDataHora(request.enviadoEm() != null ? request.enviadoEm() : OffsetDateTime.now());
         if (request.whatsappMessageId() != null && !request.whatsappMessageId().isBlank()) {
             mensagem.setWhatsappMessageId(request.whatsappMessageId().trim());
@@ -326,6 +331,11 @@ public class MensagemService {
         if (request.whatsappMessageId() != null
                 && request.whatsappMessageId().trim().length() > TAMANHO_MAXIMO_WHATSAPP_MESSAGE_ID) {
             throw new BadRequestException("whatsappMessageId excede 255 caracteres");
+        }
+        if (request.interacao() != null && deveEnviarWhatsapp(request)) {
+            throw new BadRequestException(
+                    "Mensagem interativa deve ser enviada pelo workflow e registrada com enviarWhatsapp=false"
+            );
         }
     }
 
@@ -538,8 +548,32 @@ public class MensagemService {
                 mensagem.getLidaEm(),
                 midia,
                 mensagem.getTemplateNome(),
-                mensagem.getTemplateIdioma()
+                mensagem.getTemplateIdioma(),
+                desserializarInteracao(mensagem)
         );
+    }
+
+    private String serializarInteracao(MensagemInterativaDTO interacao) {
+        if (interacao == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(interacao);
+        } catch (JsonProcessingException exception) {
+            throw new BadRequestException("Conteudo interativo invalido");
+        }
+    }
+
+    private MensagemInterativaDTO desserializarInteracao(Mensagem mensagem) {
+        if (mensagem.getConteudoInterativo() == null || mensagem.getConteudoInterativo().isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(mensagem.getConteudoInterativo(), MensagemInterativaDTO.class);
+        } catch (JsonProcessingException exception) {
+            log.warn("Conteudo interativo invalido ignorado no historico. mensagemId={}", mensagem.getId());
+            return null;
+        }
     }
 
 }

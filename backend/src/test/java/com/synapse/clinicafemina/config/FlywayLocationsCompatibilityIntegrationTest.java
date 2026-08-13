@@ -19,6 +19,7 @@ class FlywayLocationsCompatibilityIntegrationTest {
     private static final String COMMON_LOCATION = "classpath:db/migration";
     private static final String OPTIONAL_LOCATION = "classpath:db/migration-valores-consulta-medico";
     private static final String LATER_COMMON_LOCATION = "classpath:db/migration-common-after-optional-test";
+    private static final String LATER_COMMON_VERSION = "48";
     private static final int FMNA_V42_CHECKSUM = 1792192730;
 
     @Test
@@ -26,7 +27,7 @@ class FlywayLocationsCompatibilityIntegrationTest {
         Database database = database("ultramedical_locations");
         execute(database, "CREATE TABLE existing_schema_marker (id BIGINT PRIMARY KEY)");
 
-        contextRunner(database, COMMON_LOCATION).run(context -> {
+        contextRunner(database, COMMON_LOCATION, "41").run(context -> {
             assertThat(context).hasNotFailed();
             assertThat(context).hasSingleBean(Flyway.class);
         });
@@ -34,8 +35,8 @@ class FlywayLocationsCompatibilityIntegrationTest {
         assertThat(migrationCount(database, "42")).isZero();
         assertThat(tableExists(database, "CLINICA_VALORES_CONSULTA_MEDICO")).isFalse();
 
-        migrate(database, COMMON_LOCATION, LATER_COMMON_LOCATION);
-        assertThat(migrationCount(database, "43")).isOne();
+        migrate(database, LATER_COMMON_LOCATION);
+        assertThat(migrationCount(database, LATER_COMMON_VERSION)).isOne();
         assertThat(tableExists(database, "FLYWAY_COMMON_AFTER_OPTIONAL_PROBE")).isTrue();
     }
 
@@ -44,7 +45,7 @@ class FlywayLocationsCompatibilityIntegrationTest {
         Database database = database("fmna_locations");
         execute(database, "CREATE TABLE clinica_valores_consulta_medico (id BIGINT PRIMARY KEY)");
 
-        contextRunner(database, COMMON_LOCATION + "," + OPTIONAL_LOCATION).run(context -> {
+        contextRunner(database, COMMON_LOCATION + "," + OPTIONAL_LOCATION, "42").run(context -> {
             assertThat(context).hasNotFailed();
             assertThat(context).hasSingleBean(Flyway.class);
         });
@@ -53,12 +54,12 @@ class FlywayLocationsCompatibilityIntegrationTest {
         assertThat(migrationChecksum(database, "42")).isEqualTo(FMNA_V42_CHECKSUM);
         assertThat(columnExists(database, "CLINICA_VALORES_CONSULTA_MEDICO", "ATENDE_CONVENIO")).isTrue();
 
-        migrate(database, COMMON_LOCATION, OPTIONAL_LOCATION, LATER_COMMON_LOCATION);
-        assertThat(migrationCount(database, "43")).isOne();
+        migrate(database, OPTIONAL_LOCATION, LATER_COMMON_LOCATION);
+        assertThat(migrationCount(database, LATER_COMMON_VERSION)).isOne();
         assertThat(tableExists(database, "FLYWAY_COMMON_AFTER_OPTIONAL_PROBE")).isTrue();
     }
 
-    private static ApplicationContextRunner contextRunner(Database database, String locations) {
+    private static ApplicationContextRunner contextRunner(Database database, String locations, String target) {
         return new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(
                         DataSourceAutoConfiguration.class,
@@ -71,7 +72,8 @@ class FlywayLocationsCompatibilityIntegrationTest {
                         "spring.datasource.driver-class-name=org.h2.Driver",
                         "spring.flyway.locations=" + locations,
                         "spring.flyway.baseline-on-migrate=true",
-                        "spring.flyway.baseline-version=41"
+                        "spring.flyway.baseline-version=41",
+                        "spring.flyway.target=" + target
                 );
     }
 

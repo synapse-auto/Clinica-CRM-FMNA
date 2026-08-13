@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.controller;
 import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
 import com.synapse.clinicafemina.dto.AtendenteOptionDTO;
 import com.synapse.clinicafemina.dto.MensagemDTO;
+import com.synapse.clinicafemina.dto.MensagemInterativaDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
 import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.exception.NotFoundException;
@@ -88,6 +89,82 @@ class N8nAtendimentoControllerTest {
                 .andExpect(jsonPath("$.remetente").value("IA"));
 
         verify(mensagemService).responderIa(eq(30L), eq(7L), any(N8nResponderRequest.class));
+    }
+
+    @Test
+    void should_bind_and_return_normalized_interactive_options() throws Exception {
+        autorizar("test-secret");
+        MensagemInterativaDTO interacao = new MensagemInterativaDTO(
+                "BOTOES",
+                "Escolher opcao",
+                List.of(
+                        new MensagemInterativaDTO.OpcaoDTO("agendar", "Agendar consulta", null),
+                        new MensagemInterativaDTO.OpcaoDTO("atendente", "Falar com atendente", null)
+                )
+        );
+        when(mensagemService.responderIa(eq(30L), eq(7L), any(N8nResponderRequest.class)))
+                .thenReturn(new MensagemService.RespostaIaResultado(
+                        mensagemInterativaDto(77L, interacao),
+                        false
+                ));
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/responder")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "pacienteId": 20,
+                                  "mensagem": "O que voce gostaria?",
+                                  "tipoMedia": "TEXTO",
+                                  "origem": "N8N",
+                                  "enviarWhatsapp": false,
+                                  "interacao": {
+                                    "tipo": "BOTOES",
+                                    "textoAcao": "Escolher opcao",
+                                    "opcoes": [
+                                      {"id": "agendar", "titulo": "Agendar consulta"},
+                                      {"id": "atendente", "titulo": "Falar com atendente"}
+                                    ]
+                                  }
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.interacao.tipo").value("BOTOES"))
+                .andExpect(jsonPath("$.interacao.textoAcao").value("Escolher opcao"))
+                .andExpect(jsonPath("$.interacao.opcoes[0].id").value("agendar"))
+                .andExpect(jsonPath("$.interacao.opcoes[0].titulo").value("Agendar consulta"));
+
+        ArgumentCaptor<N8nResponderRequest> requestCaptor = ArgumentCaptor.forClass(N8nResponderRequest.class);
+        verify(mensagemService).responderIa(eq(30L), eq(7L), requestCaptor.capture());
+        assertEquals("Falar com atendente", requestCaptor.getValue().interacao().opcoes().get(1).titulo());
+    }
+
+    @Test
+    void should_reject_more_than_three_button_options() throws Exception {
+        mockMvc.perform(post("/api/n8n/atendimentos/30/responder")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "pacienteId": 20,
+                                  "mensagem": "Escolha",
+                                  "tipoMedia": "TEXTO",
+                                  "origem": "N8N",
+                                  "enviarWhatsapp": false,
+                                  "interacao": {
+                                    "tipo": "BOTOES",
+                                    "opcoes": [
+                                      {"id": "1", "titulo": "Um"},
+                                      {"id": "2", "titulo": "Dois"},
+                                      {"id": "3", "titulo": "Tres"},
+                                      {"id": "4", "titulo": "Quatro"}
+                                    ]
+                                  }
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(mensagemService, never()).responderIa(any(), any(), any());
     }
 
     @Test
@@ -565,6 +642,26 @@ class N8nAtendimentoControllerTest {
                 null,
                 null,
                 null
+        );
+    }
+
+    private MensagemDTO mensagemInterativaDto(Long id, MensagemInterativaDTO interacao) {
+        return new MensagemDTO(
+                id,
+                "SAIDA",
+                "IA",
+                "TEXTO",
+                "O que voce gostaria?",
+                "O que voce gostaria?",
+                "REGISTRADA",
+                null,
+                OffsetDateTime.parse("2026-07-03T12:00:00Z"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                interacao
         );
     }
 

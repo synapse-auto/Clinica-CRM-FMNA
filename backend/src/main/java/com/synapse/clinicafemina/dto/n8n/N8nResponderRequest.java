@@ -1,5 +1,7 @@
 package com.synapse.clinicafemina.dto.n8n;
 
+import com.synapse.clinicafemina.dto.MensagemInterativaDTO;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -13,7 +15,8 @@ public record N8nResponderRequest(
         Boolean enviarWhatsapp,
         @Size(max = 255, message = "whatsappMessageId deve ter no maximo 255 caracteres")
         String whatsappMessageId,
-        OffsetDateTime enviadoEm
+        OffsetDateTime enviadoEm,
+        @Valid MensagemInterativaDTO interacao
 ) {
     public N8nResponderRequest(
             Long pacienteId,
@@ -22,6 +25,18 @@ public record N8nResponderRequest(
             String origem,
             Boolean enviarWhatsapp
     ) {
-        this(pacienteId, mensagem, tipoMedia, origem, enviarWhatsapp, null, null);
+        this(pacienteId, mensagem, tipoMedia, origem, enviarWhatsapp, null, null, null);
+    }
+
+    public N8nResponderRequest(
+            Long pacienteId,
+            String mensagem,
+            String tipoMedia,
+            String origem,
+            Boolean enviarWhatsapp,
+            String whatsappMessageId,
+            OffsetDateTime enviadoEm
+    ) {
+        this(pacienteId, mensagem, tipoMedia, origem, enviarWhatsapp, whatsappMessageId, enviadoEm, null);
     }
 }

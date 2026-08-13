@@ -161,6 +161,15 @@ export type MensagemAtendimento = {
   } | null;
   templateNome: string | null;
   templateIdioma: string | null;
+  interacao?: {
+    tipo: 'BOTOES' | 'LISTA';
+    textoAcao: string | null;
+    opcoes: Array<{
+      id: string;
+      titulo: string;
+      descricao: string | null;
+    }>;
+  } | null;
 };
 
 export type AtendimentoFilter =

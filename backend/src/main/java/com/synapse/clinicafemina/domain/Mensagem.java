@@ -37,6 +37,10 @@ public class Mensagem {
     @Convert(converter = AesGcmConverter.class)
     private String conteudo;
 
+    @Column(name = "conteudo_interativo")
+    @Convert(converter = AesGcmConverter.class)
+    private String conteudoInterativo;
+
     @Column(name = "conteudo_previa", length = 60)
     private String conteudoPrevia;
 

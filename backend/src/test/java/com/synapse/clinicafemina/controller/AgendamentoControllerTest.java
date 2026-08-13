@@ -6,6 +6,7 @@ import com.synapse.clinicafemina.dto.agendamento.AgendamentoResponse;
 import com.synapse.clinicafemina.dto.agendamento.AgendaOptionResponse;
 import com.synapse.clinicafemina.dto.agendamento.AgendaOptionsResponse;
 import com.synapse.clinicafemina.service.AgendamentoService;
+import com.synapse.clinicafemina.service.CancelamentoAgendamentoService;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.security.JwtService;
 import java.time.OffsetDateTime;
@@ -44,6 +45,9 @@ class AgendamentoControllerTest {
 
     @MockBean
     private AgendamentoService agendamentoService;
+
+    @MockBean
+    private CancelamentoAgendamentoService cancelamentoAgendamentoService;
 
     @MockBean
     private JwtService jwtService;

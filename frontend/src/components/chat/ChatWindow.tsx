@@ -711,9 +711,16 @@ function MessageBubble({
             {message.templateIdioma ? <span className="opacity-70">· {message.templateIdioma}</span> : null}
           </div>
         ) : null}
-        <div className="whitespace-pre-wrap" style={{ fontFamily: EMOJI_FONT_STACK }}>{message.midia ? (
+        <div style={{ fontFamily: EMOJI_FONT_STACK }}>{message.midia ? (
           <MediaContent message={message} onLayoutChanged={onMediaLayoutChanged} />
-        ) : message.conteudo}</div>
+        ) : (
+          <>
+            <div className="whitespace-pre-wrap" style={{ fontFamily: EMOJI_FONT_STACK }}>
+              {message.conteudo}
+            </div>
+            {message.interacao ? <InteractiveOptions interacao={message.interacao} /> : null}
+          </>
+        )}</div>
       </div>
       <div className="mt-1 flex items-center gap-1 text-[10px] text-clinic-muted">
         {outbound ? <MessageAuthor message={message} /> : null}
@@ -727,6 +734,39 @@ function MessageBubble({
           </span>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function InteractiveOptions({
+  interacao,
+}: {
+  interacao: NonNullable<MensagemAtendimento['interacao']>;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Opcoes da mensagem"
+      className="mt-3 border-t border-current/20 pt-2"
+    >
+      {interacao.textoAcao ? (
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-wide opacity-75">
+          {interacao.textoAcao}
+        </p>
+      ) : null}
+      <ul className="space-y-1.5">
+        {interacao.opcoes.map((opcao) => (
+          <li
+            key={opcao.id}
+            className="rounded-lg border border-current/25 bg-white/10 px-3 py-2 text-center"
+          >
+            <span className="block text-[12px] font-semibold">{opcao.titulo}</span>
+            {opcao.descricao ? (
+              <span className="mt-0.5 block text-[10px] opacity-75">{opcao.descricao}</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

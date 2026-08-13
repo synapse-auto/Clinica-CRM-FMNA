@@ -575,6 +575,31 @@ describe('ChatWindow', () => {
     expect(screen.queryByText('[INTERACTIVE]')).not.toBeInTheDocument();
   });
 
+  it('should_render_persisted_interactive_options_as_non_clickable_history_items', () => {
+    const interactiveMessage: MensagemAtendimento = {
+      ...makeMessage(18, 'SAIDA'),
+      remetente: 'IA',
+      conteudo: 'O que voce gostaria?',
+      interacao: {
+        tipo: 'BOTOES',
+        textoAcao: 'Escolher opcao',
+        opcoes: [
+          { id: 'agendar', titulo: 'Agendar consulta', descricao: null },
+          { id: 'atendente', titulo: 'Falar com atendente', descricao: 'Continuar com a recepcao' },
+        ],
+      },
+    };
+
+    render(<ChatWindow detail={null} messages={[interactiveMessage]} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
+
+    expect(screen.getByRole('group', { name: 'Opcoes da mensagem' })).toBeInTheDocument();
+    expect(screen.getByText('Escolher opcao')).toBeInTheDocument();
+    expect(screen.getByText('Agendar consulta')).toBeInTheDocument();
+    expect(screen.getByText('Falar com atendente')).toBeInTheDocument();
+    expect(screen.getByText('Continuar com a recepcao')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Agendar consulta' })).not.toBeInTheDocument();
+  });
+
   it('should_render_reaction_and_removal_as_accessible_discrete_text_events', () => {
     render(<ChatWindow detail={null} messages={[
       { ...makeMessage(16, 'ENTRADA'), conteudo: 'Paciente reagiu com ❤️' },

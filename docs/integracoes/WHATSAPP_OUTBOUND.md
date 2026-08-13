@@ -54,6 +54,18 @@ Para novo tipo de envio:
 - registrar somente IDs e telefones mascarados nos logs;
 - adicionar testes para chat ID confirmado e telefone cadastrado.
 
+## Registro de mensagens interativas enviadas pelo N8N
+
+Quando o workflow envia botões ou lista diretamente ao provider, ele deve registrar a resposta no
+callback `/api/n8n/atendimentos/{atendimentoId}/responder` com `enviarWhatsapp=false` e o campo
+normalizado `interacao`. Esse campo contém `tipo` (`BOTOES` ou `LISTA`), `textoAcao` e as opções
+com `id`, `titulo` e `descricao`. O CRM persiste essa representação cifrada e a devolve pelo
+histórico para reconstruir a interface depois de um reload.
+
+Não enviar `interacao` com `enviarWhatsapp=true`: os adapters atuais desse endpoint suportam
+texto e mídia, mas não reproduzem a estrutura interativa. O backend rejeita essa combinação para
+impedir que o paciente receba somente texto enquanto o CRM registre botões inexistentes.
+
 ## Mensagens inbound: Unicode, figurinhas e reações
 
 O envelope inbound comum de Meta e UAZAP preserva `text.body` como Unicode UTF-8, sem

@@ -1,5 +1,6 @@
 package com.synapse.clinicafemina.integration.whatsapp.uazap;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Mensagem;
@@ -97,7 +98,8 @@ class MensagemServiceUazapOutboundWiringTest {
         return new MensagemService(
                 mensagemRepository, midiaMensagemRepository, atendimentoRepository, usuarioRepository,
                 whatsappOutboundClient, rabbitTemplate, whatsappWindowService,
-                new WhatsappRecipientService(resolver, atendimentoRepository));
+                new WhatsappRecipientService(resolver, atendimentoRepository),
+                new ObjectMapper().findAndRegisterModules());
     }
 
     @Test

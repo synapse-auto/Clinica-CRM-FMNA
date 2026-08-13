@@ -39,11 +39,12 @@ describe('auth permissions', () => {
     expect(isRouteAllowed('RECEPCIONISTA', '/minha-conta')).toBe(true);
   });
 
-  it('should_limit_doctor_to_dashboard_conversations_agenda_and_account', () => {
+  it('should_limit_doctor_to_clinical_routes_and_account', () => {
     expect(menuItemsForProfile('MEDICO').map((item) => item.href)).toEqual([
       '/atendimentos',
       '/dashboard',
       '/agenda',
+      '/cancelamentos',
       '/minha-conta',
     ]);
     expect(isRouteAllowed('MEDICO', '/pacientes')).toBe(false);
