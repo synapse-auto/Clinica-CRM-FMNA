@@ -146,21 +146,21 @@ Nunca use reset destrutivo em producao.
 ## Hotfix de compatibilidade das locations Flyway
 
 As migrations de `classpath:db/migration` sao comuns aos dois deploys. A V42
-`V42__adicionar_atende_convenio_em_clinica_valores_consulta_medico.sql` pertence
-ao modulo opcional da FMNA e fica somente em
-`classpath:db/migration-valores-consulta-medico`. O arquivo preserva o mesmo nome,
-conteudo e checksum ja registrados pela FMNA.
+`V42__adicionar_atende_convenio_em_clinica_valores_consulta_medico.sql` e a V46
+`V46__reestruturar_medicos_consultas.sql` pertencem ao modulo opcional da FMNA e
+ficam somente em `classpath:db/migration-valores-consulta-medico`. Os arquivos
+preservam os mesmos nomes, conteudos e checksums ja registrados pela FMNA.
 
 Ordem segura para restaurar os deploys:
 
 1. Manter a UltraMedical no ultimo deploy estavel.
 2. Configurar `SPRING_FLYWAY_LOCATIONS` da FMNA com as duas locations antes de atualizar seu backend.
-3. Confirmar que a FMNA encontra a V42 na location adicional.
+3. Confirmar que a FMNA encontra a V42 e a V46 na location adicional.
 4. Publicar o hotfix de codigo.
 5. Implantar o backend UltraMedical somente com `classpath:db/migration`.
 6. Confirmar a inicializacao da UltraMedical e o estado do Flyway.
 7. Implantar a FMNA com as duas locations.
-8. Confirmar que a validacao da V42 usa o checksum ja registrado.
+8. Confirmar que a validacao da V42 e da V46 usa os checksums ja registrados.
 9. Somente depois reativar o auto-deploy.
 
 Nunca coloque migration especifica na pasta comum, nunca edite uma migration

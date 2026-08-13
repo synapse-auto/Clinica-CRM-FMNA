@@ -10,8 +10,11 @@ import org.springframework.context.annotation.Configuration;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -23,6 +26,10 @@ class FlywayLocationsCompatibilityTest {
             "V42__adicionar_atende_convenio_em_clinica_valores_consulta_medico.sql";
     private static final String ORIGINAL_V42_SHA256 =
             "F38430CD438589B6522ACD728B3062BC8C6E97EC3BB62000824C3F7CA9EA773F";
+    private static final String V46_SCRIPT = "V46__reestruturar_medicos_consultas.sql";
+    private static final String ORIGINAL_V46_SHA256 =
+            "F65B33DE1E0C88C07EDD0392B9816258C333A393B2AD3CA440D66745B51FBE60";
+    private static final Pattern VERSIONED_MIGRATION = Pattern.compile("^V([^_]+)__.+\\.sql$");
     private static final Path DB_RESOURCES = Path.of("src/main/resources/db");
     private static final Path COMMON_DIRECTORY = DB_RESOURCES.resolve("migration");
     private static final Path OPTIONAL_DIRECTORY = DB_RESOURCES.resolve("migration-valores-consulta-medico");
@@ -66,6 +73,45 @@ class FlywayLocationsCompatibilityTest {
         assertThat(OPTIONAL_DIRECTORY.getParent()).isEqualTo(COMMON_DIRECTORY.getParent());
         assertThat(OPTIONAL_DIRECTORY.startsWith(COMMON_DIRECTORY)).isFalse();
         assertThat(sha256(OPTIONAL_DIRECTORY.resolve(V42_SCRIPT))).isEqualTo(ORIGINAL_V42_SHA256);
+    }
+
+    @Test
+    void should_keep_applied_v46_only_in_optional_location_with_original_bytes() throws Exception {
+        List<Path> version46Files;
+        try (var resources = Files.walk(DB_RESOURCES)) {
+            version46Files = resources
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().startsWith("V46__"))
+                    .toList();
+        }
+
+        assertThat(version46Files).containsExactly(OPTIONAL_DIRECTORY.resolve(V46_SCRIPT));
+        assertThat(COMMON_DIRECTORY.resolve(V46_SCRIPT)).doesNotExist();
+        assertThat(sha256(OPTIONAL_DIRECTORY.resolve(V46_SCRIPT))).isEqualTo(ORIGINAL_V46_SHA256);
+    }
+
+    @Test
+    void should_not_repeat_versions_across_configurable_locations() throws Exception {
+        Map<String, List<Path>> migrationsByVersion = new HashMap<>();
+        try (var resources = Files.walk(DB_RESOURCES)) {
+            resources
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.startsWith(COMMON_DIRECTORY) || path.startsWith(OPTIONAL_DIRECTORY))
+                    .forEach(path -> {
+                        var matcher = VERSIONED_MIGRATION.matcher(path.getFileName().toString());
+                        if (matcher.matches()) {
+                            migrationsByVersion.computeIfAbsent(matcher.group(1), ignored -> new java.util.ArrayList<>())
+                                    .add(path);
+                        }
+                    });
+        }
+
+        var duplicatedVersions = migrationsByVersion.entrySet().stream()
+                .filter(entry -> entry.getValue().size() > 1)
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .toList();
+
+        assertThat(duplicatedVersions).isEmpty();
     }
 
     @Test

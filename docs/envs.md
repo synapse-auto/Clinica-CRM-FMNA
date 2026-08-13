@@ -24,7 +24,8 @@ UltraMedical, que nao possui o modulo de valores de consulta medica:
 SPRING_FLYWAY_LOCATIONS=classpath:db/migration
 ```
 
-FMNA, que possui `clinica_valores_consulta_medico` e ja aplicou a V42:
+FMNA, que possui `clinica_valores_consulta_medico` e ja aplicou as migrations
+especificas V42 e V46:
 
 ```text
 SPRING_FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/migration-valores-consulta-medico
@@ -34,6 +35,10 @@ A selecao e exclusiva da configuracao do deploy. Nao condicione migrations por
 `CLINIC_SLUG`, `clinicId` ou logica Java. Uma migration aplicada deve manter nome,
 conteudo e checksum; nunca use `repair` ou altere `flyway_schema_history` para
 compensar uma location incorreta.
+
+As migrations `V42__adicionar_atende_convenio_em_clinica_valores_consulta_medico.sql`
+e `V46__reestruturar_medicos_consultas.sql` pertencem somente a location opcional.
+A V46 preserva o filename e o checksum Flyway `-124947821` registrados pela FMNA.
 
 ## JWT
 

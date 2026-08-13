@@ -1,6 +1,7 @@
 package com.synapse.clinicafemina.config;
 
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationInfo;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
@@ -11,6 +12,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -21,6 +23,7 @@ class FlywayLocationsCompatibilityIntegrationTest {
     private static final String LATER_COMMON_LOCATION = "classpath:db/migration-common-after-optional-test";
     private static final String LATER_COMMON_VERSION = "48";
     private static final int FMNA_V42_CHECKSUM = 1792192730;
+    private static final int FMNA_V46_CHECKSUM = -124947821;
 
     @Test
     void should_start_ultramedical_context_without_optional_table_or_v42() throws Exception {
@@ -33,6 +36,7 @@ class FlywayLocationsCompatibilityIntegrationTest {
         });
 
         assertThat(migrationCount(database, "42")).isZero();
+        assertThat(migrationCount(database, "46")).isZero();
         assertThat(tableExists(database, "CLINICA_VALORES_CONSULTA_MEDICO")).isFalse();
 
         migrate(database, LATER_COMMON_LOCATION);
@@ -41,7 +45,7 @@ class FlywayLocationsCompatibilityIntegrationTest {
     }
 
     @Test
-    void should_start_fmna_context_with_optional_v42_and_later_common_migrations() throws Exception {
+    void should_start_fmna_context_with_v42_and_resolve_applied_v46_from_optional_location() throws Exception {
         Database database = database("fmna_locations");
         execute(database, "CREATE TABLE clinica_valores_consulta_medico (id BIGINT PRIMARY KEY)");
 
@@ -54,9 +58,10 @@ class FlywayLocationsCompatibilityIntegrationTest {
         assertThat(migrationChecksum(database, "42")).isEqualTo(FMNA_V42_CHECKSUM);
         assertThat(columnExists(database, "CLINICA_VALORES_CONSULTA_MEDICO", "ATENDE_CONVENIO")).isTrue();
 
-        migrate(database, OPTIONAL_LOCATION, LATER_COMMON_LOCATION);
-        assertThat(migrationCount(database, LATER_COMMON_VERSION)).isOne();
-        assertThat(tableExists(database, "FLYWAY_COMMON_AFTER_OPTIONAL_PROBE")).isTrue();
+        MigrationInfo v46 = resolvedMigration(database, OPTIONAL_LOCATION, "46");
+        assertThat(v46.getScript()).isEqualTo("V46__reestruturar_medicos_consultas.sql");
+        assertThat(v46.getChecksum()).isEqualTo(FMNA_V46_CHECKSUM);
+        assertThat(v46.getPhysicalLocation()).contains("migration-valores-consulta-medico");
     }
 
     private static ApplicationContextRunner contextRunner(Database database, String locations, String target) {
@@ -85,6 +90,20 @@ class FlywayLocationsCompatibilityIntegrationTest {
                 .baselineVersion("41")
                 .load()
                 .migrate();
+    }
+
+    private static MigrationInfo resolvedMigration(Database database, String location, String version) {
+        Flyway flyway = Flyway.configure()
+                .dataSource(database.url(), database.username(), database.password())
+                .locations(location)
+                .baselineOnMigrate(true)
+                .baselineVersion("41")
+                .load();
+        return Arrays.stream(flyway.info().all())
+                .filter(migration -> migration.getVersion() != null)
+                .filter(migration -> version.equals(migration.getVersion().getVersion()))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static Database database(String name) {
