@@ -236,6 +236,40 @@
   transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
+:global(.login-password-input) {
+  padding-right: 3.4rem;
+}
+
+:global(.login-password-toggle) {
+  position: absolute;
+  top: 50%;
+  right: 0.85rem;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 0;
+  border-radius: 0.55rem;
+  background: transparent;
+  color: #8ca8c2;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+:global(.login-password-toggle:hover) {
+  color: var(--login-text);
+}
+
+:global(.login-password-toggle:focus-visible) {
+  outline: 2px solid #7fbbf2;
+  outline-offset: 2px;
+}
+
+:global(.login-password-toggle svg) {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
 :global(.login-input::placeholder) {
   color: #7891aa;
 }

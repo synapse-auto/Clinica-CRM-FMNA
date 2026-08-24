@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { LockKeyhole, Mail } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole, Mail } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 type LoginResponse = {
@@ -13,6 +13,7 @@ export function LoginForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,7 +62,16 @@ export function LoginForm() {
         <span className="login-label">Senha</span>
         <span className="login-control">
           <LockKeyhole className="login-input-icon" aria-hidden="true" />
-          <input name="senha" type="password" autoComplete="current-password" required aria-describedby={error ? 'login-error' : undefined} className="login-input" />
+          <input name="senha" type={showPassword ? 'text' : 'password'} autoComplete="current-password" required aria-describedby={error ? 'login-error' : undefined} className="login-input login-password-input" />
+          <button
+            type="button"
+            className="login-password-toggle"
+            aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+            title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+            onClick={() => setShowPassword((visible) => !visible)}
+          >
+            {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+          </button>
         </span>
       </label>
       <button type="submit" disabled={loading} className="login-submit">

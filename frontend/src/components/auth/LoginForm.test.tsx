@@ -32,6 +32,21 @@ describe('LoginForm', () => {
     expect(screen.getByLabelText('Email')).toHaveAttribute('inputmode', 'email');
     expect(screen.getByLabelText('Email')).toHaveAttribute('placeholder', 'nome@empresa.com');
     expect(screen.getByLabelText('Senha')).toHaveAttribute('autocomplete', 'current-password');
+    expect(screen.getByLabelText('Senha')).toHaveAttribute('type', 'password');
+    expect(screen.getByRole('button', { name: 'Mostrar senha' })).toHaveAttribute('type', 'button');
+    expect(screen.getByRole('button', { name: 'Entrar' })).toHaveAttribute('type', 'submit');
+  });
+
+  it('should_toggle_password_visibility_without_changing_the_submit_action', async () => {
+    const user = userEvent.setup();
+    render(<LoginForm />);
+
+    await user.click(screen.getByRole('button', { name: 'Mostrar senha' }));
+    expect(screen.getByLabelText('Senha')).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: 'Ocultar senha' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Ocultar senha' }));
+    expect(screen.getByLabelText('Senha')).toHaveAttribute('type', 'password');
     expect(screen.getByRole('button', { name: 'Entrar' })).toHaveAttribute('type', 'submit');
   });
 

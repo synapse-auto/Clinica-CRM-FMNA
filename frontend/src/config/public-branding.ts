@@ -17,6 +17,16 @@ function publicValue(name: string, fallback: string) {
   return value || fallback;
 }
 
+/**
+ * FMNA é o slug/legado técnico da clínica Femina. O slug permanece estável,
+ * mas a marca exibida ao usuário deve usar o nome comercial em todas as telas
+ * públicas. Outras clínicas (por exemplo, UltraMedical) permanecem intactas.
+ */
+export function normalizeClinicDisplayName(value: string) {
+  const normalized = value.trim();
+  return /^fmna$/i.test(normalized) ? 'Femina' : normalized;
+}
+
 function isLocalPublicPath(value: string | undefined): value is string {
   return Boolean(value?.startsWith('/') && !value.startsWith('//'));
 }
@@ -38,7 +48,7 @@ export function publicLogoBorderRadius(value?: string) {
 }
 
 export const publicBranding = {
-  clinicName: publicValue('NEXT_PUBLIC_CLINIC_NAME', DEFAULT_BRANDING.clinicName),
+  clinicName: normalizeClinicDisplayName(publicValue('NEXT_PUBLIC_CLINIC_NAME', DEFAULT_BRANDING.clinicName)),
   logoUrl: publicLogo(),
   logoBorderRadius: publicLogoBorderRadius(process.env.NEXT_PUBLIC_CLINIC_LOGO_BORDER_RADIUS),
   faviconUrl: publicFavicon(),

@@ -3,10 +3,19 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   buildDocumentTitle,
+  normalizeClinicDisplayName,
   publicFavicon,
   publicLogo,
   publicLogoBorderRadius,
 } from './public-branding';
+
+describe('clinic display name', () => {
+  it('uses Femina for the legacy FMNA name and preserves other clinics', () => {
+    expect(normalizeClinicDisplayName('FMNA')).toBe('Femina');
+    expect(normalizeClinicDisplayName('fmna')).toBe('Femina');
+    expect(normalizeClinicDisplayName('UltraMedical')).toBe('UltraMedical');
+  });
+});
 
 describe('public branding document title', () => {
   it('uses the configured clinic name', () => {
