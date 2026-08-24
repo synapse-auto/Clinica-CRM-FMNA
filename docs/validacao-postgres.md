@@ -64,7 +64,7 @@ $env:APP_DEV_SEED_ENABLED="true"
 $env:APP_DEV_SEED_EMAIL="gestor-fmna@local.test"
 $env:APP_DEV_SEED_PASSWORD="senha-local-forte-fmna"
 $env:APP_CLINIC_SLUG="fmna"
-$env:APP_CLINIC_NAME="FMNA"
+$env:APP_CLINIC_NAME="Femina"
 $env:APP_CLINIC_EXTERNAL_PROVIDER="DARWIN"
 $env:APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID="phone-fmna"
 

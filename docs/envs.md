@@ -57,7 +57,7 @@ CRYPTO_MASTER_KEY=<chave-aes-32-caracteres>
 
 ```text
 APP_CLINIC_SLUG=fmna
-APP_CLINIC_NAME=FMNA
+APP_CLINIC_NAME=Femina
 APP_CLINIC_EXTERNAL_PROVIDER=DARWIN
 APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID=<phone-number-id>
 ```
@@ -132,7 +132,7 @@ Use somente em desenvolvimento/homologacao descartavel. Em producao, deixe desab
 
 ```text
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
-NEXT_PUBLIC_CLINIC_NAME=FMNA
+NEXT_PUBLIC_CLINIC_NAME=Femina
 NEXT_PUBLIC_CLINIC_LOGO=/fmna-logo.png
 NEXT_PUBLIC_CLINIC_FAVICON=/fmna-favicon.png
 NEXT_PUBLIC_CLINIC_LOGO_BORDER_RADIUS=12

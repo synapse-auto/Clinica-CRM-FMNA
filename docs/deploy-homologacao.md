@@ -22,20 +22,20 @@ Dashboard, agenda e pacientes leem somente o modelo interno do CRM. Darwin e Med
 7. Validar webhook WhatsApp com `metadata.phone_number_id` do deploy.
 8. Validar N8N apenas se `usaN8n=true` e `n8nWebhookUrl` estiver configurada.
 
-## FMNA
+## Femina (slug técnico `fmna`)
 
 Variaveis essenciais:
 
 ```text
 APP_CLINIC_SLUG=fmna
-APP_CLINIC_NAME=FMNA
+APP_CLINIC_NAME=Femina
 APP_CLINIC_EXTERNAL_PROVIDER=DARWIN
 APP_CLINIC_WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-fmna>
 WHATSAPP_PHONE_NUMBER_ID=<phone-number-id-fmna>
 SPRING_FLYWAY_LOCATIONS=classpath:db/migration,classpath:db/migration-valores-consulta-medico
 DARWIN_API_URL=<url-darwin>
 DARWIN_API_TOKEN=<token-read-only-darwin>
-NEXT_PUBLIC_CLINIC_NAME=FMNA
+NEXT_PUBLIC_CLINIC_NAME=Femina
 NEXT_PUBLIC_CLINIC_LOGO=/fmna-logo.png
 NEXT_PUBLIC_CLINIC_FAVICON=/fmna-favicon.png
 NEXT_PUBLIC_CLINIC_LOGO_BORDER_RADIUS=12
