@@ -11,6 +11,9 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,5 +42,12 @@ public class CancelamentoAgendamentoController {
     ) {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
         return service.listar(clinica, busca, origem, statusCancelamento, statusSincronizacao, pacienteId, agendamentoId, inicio, fim, pageable);
+    }
+
+    @DeleteMapping
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('GESTOR')")
+    public void apagarTodos() {
+        service.apagarTodos(clinicaConfigService.obterClinicaAtual());
     }
 }

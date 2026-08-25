@@ -104,6 +104,11 @@ public class CancelamentoAgendamentoService {
         return repository.findAll(spec, pageable).map(this::toResponse);
     }
 
+    @Transactional
+    public long apagarTodos(Clinica clinica) {
+        return repository.deleteByClinicaId(clinica.getId());
+    }
+
     private Atendimento validarAtendimento(Clinica clinica, Long atendimentoId, Agendamento agendamento) {
         if (atendimentoId == null) return null;
         Atendimento atendimento = atendimentoRepository.findByIdAndClinicaId(atendimentoId, clinica.getId())
@@ -127,6 +132,13 @@ public class CancelamentoAgendamentoService {
     private String normalizarMotivo(String motivo) { String value = motivo == null ? "" : motivo.replaceAll("<[^>]*>", "").trim(); if (value.isBlank()) throw new BadRequestException("Motivo do cancelamento e obrigatorio."); if (value.length() > 2000) throw new BadRequestException("Motivo do cancelamento deve ter no maximo 2000 caracteres."); return value; }
     private boolean mesmoPayload(CancelamentoAgendamento c, CancelarAgendamentoN8nRequest r, String motivo, String origem) { return c.getAgendamento().getId().equals(r.agendamentoId()) && java.util.Objects.equals(c.getAtendimento() == null ? null : c.getAtendimento().getId(), r.atendimentoId()) && c.getMotivo().equals(motivo) && c.getOrigem().equals(origem); }
     private String resumirErro(RuntimeException exception) { String message = exception.getMessage(); return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message.substring(0, Math.min(255, message.length())); }
-    private CancelamentoAgendamentoResponse toResponse(CancelamentoAgendamento c) { Agendamento a = c.getAgendamento(); Paciente p = c.getPaciente(); return new CancelamentoAgendamentoResponse(c.getId(), p.getId(), p.getNome(), mascararTelefone(p.getTelefone()), a == null ? null : a.getId(), a == null ? null : a.getDataHoraInicio(), a == null ? null : a.getProfissionalNome(), a == null ? null : a.getServicoNome(), c.getMotivo(), c.getOrigem(), c.getStatusCancelamento(), c.getStatusSincronizacao(), c.getColetadoEm()); }
+    private CancelamentoAgendamentoResponse toResponse(CancelamentoAgendamento c) { Agendamento a = c.getAgendamento(); Paciente p = c.getPaciente(); return new CancelamentoAgendamentoResponse(c.getId(), p.getId(), p.getNome(), mascararTelefone(p.getTelefone()), a == null ? null : a.getId(), a == null ? null : a.getDataHoraInicio(), resolverProfissionalNome(a), a == null ? null : a.getServicoNome(), c.getMotivo(), c.getOrigem(), c.getStatusCancelamento(), c.getStatusSincronizacao(), c.getColetadoEm()); }
+    private String resolverProfissionalNome(Agendamento agendamento) {
+        if (agendamento == null) return null;
+        if (agendamento.getExternalSource() == ExternalProviderType.MEDWARE) {
+            return agendamentoService.resolverProfissionalNome(agendamento);
+        }
+        return agendamento.getMedico() == null ? agendamento.getProfissionalNome() : agendamento.getMedico().getNome();
+    }
     private String mascararTelefone(String telefone) { if (telefone == null || telefone.length() < 4) return null; String digits = telefone.replaceAll("\\D", ""); return digits.length() < 4 ? null : "***" + digits.substring(digits.length() - 4); }
 }

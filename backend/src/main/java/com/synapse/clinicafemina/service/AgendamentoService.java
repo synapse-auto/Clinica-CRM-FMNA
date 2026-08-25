@@ -196,6 +196,20 @@ public class AgendamentoService {
         }
     }
 
+    /** Resolve o profissional usando a mesma regra exposta pela agenda, inclusive MEDWARE. */
+    public String resolverProfissionalNome(Agendamento agendamento) {
+        if (agendamento == null) {
+            return null;
+        }
+        if (agendamento.getExternalSource() == ExternalProviderType.MEDWARE) {
+            return externalDoctorResolver.resolve(agendamento)
+                    .map(AgendaExternalDoctorResolver.ExternalDoctor::nome)
+                    .orElse(agendamento.getProfissionalNome());
+        }
+        Usuario medico = agendamento.getMedico();
+        return medico == null ? agendamento.getProfissionalNome() : medico.getNome();
+    }
+
     private AgendamentoResponse toResponse(Agendamento agendamento) {
         if (agendamento.getExternalSource() == ExternalProviderType.MEDWARE) {
             AgendaExternalDoctorResolver.ExternalDoctor doctor = externalDoctorResolver.resolve(agendamento)
@@ -205,7 +219,7 @@ public class AgendamentoService {
                     agendamento.getPaciente().getId(),
                     agendamento.getPaciente().getNome(),
                     null,
-                    doctor == null ? null : doctor.nome(),
+                    resolverProfissionalNome(agendamento),
                     agendamento.getDataHoraInicio(),
                     agendamento.getDataHoraFim(),
                     agendamento.getTipo(),
@@ -225,7 +239,7 @@ public class AgendamentoService {
                 agendamento.getPaciente().getId(),
                 agendamento.getPaciente().getNome(),
                 medico == null ? null : medico.getId(),
-                medico == null ? null : medico.getNome(),
+                resolverProfissionalNome(agendamento),
                 agendamento.getDataHoraInicio(),
                 agendamento.getDataHoraFim(),
                 agendamento.getTipo(),

@@ -7,3 +7,11 @@ export async function listarCancelamentos(params: Record<string, string | number
   if (!response.ok) throw new Error('Não foi possível carregar os cancelamentos.');
   return response.json() as Promise<CancelamentoPage>;
 }
+
+export async function apagarTodosCancelamentos(): Promise<void> {
+  const response = await fetch('/api/cancelamentos', {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) throw new Error('Não foi possível apagar o histórico de cancelamentos.');
+}

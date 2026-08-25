@@ -11,4 +11,5 @@ public interface CancelamentoAgendamentoRepository extends JpaRepository<Cancela
     @EntityGraph(attributePaths = {"paciente", "agendamento", "atendimento"})
     Optional<CancelamentoAgendamento> findByClinicaIdAndIdempotencyKey(Long clinicaId, String idempotencyKey);
     boolean existsByClinicaIdAndAgendamentoIdAndOrigem(Long clinicaId, Long agendamentoId, String origem);
+    long deleteByClinicaId(Long clinicaId);
 }
