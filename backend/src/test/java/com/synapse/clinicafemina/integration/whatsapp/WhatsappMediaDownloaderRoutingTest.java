@@ -22,7 +22,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * Prova de roteamento por {@code phone_number_id}, sem chamada real e sem if/else espalhado:
- * Meta usa {@link WhatsappOutboundClient}; UAZAP nunca o toca; falha/pendência não propaga exceção.
+ * Meta usa {@link WhatsappOutboundClient}; UAZAP nunca o toca; falha de configuração não propaga exceção.
  */
 @DisplayName("Roteamento de download de mídia inbound: Meta vs UAZAP")
 class WhatsappMediaDownloaderRoutingTest {
@@ -66,14 +66,14 @@ class WhatsappMediaDownloaderRoutingTest {
     }
 
     @Test
-    @DisplayName("3/4. Mídia UAZAP por id (contrato de binário não confirmado): download retorna null (pendente), não lança exceção")
-    void uazapMediaById_returnsNullPending_contractNotConfirmed() {
+    @DisplayName("3/4. Mídia UAZAP sem configuração completa retorna null e não lança exceção")
+    void uazapMediaById_returnsNull_whenConfigurationIsIncomplete() {
         UazapWhatsappMediaDownloader downloader =
                 new UazapWhatsappMediaDownloader(propertiesWithUazapPhoneId("uazap-fmna"));
 
         WhatsappOutboundClient.MidiaBaixada resultado = downloader.download("media-uazap-id-or-link");
 
-        assertThat(resultado).isNull(); // pendente — metadados já persistidos pelo chamador continuam válidos
+        assertThat(resultado).isNull();
     }
 
     @Test

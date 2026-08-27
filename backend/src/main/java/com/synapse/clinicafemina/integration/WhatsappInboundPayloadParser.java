@@ -122,6 +122,7 @@ public class WhatsappInboundPayloadParser {
             case "image", "sticker" -> "IMAGEM";
             case "audio" -> "AUDIO";
             case "document" -> "DOCUMENTO";
+            case "video" -> "VIDEO";
             default -> "OUTRO";
         };
     }
@@ -202,6 +203,7 @@ public class WhatsappInboundPayloadParser {
         return switch (tipoMedia) {
             case "IMAGEM" -> "image/jpeg";
             case "AUDIO" -> "audio/ogg";
+            case "VIDEO" -> "video/mp4";
             default -> "application/octet-stream";
         };
     }

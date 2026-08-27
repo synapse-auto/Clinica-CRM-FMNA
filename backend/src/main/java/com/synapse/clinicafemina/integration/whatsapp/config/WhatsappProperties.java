@@ -75,6 +75,10 @@ public class WhatsappProperties {
         private String webhookSecret;
         private int connectTimeoutMs = 5000;
         private int readTimeoutMs = 15000;
+        /** Limite defensivo do binário de mídia inbound baixado pela UAZAP (25 MiB por padrão). */
+        private int mediaMaxBytes = 25 * 1024 * 1024;
+        /** Hosts HTTPS adicionais, separados por vírgula, autorizados a servir mídia inbound. */
+        private String mediaAllowedHosts = "lookaside.fbsbx.com";
         /** {@code UAZAP_PICTURE_ENRICHMENT_ENABLED} - fluxo automatico desabilitado por padrao. */
         private boolean pictureEnrichmentEnabled = false;
         /** {@code UAZAP_PICTURE_DIAGNOSTICS_ENABLED} — desabilitado por padrão. Ver {@code UazapPictureDiagnosticoController}. */
@@ -144,6 +148,22 @@ public class WhatsappProperties {
 
         public void setReadTimeoutMs(int readTimeoutMs) {
             this.readTimeoutMs = readTimeoutMs;
+        }
+
+        public int getMediaMaxBytes() {
+            return mediaMaxBytes;
+        }
+
+        public void setMediaMaxBytes(int mediaMaxBytes) {
+            this.mediaMaxBytes = mediaMaxBytes;
+        }
+
+        public String getMediaAllowedHosts() {
+            return mediaAllowedHosts;
+        }
+
+        public void setMediaAllowedHosts(String mediaAllowedHosts) {
+            this.mediaAllowedHosts = mediaAllowedHosts;
         }
 
         public boolean isPictureEnrichmentEnabled() {

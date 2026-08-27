@@ -243,6 +243,20 @@ class WhatsappInboundPayloadParserTest {
     }
 
     @Test
+    void should_classify_video_as_video_with_media_metadata() {
+        WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
+                "id", "wamid-video",
+                "type", "video",
+                "video", Map.of("id", "media-video", "mime_type", "video/mp4")
+        ));
+
+        assertEquals("VIDEO", dados.tipoMedia());
+        assertEquals("video/mp4", dados.mimeType());
+        assertEquals("media-video", dados.mediaId());
+        assertEquals("Vídeo recebido", dados.conteudo());
+    }
+
+    @Test
     void should_render_reaction_as_text_without_creating_fake_media() {
         WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
                 "id", "wamid-reaction",

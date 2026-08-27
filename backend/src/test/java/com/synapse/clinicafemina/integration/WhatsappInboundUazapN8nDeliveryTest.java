@@ -316,7 +316,7 @@ class WhatsappInboundUazapN8nDeliveryTest {
             return m;
         });
 
-        // UAZAP: o downloader retorna null (segundo hop não confirmado) → mídia pendente, mensagem segue.
+        // UAZAP sem configuração HTTP completa: downloader retorna null, mas a mensagem segue.
         Map<String, Object> comMidia = Map.of(
                 "id", "UZ-audio", "from", WA_ID, "timestamp", "1781455200", "type", "audio",
                 "audio", Map.of("id", "media-uz", "mime_type", "audio/ogg"));

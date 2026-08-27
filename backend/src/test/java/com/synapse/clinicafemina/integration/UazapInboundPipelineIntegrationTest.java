@@ -401,8 +401,8 @@ class UazapInboundPipelineIntegrationTest {
             """;
 
     @Test
-    @DisplayName("5/6. Mídia UAZAP: falha/pendência no download do binário não impede persistência da mensagem nem o envio ao N8N")
-    void uazapMediaDownloadPending_doesNotBlockPersistence_orN8nDelivery() {
+    @DisplayName("5/6. Mídia UAZAP: falha no download do binário não impede persistência da mensagem nem o envio ao N8N")
+    void uazapMediaDownloadFailure_doesNotBlockPersistence_orN8nDelivery() {
         Clinica clinica = clinicaFmna();
         Paciente paciente = paciente(clinica);
         Atendimento atendimento = atendimento(clinica, paciente, true);
@@ -412,7 +412,7 @@ class UazapInboundPipelineIntegrationTest {
 
         // Mensagem persistida normalmente.
         verify(mensagemRepository).save(any(Mensagem.class));
-        // Metadados de mídia persistidos mesmo sem o binário (download pendente).
+        // Metadados de mídia persistidos mesmo quando o download falha.
         ArgumentCaptor<com.synapse.clinicafemina.domain.MidiaMensagem> midiaCaptor =
                 ArgumentCaptor.forClass(com.synapse.clinicafemina.domain.MidiaMensagem.class);
         verify(midiaMensagemRepository).save(midiaCaptor.capture());
