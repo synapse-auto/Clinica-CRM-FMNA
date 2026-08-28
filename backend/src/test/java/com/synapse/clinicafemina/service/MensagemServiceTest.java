@@ -12,10 +12,12 @@ import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.dto.MensagemInterativaDTO;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappMediaDownloader;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderResolver;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
 import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappProvider;
+import com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappMediaDownloader;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
 import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
@@ -97,7 +99,10 @@ class MensagemServiceTest {
                 rabbitTemplate,
                 whatsappWindowService,
                 new WhatsappRecipientService(whatsappProviderResolver, atendimentoRepository),
-                new ObjectMapper().findAndRegisterModules()
+                new ObjectMapper().findAndRegisterModules(),
+                List.<WhatsappMediaDownloader>of(new MetaWhatsappMediaDownloader(
+                        whatsappOutboundClient, new WhatsappProperties())),
+                new WhatsappProperties()
         );
 
         Clinica clinica = new Clinica();

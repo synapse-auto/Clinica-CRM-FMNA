@@ -15,7 +15,10 @@ import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappMediaDownloader;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappRecipientResolutionException;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
+import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappMessageType;
 import com.synapse.clinicafemina.integration.whatsapp.model.ResolvedWhatsappRecipient;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
@@ -34,6 +37,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.OffsetDateTime;
 import java.util.Locale;
+import java.util.List;
 import java.util.Optional;
 
 @Slf4j
@@ -58,6 +62,8 @@ public class MensagemService {
     private final WhatsappWindowService whatsappWindowService;
     private final WhatsappRecipientService whatsappRecipientService;
     private final ObjectMapper objectMapper;
+    private final List<WhatsappMediaDownloader> mediaDownloaders;
+    private final WhatsappProperties whatsappProperties;
 
     @Transactional(readOnly = true)
     public Page<MensagemDTO> listarHistorico(Long atendimentoId, Long clinicaId, Pageable pageable) {
@@ -220,7 +226,7 @@ public class MensagemService {
             return null;
         }
         try {
-            return whatsappOutboundClient.baixarMidia(mediaId);
+            return resolveMediaDownloader().download(mediaId);
         } catch (Exception e) {
             log.error("Erro ao baixar binário da mídia: mediaId={}, tipoErro={}",
                     maskId(mediaId), e.getClass().getSimpleName());
@@ -249,6 +255,17 @@ public class MensagemService {
             }
         }
         return baixada;
+    }
+
+    private WhatsappMediaDownloader resolveMediaDownloader() {
+        String phoneNumberId = whatsappProperties.resolveProvider() == WhatsappProviderType.UAZAP
+                ? whatsappProperties.getUazap().getPhoneNumberId()
+                : null;
+        return mediaDownloaders.stream()
+                .filter(downloader -> downloader.supports(phoneNumberId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "Nenhum WhatsappMediaDownloader disponível para o provider ativo"));
     }
 
     private void armazenarLocalmente(

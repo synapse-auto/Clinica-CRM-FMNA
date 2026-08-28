@@ -4,15 +4,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.Mensagem;
+import com.synapse.clinicafemina.domain.MidiaMensagem;
 import com.synapse.clinicafemina.domain.Paciente;
 import com.synapse.clinicafemina.domain.Recepcionista;
 import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderResolver;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappMediaDownloader;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappMessageType;
 import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappProvider;
+import com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappMediaDownloader;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
 import com.synapse.clinicafemina.repository.MensagemRepository;
 import com.synapse.clinicafemina.repository.MidiaMensagemRepository;
@@ -37,7 +40,10 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -91,17 +97,31 @@ class MensagemServiceUazapOutboundWiringTest {
         remetente.setId(99L);
         remetente.setClinica(clinica);
 
-        when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
-        when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L)).thenReturn(Optional.of(remetente));
-        when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(atendimentoRepository.findByIdAndClinicaId(30L, 9L)).thenReturn(Optional.of(atendimento));
+        lenient().when(usuarioRepository.findAtivoByIdAndClinicaId(99L, 9L)).thenReturn(Optional.of(remetente));
+        lenient().when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     private MensagemService service(WhatsappProviderResolver resolver) {
+        WhatsappProperties mediaProperties = new WhatsappProperties();
+        mediaProperties.getUazap().setPhoneNumberId("uazap-fmna");
+        return service(resolver, List.of(
+                new MetaWhatsappMediaDownloader(whatsappOutboundClient, mediaProperties),
+                new UazapWhatsappMediaDownloader(mediaProperties)), mediaProperties);
+    }
+
+    private MensagemService service(
+            WhatsappProviderResolver resolver,
+            List<WhatsappMediaDownloader> mediaDownloaders,
+            WhatsappProperties mediaProperties
+    ) {
         return new MensagemService(
                 mensagemRepository, midiaMensagemRepository, atendimentoRepository, usuarioRepository,
                 whatsappOutboundClient, rabbitTemplate, whatsappWindowService,
                 new WhatsappRecipientService(resolver, atendimentoRepository),
-                new ObjectMapper().findAndRegisterModules());
+                new ObjectMapper().findAndRegisterModules(),
+                mediaDownloaders,
+                mediaProperties);
     }
 
     @Test
@@ -176,6 +196,36 @@ class MensagemServiceUazapOutboundWiringTest {
         verify(uazapClient).uploadMedia(any(), org.mockito.ArgumentMatchers.eq("application/pdf"),
                 org.mockito.ArgumentMatchers.eq("guia.pdf"));
         verify(uazapClient).sendMedia("558391114004", WhatsappMessageType.DOCUMENT, "media-pdf-1", null);
+        verifyNoInteractions(whatsappOutboundClient);
+    }
+
+    @Test
+    @DisplayName("WHATSAPP_PROVIDER=UAZAP: visualização de mídia usa o downloader UAZAP, não o Meta")
+    void uazapProvider_readsMediaThroughUazapDownloader() {
+        WhatsappProperties properties = new WhatsappProperties();
+        properties.setProvider("UAZAP");
+        properties.getUazap().setPhoneNumberId("uazap-fmna");
+        WhatsappMediaDownloader downloader = mock(WhatsappMediaDownloader.class);
+        when(downloader.supports("uazap-fmna")).thenReturn(true);
+        byte[] pdf = "%PDF-1.7".getBytes();
+        when(downloader.download("media-pdf-1"))
+                .thenReturn(new WhatsappOutboundClient.MidiaBaixada(pdf, "application/pdf"));
+
+        MidiaMensagem midia = new MidiaMensagem();
+        midia.setWhatsappMediaId("media-pdf-1");
+        midia.setMimeType("application/pdf");
+        midia.setTamanhoBytes((long) pdf.length);
+
+        MensagemService service = service(
+                new WhatsappProviderResolver(List.of(), properties),
+                List.of(downloader),
+                properties);
+
+        WhatsappOutboundClient.MidiaBaixada resultado = service.obterBinarioMidia(midia);
+
+        assertArrayEquals(pdf, resultado.bytes());
+        assertEquals("application/pdf", resultado.mimeType());
+        verify(downloader).download("media-pdf-1");
         verifyNoInteractions(whatsappOutboundClient);
     }
 
