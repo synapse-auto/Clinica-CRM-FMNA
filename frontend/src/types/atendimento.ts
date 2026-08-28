@@ -144,7 +144,7 @@ export type MensagemAtendimento = {
   id: number;
   direcao: 'ENTRADA' | 'SAIDA' | 'SISTEMA';
   remetente: 'PACIENTE' | 'ATENDENTE' | 'IA' | 'SISTEMA';
-  tipoMedia: 'TEXTO' | 'IMAGEM' | 'AUDIO' | 'DOCUMENTO' | 'TEMPLATE' | 'AI_HANDOFF_SUMMARY' | 'AI_HANDOFF_ENDED' | 'HUMAN_HANDOFF_START';
+  tipoMedia: 'TEXTO' | 'IMAGEM' | 'AUDIO' | 'VIDEO' | 'DOCUMENTO' | 'TEMPLATE' | 'AI_HANDOFF_SUMMARY' | 'AI_HANDOFF_ENDED' | 'HUMAN_HANDOFF_START';
   conteudo: string | null;
   conteudoPrevia: string | null;
   whatsappStatus: string | null;

@@ -1,5 +1,6 @@
 'use client';
 
+import { Dialog } from '@base-ui/react/dialog';
 import { Menu } from '@base-ui/react/menu';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import {
@@ -15,6 +16,7 @@ import {
   Send,
   Search,
   UserRound,
+  X,
 } from 'lucide-react';
 import {
   DEFAULT_WHATSAPP_CAPABILITIES,
@@ -83,6 +85,7 @@ export function ChatWindow({
   const [quickOpen, setQuickOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [mediaViewerMessage, setMediaViewerMessage] = useState<MensagemAtendimento | null>(null);
   const [quickSearch, setQuickSearch] = useState('');
   const [quickActiveIndex, setQuickActiveIndex] = useState(0);
   const [showNewMessagesNotice, setShowNewMessagesNotice] = useState(false);
@@ -393,6 +396,7 @@ export function ChatWindow({
                 message={message}
                 enforcesCustomerCareWindow={enforcesCustomerCareWindow}
                 onMediaLayoutChanged={detail ? () => handleMediaLayoutChanged(detail.id) : undefined}
+                onOpenMedia={() => setMediaViewerMessage(message)}
               />
               {message.direcao === 'SAIDA' && message.whatsappStatus === 'FALHA' && onRetryFailedMessage && canRetryFailedMessage?.(message.id) ? (
                 <button
@@ -605,6 +609,12 @@ export function ChatWindow({
           onSend={onSendTemplate ?? (() => Promise.resolve())}
         />
       ) : null}
+      {mediaViewerMessage ? (
+        <MediaViewerDialog
+          message={mediaViewerMessage}
+          onClose={() => setMediaViewerMessage(null)}
+        />
+      ) : null}
     </section>
   );
 }
@@ -679,10 +689,12 @@ function MessageBubble({
   message,
   enforcesCustomerCareWindow,
   onMediaLayoutChanged,
+  onOpenMedia,
 }: {
   message: MensagemAtendimento;
   enforcesCustomerCareWindow: boolean;
   onMediaLayoutChanged?: () => void;
+  onOpenMedia: () => void;
 }) {
   if (message.tipoMedia === 'AI_HANDOFF_SUMMARY') {
     return <AiHandoffSummaryMessage message={message} />;
@@ -712,7 +724,7 @@ function MessageBubble({
           </div>
         ) : null}
         <div style={{ fontFamily: EMOJI_FONT_STACK }}>{message.midia ? (
-          <MediaContent message={message} onLayoutChanged={onMediaLayoutChanged} />
+          <MediaContent message={message} onLayoutChanged={onMediaLayoutChanged} onOpenMedia={onOpenMedia} />
         ) : (
           <>
             <div className="whitespace-pre-wrap" style={{ fontFamily: EMOJI_FONT_STACK }}>
@@ -832,9 +844,11 @@ function mensagemFalhaAmigavel(reason: string | null, enforcesCustomerCareWindow
 function MediaContent({
   message,
   onLayoutChanged,
+  onOpenMedia,
 }: {
   message: MensagemAtendimento;
   onLayoutChanged?: () => void;
+  onOpenMedia: () => void;
 }) {
   const media = message.midia;
   const [error, setError] = useState(false);
@@ -842,6 +856,7 @@ function MediaContent({
   if (!media) return null;
   const mimeType = media.mimeType?.toLowerCase() ?? '';
   const visualMedia = media.tipoMedia === 'IMAGEM' || mimeType.startsWith('image/');
+  const videoMedia = media.tipoMedia === 'VIDEO' || mimeType.startsWith('video/');
   const sticker = mimeType === 'image/webp';
 
   if (error) {
@@ -851,13 +866,20 @@ function MediaContent({
       ? 'Imagem indisponível'
       : media.tipoMedia === 'AUDIO'
         ? 'Áudio indisponível'
+        : videoMedia
+          ? 'Vídeo indisponível'
         : 'Documento indisponível';
     return <span className="italic text-clinic-muted">{errorText}</span>;
   }
 
   if (visualMedia) {
     return (
-      <a href={media.url} target="_blank" rel="noreferrer">
+      <button
+        type="button"
+        aria-label={`Visualizar ${sticker ? 'figurinha' : media.nomeArquivo ?? 'imagem'}`}
+        onClick={onOpenMedia}
+        className="block cursor-zoom-in rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-clinic-primary"
+      >
         <img
           src={media.url}
           alt={sticker ? 'Figurinha recebida' : media.nomeArquivo ?? 'Imagem recebida'}
@@ -867,7 +889,7 @@ function MediaContent({
             ? 'max-h-[220px] w-auto max-w-[220px] object-contain'
             : 'max-h-56 w-auto max-w-full rounded-lg object-contain'}
         />
-      </a>
+      </button>
     );
   }
   if (media.tipoMedia === 'AUDIO') {
@@ -886,15 +908,86 @@ function MediaContent({
     ? media.nomeArquivo
     : message.conteudo ?? 'Abrir documento';
   return (
-    <a
-      href={media.url}
-      target="_blank"
-      rel="noreferrer"
+    <button
+      type="button"
+      onClick={onOpenMedia}
       className="flex items-center gap-2 font-semibold underline"
     >
       <FileText className="h-4 w-4" />
-      {documentLabel}
-    </a>
+      <span>{videoMedia ? `Visualizar ${documentLabel}` : documentLabel}</span>
+    </button>
+  );
+}
+
+function MediaViewerDialog({
+  message,
+  onClose,
+}: {
+  message: MensagemAtendimento;
+  onClose: () => void;
+}) {
+  const media = message.midia;
+  if (!media) return null;
+
+  const mimeType = media.mimeType?.toLowerCase() ?? '';
+  const imageMedia = media.tipoMedia === 'IMAGEM' || mimeType.startsWith('image/');
+  const videoMedia = media.tipoMedia === 'VIDEO' || mimeType.startsWith('video/');
+  const pdfDocument = mimeType === 'application/pdf';
+  const label = media.nomeArquivo && media.nomeArquivo.toLocaleLowerCase('pt-BR') !== 'outro'
+    ? media.nomeArquivo
+    : imageMedia
+      ? 'Imagem recebida'
+      : videoMedia
+        ? 'Vídeo recebido'
+        : 'Documento recebido';
+  const title = imageMedia ? 'Visualizar imagem' : videoMedia ? 'Visualizar vídeo' : 'Visualizar documento';
+
+  return (
+    <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Backdrop className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-[1px]" />
+        <Dialog.Viewport className="fixed inset-0 z-[91] flex items-center justify-center p-3 sm:p-6">
+          <Dialog.Popup className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-clinic-border bg-clinic-surface text-clinic-text shadow-2xl outline-none">
+            <header className="flex shrink-0 items-start justify-between gap-4 border-b border-clinic-border px-5 py-4">
+              <div className="min-w-0">
+                <Dialog.Title className="text-base font-extrabold">{title}</Dialog.Title>
+                <Dialog.Description className="mt-1 truncate text-xs text-clinic-muted">{label}</Dialog.Description>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar visualizador de mídia"
+                onClick={onClose}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-clinic-muted hover:bg-clinic-hover hover:text-clinic-text"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-auto bg-black/5 p-3 sm:p-5 custom-scrollbar">
+              {imageMedia ? (
+                <img src={media.url} alt={label} className="mx-auto max-h-[74vh] max-w-full rounded-lg object-contain" />
+              ) : videoMedia ? (
+                <video controls autoPlay preload="metadata" src={media.url} className="mx-auto max-h-[74vh] max-w-full rounded-lg" />
+              ) : pdfDocument ? (
+                <iframe title={label} src={media.url} className="h-[74vh] w-full rounded-lg border border-clinic-border bg-white" />
+              ) : (
+                <div className="mx-auto flex max-w-md flex-col items-center rounded-lg border border-clinic-border bg-clinic-canvas p-8 text-center">
+                  <FileText className="h-10 w-10 text-clinic-primary" />
+                  <p className="mt-4 text-sm font-bold">{label}</p>
+                  <p className="mt-1 text-xs text-clinic-muted">A pré-visualização não está disponível para este tipo de arquivo.</p>
+                  <a
+                    href={media.url}
+                    download
+                    className="mt-5 rounded-md bg-clinic-primary px-4 py-2 text-xs font-extrabold text-white hover:bg-clinic-primary-strong"
+                  >
+                    Baixar arquivo
+                  </a>
+                </div>
+              )}
+            </div>
+          </Dialog.Popup>
+        </Dialog.Viewport>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

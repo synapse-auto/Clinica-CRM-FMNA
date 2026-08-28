@@ -560,6 +560,7 @@ describe('ChatWindow', () => {
     const imgElement = screen.getByRole('img', { name: 'exame.png' });
     expect(imgElement).toBeInTheDocument();
     expect(imgElement).toHaveAttribute('src', '/api/atendimentos/30/mensagens/1/midia');
+    expect(imgElement.closest('button')).toHaveAttribute('aria-label', 'Visualizar exame.png');
   });
 
   it('should_render_canonical_button_and_list_replies_without_technical_placeholders', () => {
@@ -638,7 +639,7 @@ describe('ChatWindow', () => {
     render(<ChatWindow detail={null} messages={[sticker]} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
 
     const image = screen.getByRole('img', { name: 'Figurinha recebida' });
-    expect(image.closest('a')).toHaveAttribute('href', '/api/atendimentos/30/mensagens/11/midia');
+    expect(image.closest('button')).toHaveAttribute('aria-label', 'Visualizar figurinha');
     expect(screen.queryByRole('link', { name: 'outro' })).not.toBeInTheDocument();
   });
 
@@ -711,7 +712,8 @@ describe('ChatWindow', () => {
     expect(audioElement).toHaveAttribute('src', '/api/atendimentos/30/mensagens/2/midia');
   });
 
-  it('should_render_document_link_using_bff_endpoint', () => {
+  it('should_open_document_in_the_chat_media_viewer', async () => {
+    const user = userEvent.setup();
     const mockDocMessage: MensagemAtendimento = {
       id: 3,
       direcao: 'ENTRADA',
@@ -747,12 +749,13 @@ describe('ChatWindow', () => {
       />,
     );
 
-    const docLink = screen.getByRole('link', { name: 'exame.pdf' });
-    expect(docLink).toBeInTheDocument();
-    expect(docLink).toHaveAttribute('href', '/api/atendimentos/30/mensagens/3/midia');
+    await user.click(screen.getByRole('button', { name: 'exame.pdf' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTitle('exame.pdf')).toHaveAttribute('src', '/api/atendimentos/30/mensagens/3/midia');
   });
 
-  it('should_use_the_friendly_canonical_text_for_unknown_media_named_outro', () => {
+  it('should_open_unknown_video_media_in_the_chat_media_viewer', async () => {
+    const user = userEvent.setup();
     const video: MensagemAtendimento = {
       id: 18, direcao: 'ENTRADA', remetente: 'PACIENTE', tipoMedia: 'DOCUMENTO',
       conteudo: 'Vídeo recebido', conteudoPrevia: 'Vídeo recebido', whatsappStatus: 'RECEBIDA', motivoFalha: null,
@@ -762,8 +765,35 @@ describe('ChatWindow', () => {
     };
     render(<ChatWindow detail={null} messages={[video]} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
 
-    expect(screen.getByRole('link', { name: 'Vídeo recebido' })).toHaveAttribute('href', '/api/atendimentos/30/mensagens/18/midia');
+    await user.click(screen.getByRole('button', { name: 'Visualizar Vídeo recebido' }));
+    const videoElement = document.querySelector('video');
+    expect(videoElement).toHaveAttribute('src', '/api/atendimentos/30/mensagens/18/midia');
     expect(screen.queryByRole('link', { name: 'outro' })).not.toBeInTheDocument();
+  });
+
+  it('should_keep_image_viewing_inside_the_chat_and_allow_closing_the_viewer', async () => {
+    const user = userEvent.setup();
+    const image = {
+      ...makeMessage(19, 'ENTRADA'),
+      tipoMedia: 'IMAGEM' as const,
+      conteudo: '[IMAGEM]',
+      midia: {
+        tipoMedia: 'IMAGEM',
+        mimeType: 'image/jpeg',
+        nomeArquivo: 'foto.jpg',
+        tamanhoBytes: 1234,
+        url: '/api/atendimentos/30/mensagens/19/midia',
+      },
+    };
+    render(<ChatWindow detail={null} messages={[image]} quickMessages={[]} busy={false} error={null} onSend={async () => undefined} onAttach={async () => undefined} />);
+
+    await user.click(screen.getByRole('button', { name: 'Visualizar foto.jpg' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'foto.jpg' })).toHaveAttribute('src', '/api/atendimentos/30/mensagens/19/midia');
+    expect(screen.queryByRole('link', { name: 'foto.jpg' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Fechar visualizador de mídia' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('should_keep_24_hour_failure_visible_with_a_friendly_reason', () => {
