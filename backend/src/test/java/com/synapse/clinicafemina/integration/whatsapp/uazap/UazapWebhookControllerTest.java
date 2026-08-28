@@ -5,8 +5,11 @@ import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import com.synapse.clinicafemina.service.WhatsappWebhookDispatchService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -20,6 +23,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 @DisplayName("UazapWebhookController — endpoint isolado, validação e despacho assíncrono")
+@ExtendWith(OutputCaptureExtension.class)
 class UazapWebhookControllerTest {
 
     private static final String VALID_PAYLOAD = """
@@ -67,6 +71,26 @@ class UazapWebhookControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         verify(dispatchService, times(1)).despachar(bytes(VALID_PAYLOAD));
+    }
+
+    @Test
+    @DisplayName("vídeo oficial gera somente diagnóstico estrutural sanitizado antes do despacho")
+    void officialVideoPayload_logsSafeStructuralDiagnostics(CapturedOutput output) {
+        String payload = messagePayload("video", "5511988887777@s.whatsapp.net", "5511988887777")
+                .replace("MEDIA-1", "MEDIA-SECRET-123");
+
+        ResponseEntity<Void> response = controller(properties(true, "UAZAP", "PNID-1", null))
+                .receberWebhook(bytes(payload), null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(output.getOut())
+                .contains("message.type=video")
+                .contains("mime_type=video/mp4")
+                .contains("media_id_presente=true")
+                .contains("message.keys=[from, id, key, timestamp, type, video]")
+                .doesNotContain("MEDIA-SECRET-123")
+                .doesNotContain("5511988887777");
+        verify(dispatchService).despachar(bytes(payload));
     }
 
     @ParameterizedTest

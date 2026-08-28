@@ -79,8 +79,8 @@ public class WhatsappProperties {
         private int mediaMaxBytes = 25 * 1024 * 1024;
         /** Hosts HTTPS adicionais, separados por vírgula, autorizados a servir mídia inbound. */
         private String mediaAllowedHosts = "lookaside.fbsbx.com";
-        /** {@code UAZAP_PICTURE_ENRICHMENT_ENABLED} - fluxo automatico desabilitado por padrao. */
-        private boolean pictureEnrichmentEnabled = false;
+        /** {@code UAZAP_PICTURE_ENRICHMENT_ENABLED} - fluxo automatico habilitado por padrao. */
+        private boolean pictureEnrichmentEnabled = true;
         /** {@code UAZAP_PICTURE_DIAGNOSTICS_ENABLED} — desabilitado por padrão. Ver {@code UazapPictureDiagnosticoController}. */
         private boolean pictureDiagnosticsEnabled = false;
         /** Hosts HTTPS adicionais, separados por virgula, autorizados a servir fotos. */

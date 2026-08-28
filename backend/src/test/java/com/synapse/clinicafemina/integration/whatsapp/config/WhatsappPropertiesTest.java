@@ -12,10 +12,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WhatsappPropertiesTest {
 
     @Test
-    void pictureEnrichmentIsDisabledByDefault() {
+    void pictureEnrichmentIsEnabledByDefault() {
         WhatsappProperties properties = new WhatsappProperties();
 
-        assertThat(properties.getUazap().isPictureEnrichmentEnabled()).isFalse();
+        assertThat(properties.getUazap().isPictureEnrichmentEnabled()).isTrue();
     }
 
     @Test

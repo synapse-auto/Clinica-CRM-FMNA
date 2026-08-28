@@ -400,6 +400,16 @@ class UazapInboundPipelineIntegrationTest {
             "image":{"id":"media-uazap-img","mime_type":"image/jpeg"}}]}}]}]}
             """;
 
+    // Fixture sanitizada do webhook de vídeo documentado pela UAZAP (envelope Meta-compatible).
+    private static final String UAZAP_VIDEO_RAW = """
+            {"object":"whatsapp_business_account","entry":[{"id":"INST-FMNA","changes":[{"field":"messages","value":{
+            "messaging_product":"whatsapp",
+            "metadata":{"display_phone_number":"5543000000000","phone_number_id":"uazap-fmna"},
+            "contacts":[{"profile":{"name":"Paciente FMNA"},"wa_id":"5543988887777"}],
+            "messages":[{"from":"5543988887777","id":"UZ-VIDEO-1","isGroup":false,"timestamp":"1781455200","type":"video",
+            "video":{"caption":"","id":"media-uazap-video","mime_type":"video/mp4","sha256":"hash-sanitizado"}}]}}]}]}
+            """;
+
     @Test
     @DisplayName("5/6. Mídia UAZAP: falha no download do binário não impede persistência da mensagem nem o envio ao N8N")
     void uazapMediaDownloadFailure_doesNotBlockPersistence_orN8nDelivery() {
@@ -421,6 +431,32 @@ class UazapInboundPipelineIntegrationTest {
         // Meta nunca é chamado para mídia UAZAP.
         verifyNoInteractions(whatsappOutboundClient);
         // Payload ainda é entregue ao N8N (IA ativa).
+        capturarUnicoEventoN8n();
+        verify(notificationService).notificarNovaMensagem(eq(atendimento), any());
+    }
+
+    @Test
+    @DisplayName("vídeo UAZAP oficial é classificado e persistido antes de qualquer tentativa de download")
+    void officialUazapVideo_isParsedAndPersistedAsVideo() {
+        Clinica clinica = clinicaFmna();
+        Paciente paciente = paciente(clinica);
+        Atendimento atendimento = atendimento(clinica, paciente, true);
+        stubHappyPath(clinica, paciente, atendimento, "UZ-VIDEO-1");
+
+        listener.processarMensagem(UAZAP_VIDEO_RAW.getBytes(StandardCharsets.UTF_8));
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository).save(mensagemCaptor.capture());
+        assertEquals("VIDEO", mensagemCaptor.getValue().getTipoMedia());
+        assertEquals("Vídeo recebido", mensagemCaptor.getValue().getConteudo());
+
+        ArgumentCaptor<com.synapse.clinicafemina.domain.MidiaMensagem> midiaCaptor =
+                ArgumentCaptor.forClass(com.synapse.clinicafemina.domain.MidiaMensagem.class);
+        verify(midiaMensagemRepository).save(midiaCaptor.capture());
+        assertEquals("media-uazap-video", midiaCaptor.getValue().getWhatsappMediaId());
+        assertEquals("video/mp4", midiaCaptor.getValue().getMimeType());
+
+        verifyNoInteractions(whatsappOutboundClient);
         capturarUnicoEventoN8n();
         verify(notificationService).notificarNovaMensagem(eq(atendimento), any());
     }

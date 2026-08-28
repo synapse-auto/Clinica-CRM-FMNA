@@ -119,6 +119,8 @@ class WhatsappInboundMapperUazapPictureEventTest {
     @Test
     @DisplayName("provider META e flag false: nunca publica o evento de foto UAZAP")
     void metaProviderWithFlagDisabled_neverPublishesEvent() {
+        whatsappProperties.getUazap().setPictureEnrichmentEnabled(false);
+
         mapper().processarMensagemTexto(payload());
 
         verify(eventPublisher, never()).publishEvent(any(UazapPictureEnrichmentRequestedEvent.class));
@@ -138,6 +140,7 @@ class WhatsappInboundMapperUazapPictureEventTest {
     @DisplayName("provider UAZAP e flag false: preserva mensagem, atendimento e evento N8N")
     void uazapProviderWithFlagDisabled_preservesInboundFlowWithoutPictureEvent() {
         whatsappProperties.setProvider("UAZAP");
+        whatsappProperties.getUazap().setPictureEnrichmentEnabled(false);
 
         mapper().processarMensagemTexto(payload());
 

@@ -87,6 +87,8 @@ public class UazapWebhookController {
             return ResponseEntity.ok().build();
         }
 
+        logMessageDiagnostics(payload);
+
         // Processamento pesado fora da requisição HTTP (mesma fila inbound existente).
         dispatchService.despachar(rawBody);
         return ResponseEntity.ok().build();
@@ -142,5 +144,14 @@ public class UazapWebhookController {
             }
         }
         return false;
+    }
+
+    private void logMessageDiagnostics(JsonNode payload) {
+        UazapInboundMessageDiagnostics.extract(payload).forEach(diagnostic -> log.info(
+                "Evento inbound UAZAP aceito: message.type={}, message.keys={}, mime_type={}, media_id_presente={}",
+                diagnostic.messageType(),
+                diagnostic.messageKeys(),
+                diagnostic.mimeType(),
+                diagnostic.mediaIdPresent()));
     }
 }

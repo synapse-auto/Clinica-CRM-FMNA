@@ -100,7 +100,7 @@ app:
       read-timeout-ms: ${UAZAP_READ_TIMEOUT_MS:15000}
       media-max-bytes: ${UAZAP_MEDIA_MAX_BYTES:26214400}
       media-allowed-hosts: ${UAZAP_MEDIA_ALLOWED_HOSTS:lookaside.fbsbx.com}
-      picture-enrichment-enabled: ${UAZAP_PICTURE_ENRICHMENT_ENABLED:false}
+      picture-enrichment-enabled: ${UAZAP_PICTURE_ENRICHMENT_ENABLED:true}
       picture-diagnostics-enabled: ${UAZAP_PICTURE_DIAGNOSTICS_ENABLED:false}
       picture-allowed-hosts: ${UAZAP_PICTURE_ALLOWED_HOSTS:}
 
