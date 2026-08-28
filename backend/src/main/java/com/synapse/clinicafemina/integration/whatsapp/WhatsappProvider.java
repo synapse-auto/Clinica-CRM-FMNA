@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.integration.whatsapp;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappMessageType;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappRecipientResolution;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
+import org.springframework.core.io.Resource;
 
 import java.util.Set;
 
@@ -65,4 +66,12 @@ public interface WhatsappProvider {
      * @return resultado com o {@code externalMessageId} atribuído pelo provider
      */
     WhatsappSendResult sendMedia(String toE164, WhatsappMessageType type, String mediaReference, String caption);
+
+    /**
+     * Faz upload de uma mídia local e retorna a referência que {@link #sendMedia} espera.
+     * Providers que não suportarem upload local devem falhar explicitamente.
+     */
+    default String uploadMedia(Resource recurso, String contentType, String nomeArquivo) {
+        throw new UnsupportedOperationException("Upload de mídia não suportado pelo provider");
+    }
 }

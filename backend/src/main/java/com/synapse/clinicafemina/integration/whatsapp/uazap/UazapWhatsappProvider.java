@@ -8,6 +8,7 @@ import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappMessageType;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappRecipientResolution;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
 import org.springframework.stereotype.Component;
+import org.springframework.core.io.Resource;
 
 import java.util.Set;
 
@@ -65,5 +66,10 @@ public class UazapWhatsappProvider implements WhatsappProvider {
     @Override
     public WhatsappSendResult sendMedia(String toE164, WhatsappMessageType type, String mediaReference, String caption) {
         return uazapClient.sendMedia(toE164, type, mediaReference, caption);
+    }
+
+    @Override
+    public String uploadMedia(Resource recurso, String contentType, String nomeArquivo) {
+        return uazapClient.uploadMedia(recurso, contentType, nomeArquivo);
     }
 }

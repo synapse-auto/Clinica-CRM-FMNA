@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -79,7 +80,8 @@ public class UazapClient {
         }
         String mediaType = type.name().toLowerCase(Locale.ROOT); // image|audio|video|document
         Map<String, Object> media = new LinkedHashMap<>();
-        media.put("link", mediaReference);
+        // Referências retornadas pelo upload são media IDs; URLs públicas continuam aceitas.
+        media.put(mediaReference.startsWith("http://") || mediaReference.startsWith("https://") ? "link" : "id", mediaReference);
         if (caption != null && !caption.isBlank()) {
             media.put("caption", caption);
         }
@@ -88,6 +90,38 @@ public class UazapClient {
         payload.put("type", mediaType);
         payload.put(mediaType, media);
         return post(payload);
+    }
+
+    public String uploadMedia(org.springframework.core.io.Resource recurso, String contentType, String nomeArquivo) {
+        validarConfiguracao();
+        try {
+            LinkedMultiValueMap<String, Object> multipart = new LinkedMultiValueMap<>();
+            multipart.add("file", recurso);
+            multipart.add("messaging_product", "whatsapp");
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restClient.post()
+                    .uri(mediaUrl())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + config.getToken())
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(multipart)
+                    .retrieve()
+                    .body(Map.class);
+            if (response == null || !(response.get("id") instanceof String id) || id.isBlank()) {
+                throw new UazapException("Resposta da Uzapi sem identificador de mídia");
+            }
+            log.info("Upload de mídia Uzapi aceito. mediaId={}", maskId(id));
+            return id.trim();
+        } catch (RestClientResponseException exception) {
+            log.error("Upload de mídia Uzapi rejeitado pelo servidor. status={}", exception.getStatusCode().value());
+            throw new UazapException("Uzapi retornou status HTTP " + exception.getStatusCode().value(), exception);
+        } catch (ResourceAccessException exception) {
+            log.error("Falha de I/O no upload de mídia Uzapi. tipoErro={}", exception.getClass().getSimpleName());
+            throw new UazapException("Falha de conexão ou timeout ao contatar a Uzapi", exception);
+        } catch (RestClientException exception) {
+            log.error("Resposta inválida no upload de mídia Uzapi. tipoErro={}", exception.getClass().getSimpleName());
+            throw new UazapException("Resposta inválida da Uzapi", exception);
+        }
     }
 
     private WhatsappSendResult post(Map<String, Object> payload) {
@@ -124,6 +158,12 @@ public class UazapClient {
         String base = config.getBaseUrl() == null ? "" : config.getBaseUrl().replaceAll("/+$", "");
         return base + "/" + config.getUsername() + "/" + config.getVersion()
                 + "/" + config.getPhoneNumberId() + "/messages";
+    }
+
+    private String mediaUrl() {
+        String base = config.getBaseUrl() == null ? "" : config.getBaseUrl().replaceAll("/+$", "");
+        return base + "/" + config.getUsername() + "/" + config.getVersion()
+                + "/" + config.getPhoneNumberId() + "/media";
     }
 
     private static String onlyDigits(String value) {

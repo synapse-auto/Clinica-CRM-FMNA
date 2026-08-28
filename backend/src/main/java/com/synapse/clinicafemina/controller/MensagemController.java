@@ -62,7 +62,7 @@ public class MensagemController {
 
     /**
      * Recebe um arquivo de mídia (imagem, áudio, documento), faz upload para
-     * a Meta Cloud API e envia como mensagem outbound.
+     * o provider WhatsApp configurado e envia como mensagem outbound.
      *
      * Suporta tipos: image/jpeg, image/png, audio/ogg, application/pdf.
      * Tamanho máximo: configurado via {@code spring.servlet.multipart.max-file-size}.

@@ -10,6 +10,7 @@ import com.synapse.clinicafemina.domain.Usuario;
 import com.synapse.clinicafemina.dto.EnviarMensagemRequest;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderResolver;
+import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappMessageType;
 import com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties;
 import com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappProvider;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
@@ -28,6 +29,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
@@ -149,6 +151,32 @@ class MensagemServiceUazapOutboundWiringTest {
         assertEquals("ENVIADA", mensagemFinal.getWhatsappStatus());
 
         verifyNoInteractions(whatsappOutboundClient); // client Meta nunca foi chamado
+    }
+
+    @Test
+    @DisplayName("WHATSAPP_PROVIDER=UAZAP: PDF faz upload na Uzapi e é enviado por media ID; Meta não é tocado")
+    void uazapProvider_sendsPdfThroughUploadAndMediaPipeline() {
+        com.synapse.clinicafemina.integration.whatsapp.uazap.UazapClient uazapClient =
+                org.mockito.Mockito.mock(com.synapse.clinicafemina.integration.whatsapp.uazap.UazapClient.class);
+        WhatsappProperties properties = new WhatsappProperties();
+        properties.setEnabled(true);
+        properties.setProvider("UAZAP");
+        WhatsappProviderResolver resolver = new WhatsappProviderResolver(
+                List.of(new UazapWhatsappProvider(uazapClient)), properties);
+        when(uazapClient.uploadMedia(any(), org.mockito.ArgumentMatchers.eq("application/pdf"),
+                org.mockito.ArgumentMatchers.eq("guia.pdf"))).thenReturn("media-pdf-1");
+        when(uazapClient.sendMedia("558391114004", WhatsappMessageType.DOCUMENT, "media-pdf-1", null))
+                .thenReturn(new com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult(
+                        "wamid.UZAPI-PDF", com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType.UAZAP));
+
+        MensagemService service = service(resolver);
+        service.enviarMidia(30L, 9L,
+                new MockMultipartFile("arquivo", "guia.pdf", "application/pdf", "pdf".getBytes()), 99L);
+
+        verify(uazapClient).uploadMedia(any(), org.mockito.ArgumentMatchers.eq("application/pdf"),
+                org.mockito.ArgumentMatchers.eq("guia.pdf"));
+        verify(uazapClient).sendMedia("558391114004", WhatsappMessageType.DOCUMENT, "media-pdf-1", null);
+        verifyNoInteractions(whatsappOutboundClient);
     }
 
     @Test

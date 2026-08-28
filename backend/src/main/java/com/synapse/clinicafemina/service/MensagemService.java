@@ -16,6 +16,7 @@ import com.synapse.clinicafemina.exception.NotFoundException;
 import com.synapse.clinicafemina.integration.WhatsappOutboundClient;
 import com.synapse.clinicafemina.integration.WhatsappTemplateRequiredException;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappRecipientResolutionException;
+import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappMessageType;
 import com.synapse.clinicafemina.integration.whatsapp.model.ResolvedWhatsappRecipient;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
@@ -174,16 +175,17 @@ public class MensagemService {
         atualizarUltimaMensagem(atendimento, mensagem);
 
         try {
-            whatsappOutboundClient.validarConfiguracao();
-            String mediaId = whatsappOutboundClient.uploadMidia(
+            ResolvedWhatsappRecipient recipient = whatsappRecipientService.resolve(atendimento);
+            String mediaId = recipient.provider().uploadMedia(
                     arquivo.getResource(), mimeType, nomeArquivo
             );
-            String wamid = whatsappOutboundClient.enviarMidia(
-                    atendimento.getPaciente().getTelefoneNormalizado(),
-                    tipoMedia.toLowerCase(Locale.ROOT),
-                    mediaId
+            WhatsappSendResult resultado = recipient.provider().sendMedia(
+                    recipient.recipient(),
+                    mapearTipoMediaProvider(tipoMedia),
+                    mediaId,
+                    null
             );
-            mensagem.setWhatsappMessageId(wamid);
+            mensagem.setWhatsappMessageId(resultado.externalMessageId());
             mensagem.setWhatsappStatus("ENVIADA");
             midiaRepository.save(criarMidia(
                     mensagem, tipoMedia, mimeType, nomeArquivo, arquivo.getSize(), mediaId
@@ -192,6 +194,15 @@ public class MensagemService {
             registrarFalha(mensagem, exception, true);
         }
         return toDTO(mensagemRepository.save(mensagem));
+    }
+
+    private WhatsappMessageType mapearTipoMediaProvider(String tipoMedia) {
+        return switch (tipoMedia) {
+            case "IMAGEM" -> WhatsappMessageType.IMAGE;
+            case "AUDIO" -> WhatsappMessageType.AUDIO;
+            case "DOCUMENTO" -> WhatsappMessageType.DOCUMENT;
+            default -> throw new IllegalArgumentException("Tipo de mídia não suportado: " + tipoMedia);
+        };
     }
 
     @Transactional(readOnly = true)

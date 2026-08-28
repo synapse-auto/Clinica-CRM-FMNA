@@ -583,7 +583,7 @@ class MensagemServiceTest {
         when(mensagemRepository.save(any(Mensagem.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(whatsappOutboundClient.uploadMidia(any(), eq("image/png"), eq("exame.png")))
                 .thenReturn("media-1");
-        when(whatsappOutboundClient.enviarMidia("5544999990000", "imagem", "media-1"))
+        when(whatsappOutboundClient.enviarMidia("5544999990000", "image", "media-1"))
                 .thenReturn("wamid-2");
 
         service.enviarMidia(30L, 9L, arquivo, 99L);

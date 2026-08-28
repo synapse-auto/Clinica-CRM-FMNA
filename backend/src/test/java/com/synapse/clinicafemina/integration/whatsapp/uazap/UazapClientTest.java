@@ -12,6 +12,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
@@ -32,6 +33,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class UazapClientTest {
 
     private static final String MESSAGES_URL = "https://uazap.test/user/v2/inst-1/messages";
+    private static final String MEDIA_URL = "https://uazap.test/user/v2/inst-1/media";
 
     private MockRestServiceServer server;
     private UazapClient client;
@@ -83,6 +85,47 @@ class UazapClientTest {
         assertThat(result.externalMessageId()).isNotEqualTo("QUEUE-123");
         assertThat(result.confirmedRecipient()).isEqualTo("5511999999999");
         assertThat(result.provider()).isEqualTo(WhatsappProviderType.UAZAP);
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("uploadMedia envia multipart para o endpoint oficial e retorna o media ID")
+    void uploadMedia_usesOfficialMultipartEndpoint() {
+        server.expect(requestTo(MEDIA_URL))
+                .andExpect(method(POST))
+                .andExpect(header(AUTHORIZATION, "Bearer secret-token"))
+                .andExpect(request -> assertThat(request.getHeaders().getContentType()).isNotNull()
+                        .extracting(MediaType::getType).isEqualTo("multipart"))
+                .andRespond(withStatus(HttpStatusCode.valueOf(201))
+                        .body("{\"id\":\"media-pdf-1\"}")
+                        .contentType(MediaType.APPLICATION_JSON));
+
+        String mediaId = client.uploadMedia(
+                new MockMultipartFile("file", "guia.pdf", "application/pdf", "pdf".getBytes()).getResource(),
+                "application/pdf",
+                "guia.pdf"
+        );
+
+        assertThat(mediaId).isEqualTo("media-pdf-1");
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("sendMedia usa id quando a referência veio do upload")
+    void sendMedia_usesIdForUploadedMedia() {
+        server.expect(requestTo(MESSAGES_URL))
+                .andExpect(method(POST))
+                .andExpect(jsonPath("$.type").value("document"))
+                .andExpect(jsonPath("$.document.id").value("media-pdf-1"))
+                .andRespond(withSuccess(
+                        "{\"status\":\"success\",\"queueId\":\"QUEUE-10\",\"messageId\":\"INTERNO-10\","
+                                + "\"messages\":[{\"id\":\"wamid.PDF\"}]}",
+                        MediaType.APPLICATION_JSON));
+
+        WhatsappSendResult result = client.sendMedia(
+                "5511999999999", WhatsappMessageType.DOCUMENT, "media-pdf-1", null);
+
+        assertThat(result.externalMessageId()).isEqualTo("wamid.PDF");
         server.verify();
     }
 

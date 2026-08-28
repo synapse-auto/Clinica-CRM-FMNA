@@ -6,6 +6,7 @@ import com.synapse.clinicafemina.integration.whatsapp.WhatsappProviderType;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappMessageType;
 import com.synapse.clinicafemina.integration.whatsapp.model.WhatsappSendResult;
 import org.springframework.stereotype.Component;
+import org.springframework.core.io.Resource;
 
 import java.util.Locale;
 
@@ -46,5 +47,11 @@ public class MetaWhatsappProvider implements WhatsappProvider {
         // O client Meta atual envia mídia por media_id e não recebe legenda — comportamento preservado.
         String wamid = metaClient.enviarMidia(toE164, type.name().toLowerCase(Locale.ROOT), mediaReference);
         return new WhatsappSendResult(wamid, WhatsappProviderType.META);
+    }
+
+    @Override
+    public String uploadMedia(Resource recurso, String contentType, String nomeArquivo) {
+        metaClient.validarConfiguracao();
+        return metaClient.uploadMidia(recurso, contentType, nomeArquivo);
     }
 }
