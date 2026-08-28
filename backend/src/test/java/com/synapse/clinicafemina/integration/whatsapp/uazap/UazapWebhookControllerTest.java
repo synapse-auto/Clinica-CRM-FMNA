@@ -40,6 +40,7 @@ class UazapWebhookControllerTest {
 
     private final WhatsappWebhookDispatchService dispatchService = mock(WhatsappWebhookDispatchService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final UazapInboundEventFilter inboundEventFilter = new UazapInboundEventFilter();
 
     private WhatsappProperties properties(boolean enabled, String provider, String expectedInstance, String secret) {
         WhatsappProperties properties = new WhatsappProperties();
@@ -51,7 +52,7 @@ class UazapWebhookControllerTest {
     }
 
     private UazapWebhookController controller(WhatsappProperties properties) {
-        return new UazapWebhookController(properties, dispatchService, objectMapper);
+        return new UazapWebhookController(properties, dispatchService, objectMapper, inboundEventFilter);
     }
 
     private byte[] bytes(String s) {
@@ -66,6 +67,32 @@ class UazapWebhookControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         verify(dispatchService, times(1)).despachar(bytes(VALID_PAYLOAD));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"image", "video"})
+    @DisplayName("Status inbound por key.remoteJid responde 200 e é descartado antes da fila")
+    void statusBroadcast_isIgnoredBeforeDispatch(String type) {
+        String payload = messagePayload(type, "status@broadcast", "5511988887777");
+
+        ResponseEntity<Void> response = controller(properties(true, "UAZAP", "PNID-1", null))
+                .receberWebhook(bytes(payload), null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(dispatchService, never()).despachar(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"image", "text"})
+    @DisplayName("mensagem privada sem origem de Status continua sendo despachada")
+    void privateMessage_dispatches(String type) {
+        String payload = messagePayload(type, "5511988887777@s.whatsapp.net", "5511988887777");
+
+        ResponseEntity<Void> response = controller(properties(true, "UAZAP", "PNID-1", null))
+                .receberWebhook(bytes(payload), null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(dispatchService).despachar(bytes(payload));
     }
 
     @ParameterizedTest
@@ -140,5 +167,19 @@ class UazapWebhookControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         verify(dispatchService, times(1)).despachar(bytes(VALID_PAYLOAD));
+    }
+
+    private String messagePayload(String type, String remoteJid, String from) {
+        String content = "text".equals(type)
+                ? "\"text\":{\"body\":\"oi\"}"
+                : "\"%s\":{\"id\":\"MEDIA-1\",\"mime_type\":\"%s\"}"
+                        .formatted(type, "video".equals(type) ? "video/mp4" : "image/jpeg");
+        return """
+                {"object":"whatsapp_business_account","entry":[{"id":"INST","changes":[{
+                "field":"messages","value":{"metadata":{"phone_number_id":"PNID-1"},
+                "contacts":[{"wa_id":"%s"}],"messages":[{
+                "from":"%s","key":{"remoteJid":"%s","participant":"%s"},
+                "id":"UZ-STATUS-1","timestamp":"1781455200","type":"%s",%s}]}}]}]}
+                """.formatted(from, from, remoteJid, from, type, content);
     }
 }

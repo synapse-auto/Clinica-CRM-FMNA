@@ -45,13 +45,16 @@ public class UazapWebhookController {
     private final WhatsappProperties properties;
     private final WhatsappWebhookDispatchService dispatchService;
     private final ObjectMapper objectMapper;
+    private final UazapInboundEventFilter inboundEventFilter;
 
     public UazapWebhookController(WhatsappProperties properties,
                                   WhatsappWebhookDispatchService dispatchService,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  UazapInboundEventFilter inboundEventFilter) {
         this.properties = properties;
         this.dispatchService = dispatchService;
         this.objectMapper = objectMapper;
+        this.inboundEventFilter = inboundEventFilter;
     }
 
     @PostMapping
@@ -74,9 +77,14 @@ public class UazapWebhookController {
             log.warn("Webhook UAZAP rejeitado: segredo ausente ou inválido.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        if (!estruturaValida(rawBody)) {
+        JsonNode payload = lerPayload(rawBody);
+        if (!estruturaValida(payload)) {
             log.warn("Webhook UAZAP rejeitado: estrutura inválida ou phone_number_id inesperado.");
             return ResponseEntity.badRequest().build();
+        }
+        if (inboundEventFilter.deveIgnorar(payload)) {
+            log.info("Evento inbound UAZAP ignorado: origem=status_broadcast");
+            return ResponseEntity.ok().build();
         }
 
         // Processamento pesado fora da requisição HTTP (mesma fila inbound existente).
@@ -104,11 +112,16 @@ public class UazapWebhookController {
     /**
      * Valida estrutura mínima do envelope e, se configurado, o {@code phone_number_id} esperado.
      */
-    private boolean estruturaValida(byte[] rawBody) {
-        JsonNode root;
+    private JsonNode lerPayload(byte[] rawBody) {
         try {
-            root = objectMapper.readTree(rawBody);
+            return objectMapper.readTree(rawBody);
         } catch (Exception error) {
+            return null;
+        }
+    }
+
+    private boolean estruturaValida(JsonNode root) {
+        if (root == null) {
             return false;
         }
         JsonNode entries = root.path("entry");
