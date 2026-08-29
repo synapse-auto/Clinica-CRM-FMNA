@@ -107,7 +107,7 @@ export function AtendimentosClient({
   const [reminders, setReminders] = useState<AtendimentoLembrete[]>([]);
   const [remindersLoading, setRemindersLoading] = useState(false);
   const [remindersError, setRemindersError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<AtendimentoFiltroOperacional>('TODOS');
+  const [filter, setFilter] = useState<AtendimentoFiltroOperacional>('MEUS');
   const [type, setType] = useState<'TODOS' | 'IA' | 'HUMANO'>('TODOS');
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);

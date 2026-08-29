@@ -2,6 +2,8 @@ package com.synapse.clinicafemina.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -41,6 +43,10 @@ public class MensagemRapida {
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String conteudo;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private UsoMensagemRapida uso = UsoMensagemRapida.AMBOS;
 
     @Column(nullable = false)
     private Boolean ativo = true;

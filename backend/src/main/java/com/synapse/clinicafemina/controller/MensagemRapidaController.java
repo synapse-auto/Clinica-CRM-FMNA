@@ -7,11 +7,13 @@ import com.synapse.clinicafemina.dto.operacional.MensagemRapidaResponse;
 import com.synapse.clinicafemina.dto.operacional.StatusRequest;
 import com.synapse.clinicafemina.service.ClinicaConfigService;
 import com.synapse.clinicafemina.service.MensagemRapidaService;
+import com.synapse.clinicafemina.domain.Usuario;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -37,9 +39,10 @@ public class MensagemRapidaController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('GESTOR', 'MEDICO', 'RECEPCIONISTA')")
-    public List<MensagemRapidaResponse> listar() {
+    public List<MensagemRapidaResponse> listar(@AuthenticationPrincipal Usuario usuario) {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
-        return service.listar(clinica);
+        boolean incluirChatbot = usuario != null && "GESTOR".equals(usuario.getPerfil());
+        return service.listar(clinica, incluirChatbot);
     }
 
     @GetMapping("/categorias")

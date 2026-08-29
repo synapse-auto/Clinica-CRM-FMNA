@@ -31,6 +31,7 @@ export type MensagemRapida = {
   atalho: string;
   conteudo: string;
   ativo: boolean;
+  uso?: 'HUMANO' | 'CHATBOT' | 'AMBOS';
   criadoEm: string | null;
   atualizadoEm: string | null;
 };
@@ -41,6 +42,7 @@ export type MensagemRapidaPayload = {
   atalho: string;
   conteudo: string;
   ativo: boolean;
+  uso: 'HUMANO' | 'CHATBOT' | 'AMBOS';
 };
 
 export type HorarioAtendente = {

@@ -1,5 +1,6 @@
 package com.synapse.clinicafemina.dto.operacional;
 
+import com.synapse.clinicafemina.domain.UsoMensagemRapida;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -8,6 +9,7 @@ public record MensagemRapidaRequest(
         @NotBlank @Size(max = 120) String titulo,
         @NotBlank @Size(max = 40) String atalho,
         @NotBlank String conteudo,
-        Boolean ativo
+        Boolean ativo,
+        UsoMensagemRapida uso
 ) {
 }

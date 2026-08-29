@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.service;
 import com.synapse.clinicafemina.domain.CategoriaMensagemRapida;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.MensagemRapida;
+import com.synapse.clinicafemina.domain.UsoMensagemRapida;
 import com.synapse.clinicafemina.dto.operacional.CategoriaMensagemRapidaResponse;
 import com.synapse.clinicafemina.dto.operacional.MensagemRapidaRequest;
 import com.synapse.clinicafemina.dto.operacional.MensagemRapidaResponse;
@@ -13,6 +14,7 @@ import com.synapse.clinicafemina.repository.CategoriaMensagemRapidaRepository;
 import com.synapse.clinicafemina.repository.MensagemRapidaRepository;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.EnumSet;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +28,16 @@ public class MensagemRapidaService {
 
     @Transactional(readOnly = true)
     public List<MensagemRapidaResponse> listar(Clinica clinica) {
-        return repository.findByClinicaIdAndDeletadoEmIsNullOrderByTituloAsc(clinica.getId())
+        return listar(clinica, true);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MensagemRapidaResponse> listar(Clinica clinica, boolean incluirChatbot) {
+        List<MensagemRapida> mensagens = incluirChatbot
+                ? repository.findByClinicaIdAndDeletadoEmIsNullOrderByTituloAsc(clinica.getId())
+                : repository.findByClinicaIdAndUsoInAndDeletadoEmIsNullOrderByTituloAsc(
+                        clinica.getId(), EnumSet.of(UsoMensagemRapida.HUMANO, UsoMensagemRapida.AMBOS));
+        return mensagens
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -84,6 +95,7 @@ public class MensagemRapidaService {
         mensagem.setAtalho(atalho);
         mensagem.setConteudo(required(request.conteudo(), "Conteúdo é obrigatório."));
         mensagem.setAtivo(request.ativo() == null ? Boolean.TRUE : request.ativo());
+        mensagem.setUso(request.uso() == null ? UsoMensagemRapida.AMBOS : request.uso());
     }
 
     private CategoriaMensagemRapida buscarCategoria(Short categoriaId) {
@@ -114,6 +126,7 @@ public class MensagemRapidaService {
                 mensagem.getAtalho(),
                 mensagem.getConteudo(),
                 Boolean.TRUE.equals(mensagem.getAtivo()),
+                mensagem.getUso() == null ? UsoMensagemRapida.AMBOS : mensagem.getUso(),
                 mensagem.getCriadoEm(),
                 mensagem.getAtualizadoEm()
         );

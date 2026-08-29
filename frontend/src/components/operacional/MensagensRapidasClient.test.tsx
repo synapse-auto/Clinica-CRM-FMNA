@@ -18,6 +18,7 @@ const messages: MensagemRapida[] = [
     atalho: '/confirmar',
     conteudo: 'Sua consulta esta confirmada.',
     ativo: true,
+    uso: 'HUMANO',
     criadoEm: '2026-07-01T12:00:00Z',
     atualizadoEm: '2026-07-01T12:00:00Z',
   },
@@ -70,6 +71,7 @@ describe('MensagensRapidasClient', () => {
         atalho: '/preparo',
         conteudo: 'Chegue com 15 minutos de antecedencia.',
         ativo: true,
+        uso: 'AMBOS',
       }),
     }));
   });

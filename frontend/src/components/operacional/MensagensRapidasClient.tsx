@@ -57,6 +57,7 @@ export function MensagensRapidasClient({
       atalho: String(form.get('atalho') ?? '').trim(),
       conteudo: String(form.get('conteudo') ?? '').trim(),
       ativo: form.get('ativo') === 'on',
+      uso: (String(form.get('uso') ?? 'AMBOS') as MensagemRapidaPayload['uso']),
     };
 
     try {
@@ -152,6 +153,7 @@ export function MensagensRapidasClient({
               </div>
               <p className="line-clamp-4 flex-1 text-[10px] leading-5 text-clinic-muted">{message.conteudo}</p>
               <p className="mt-3 text-[9px] font-bold text-clinic-muted">{message.categoriaRotulo ?? 'Sem categoria'}</p>
+              <p className="mt-1 text-[9px] font-bold text-clinic-muted">Uso: {message.uso === 'CHATBOT' ? 'Chatbot/IA' : message.uso === 'HUMANO' ? 'Atendimento humano' : 'Humano e chatbot'}</p>
 
               {canManage ? (
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -220,6 +222,18 @@ function MensagemDialog({
           <label className="block">
             <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Conteúdo</span>
             <textarea name="conteudo" required defaultValue={message?.conteudo ?? ''} className="h-28 w-full resize-none rounded-lg border border-clinic-border bg-clinic-input p-3 text-sm text-clinic-text outline-none focus:border-clinic-primary" />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Uso da mensagem</span>
+            <FormSelect
+              name="uso"
+              defaultValue={message?.uso ?? 'AMBOS'}
+              options={[
+                { value: 'HUMANO', label: 'Atendimento humano' },
+                { value: 'CHATBOT', label: 'Chatbot/IA' },
+                { value: 'AMBOS', label: 'Humano e chatbot' },
+              ]}
+            />
           </label>
           <ActiveCheckbox defaultChecked={message?.ativo ?? true} />
           <DialogActions isSubmitting={isSubmitting} submitLabel="Salvar mensagem" onClose={onClose} />

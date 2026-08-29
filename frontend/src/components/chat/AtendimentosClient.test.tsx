@@ -600,10 +600,10 @@ describe('AtendimentosClient troca de conversa (latência)', () => {
 
     await waitFor(() => expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('44'));
     await waitFor(() => expect(screen.getByTestId('chat-detail-id')).toHaveTextContent('44'));
-    expect(screen.getByTestId('current-filter')).toHaveTextContent('TODOS/TODOS');
+    expect(screen.getByTestId('current-filter')).toHaveTextContent('MEUS/TODOS');
     expect(screen.getByTestId('conversation-ids')).toHaveTextContent('7,8,44');
     expect(services.listAtendimentos).toHaveBeenCalledWith(
-      { filtro: 'TODOS', tipo: 'TODOS', busca: '' }, expect.any(AbortSignal),
+      { filtro: 'MEUS', tipo: 'TODOS', busca: '' }, expect.any(AbortSignal),
     );
     expect(window.location.search).toBe('?atendimentoId=44');
   });

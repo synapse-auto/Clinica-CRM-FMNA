@@ -129,7 +129,7 @@ export async function getAgendaCapabilities(): Promise<AgendaCapabilities> {
 
 export async function getAtendimentosIniciais(): Promise<AtendimentoPage<AtendimentoResumo>> {
   return getJson<AtendimentoPage<AtendimentoResumo>>(
-    '/api/atendimentos?filtro=TODOS&tipo=TODOS&size=50',
+    '/api/atendimentos?filtro=MEUS&tipo=TODOS&size=50',
   );
 }
 

@@ -3,6 +3,7 @@ package com.synapse.clinicafemina.service;
 import com.synapse.clinicafemina.domain.CategoriaMensagemRapida;
 import com.synapse.clinicafemina.domain.Clinica;
 import com.synapse.clinicafemina.domain.MensagemRapida;
+import com.synapse.clinicafemina.domain.UsoMensagemRapida;
 import com.synapse.clinicafemina.dto.operacional.MensagemRapidaRequest;
 import com.synapse.clinicafemina.dto.operacional.StatusRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
@@ -16,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -52,7 +54,8 @@ class MensagemRapidaServiceTest {
                 " Confirmacao ",
                 "/confirmar",
                 "Sua consulta esta confirmada.",
-                true
+                true,
+                UsoMensagemRapida.HUMANO
         );
         when(categoriaRepository.findById((short) 2)).thenReturn(Optional.of(categoria));
         when(repository.existsByClinicaIdAndAtalhoIgnoreCaseAndDeletadoEmIsNull(7L, "/confirmar"))
@@ -73,7 +76,35 @@ class MensagemRapidaServiceTest {
         assertEquals("Confirmacao", saved.getTitulo());
         assertEquals("/confirmar", saved.getAtalho());
         assertEquals("Sua consulta esta confirmada.", saved.getConteudo());
+        assertEquals(UsoMensagemRapida.HUMANO, saved.getUso());
         assertEquals(21L, response.id());
+    }
+
+    @Test
+    void should_show_all_usage_types_to_gestor_listing() {
+        when(repository.findByClinicaIdAndDeletadoEmIsNullOrderByTituloAsc(7L))
+                .thenReturn(List.of(mensagemComUso(1L, UsoMensagemRapida.HUMANO),
+                        mensagemComUso(2L, UsoMensagemRapida.CHATBOT)));
+
+        var response = service.listar(clinica, true);
+
+        assertEquals(List.of(UsoMensagemRapida.HUMANO, UsoMensagemRapida.CHATBOT),
+                response.stream().map(item -> item.uso()).toList());
+        verify(repository, never()).findByClinicaIdAndUsoInAndDeletadoEmIsNullOrderByTituloAsc(any(), any());
+    }
+
+    @Test
+    void should_hide_chatbot_only_messages_from_attendant_listing() {
+        when(repository.findByClinicaIdAndUsoInAndDeletadoEmIsNullOrderByTituloAsc(
+                7L, java.util.EnumSet.of(UsoMensagemRapida.HUMANO, UsoMensagemRapida.AMBOS)))
+                .thenReturn(List.of(mensagemComUso(1L, UsoMensagemRapida.HUMANO),
+                        mensagemComUso(3L, UsoMensagemRapida.AMBOS)));
+
+        var response = service.listar(clinica, false);
+
+        assertEquals(List.of(UsoMensagemRapida.HUMANO, UsoMensagemRapida.AMBOS),
+                response.stream().map(item -> item.uso()).toList());
+        verify(repository, never()).findByClinicaIdAndDeletadoEmIsNullOrderByTituloAsc(7L);
     }
 
     @Test
@@ -83,7 +114,8 @@ class MensagemRapidaServiceTest {
                 "Confirmacao",
                 "/confirmar",
                 "Texto",
-                true
+                true,
+                UsoMensagemRapida.HUMANO
         );
         when(repository.existsByClinicaIdAndAtalhoIgnoreCaseAndDeletadoEmIsNull(7L, "/confirmar"))
                 .thenReturn(true);
@@ -123,6 +155,13 @@ class MensagemRapidaServiceTest {
         mensagem.setAtalho("/confirmar");
         mensagem.setConteudo("Texto");
         mensagem.setAtivo(true);
+        mensagem.setUso(UsoMensagemRapida.HUMANO);
+        return mensagem;
+    }
+
+    private MensagemRapida mensagemComUso(Long id, UsoMensagemRapida uso) {
+        MensagemRapida mensagem = mensagem(id);
+        mensagem.setUso(uso);
         return mensagem;
     }
 

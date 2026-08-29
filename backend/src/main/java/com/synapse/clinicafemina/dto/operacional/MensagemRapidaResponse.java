@@ -1,5 +1,6 @@
 package com.synapse.clinicafemina.dto.operacional;
 
+import com.synapse.clinicafemina.domain.UsoMensagemRapida;
 import java.time.OffsetDateTime;
 
 public record MensagemRapidaResponse(
@@ -11,6 +12,7 @@ public record MensagemRapidaResponse(
         String atalho,
         String conteudo,
         boolean ativo,
+        UsoMensagemRapida uso,
         OffsetDateTime criadoEm,
         OffsetDateTime atualizadoEm
 ) {
