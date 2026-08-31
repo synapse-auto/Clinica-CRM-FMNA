@@ -125,6 +125,32 @@ class MensagemRapidaServiceTest {
     }
 
     @Test
+    void should_allow_attendant_to_create_human_message_only() {
+        MensagemRapidaRequest request = new MensagemRapidaRequest(
+                null, "Recepção", "/recepcao", "Texto", null, null);
+        when(repository.existsByClinicaIdAndAtalhoIgnoreCaseAndDeletadoEmIsNull(7L, "/recepcao"))
+                .thenReturn(false);
+        when(repository.save(any(MensagemRapida.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.criar(clinica, request, false);
+
+        ArgumentCaptor<MensagemRapida> captor = ArgumentCaptor.forClass(MensagemRapida.class);
+        verify(repository).save(captor.capture());
+        assertEquals(UsoMensagemRapida.HUMANO, captor.getValue().getUso());
+    }
+
+    @Test
+    void should_reject_attendant_chatbot_message() {
+        MensagemRapidaRequest request = new MensagemRapidaRequest(
+                null, "Bot", "/bot", "Texto", true, UsoMensagemRapida.CHATBOT);
+        when(repository.existsByClinicaIdAndAtalhoIgnoreCaseAndDeletadoEmIsNull(7L, "/bot"))
+                .thenReturn(false);
+
+        assertThrows(BadRequestException.class, () -> service.criar(clinica, request, false));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
     void should_soft_delete_quick_message_by_clinic() {
         MensagemRapida mensagem = mensagem(8L);
         when(repository.findByIdAndClinicaIdAndDeletadoEmIsNull(8L, 7L)).thenReturn(Optional.of(mensagem));

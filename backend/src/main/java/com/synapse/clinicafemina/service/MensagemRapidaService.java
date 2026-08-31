@@ -53,11 +53,17 @@ public class MensagemRapidaService {
 
     @Transactional
     public MensagemRapidaResponse criar(Clinica clinica, MensagemRapidaRequest request) {
+        return criar(clinica, request, true);
+    }
+
+    @Transactional
+    public MensagemRapidaResponse criar(Clinica clinica, MensagemRapidaRequest request,
+                                        boolean permitirUsoChatbot) {
         String atalho = normalizeShortcut(request.atalho());
         validarAtalhoDisponivel(clinica.getId(), atalho, null);
         MensagemRapida mensagem = new MensagemRapida();
         mensagem.setClinica(clinica);
-        aplicarRequest(mensagem, request, atalho);
+        aplicarRequest(mensagem, request, atalho, permitirUsoChatbot);
         return toResponse(repository.save(mensagem));
     }
 
@@ -66,7 +72,7 @@ public class MensagemRapidaService {
         MensagemRapida mensagem = buscarPorClinica(clinica, id);
         String atalho = normalizeShortcut(request.atalho());
         validarAtalhoDisponivel(clinica.getId(), atalho, id);
-        aplicarRequest(mensagem, request, atalho);
+        aplicarRequest(mensagem, request, atalho, true);
         return toResponse(repository.save(mensagem));
     }
 
@@ -89,13 +95,20 @@ public class MensagemRapidaService {
                 .orElseThrow(() -> new NotFoundException("Mensagem rápida não encontrada"));
     }
 
-    private void aplicarRequest(MensagemRapida mensagem, MensagemRapidaRequest request, String atalho) {
+    private void aplicarRequest(MensagemRapida mensagem, MensagemRapidaRequest request, String atalho,
+                                boolean permitirUsoChatbot) {
         mensagem.setCategoria(buscarCategoria(request.categoriaId()));
         mensagem.setTitulo(required(request.titulo(), "Título é obrigatório."));
         mensagem.setAtalho(atalho);
         mensagem.setConteudo(required(request.conteudo(), "Conteúdo é obrigatório."));
         mensagem.setAtivo(request.ativo() == null ? Boolean.TRUE : request.ativo());
-        mensagem.setUso(request.uso() == null ? UsoMensagemRapida.AMBOS : request.uso());
+        UsoMensagemRapida uso = request.uso() == null
+                ? (permitirUsoChatbot ? UsoMensagemRapida.AMBOS : UsoMensagemRapida.HUMANO)
+                : request.uso();
+        if (!permitirUsoChatbot && uso != UsoMensagemRapida.HUMANO) {
+            throw new BadRequestException("Atendentes só podem criar mensagens para uso humano.");
+        }
+        mensagem.setUso(uso);
     }
 
     private CategoriaMensagemRapida buscarCategoria(Short categoriaId) {

@@ -75,4 +75,26 @@ describe('MensagensRapidasClient', () => {
       }),
     }));
   });
+
+  it('should_allow_receptionist_to_open_create_form_without_management_controls', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ...messages[0], id: 23, titulo: 'Mensagem da recepção', atalho: '/recepcao', uso: 'HUMANO',
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MensagensRapidasClient initialMessages={[]} categories={categories} initialError={null} canManage={false} canCreate />);
+
+    await user.click(screen.getByRole('button', { name: /nova mensagem/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByText('Uso da mensagem')).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Título'), 'Mensagem da recepção');
+    await user.type(screen.getByLabelText('Atalho'), '/recepcao');
+    await user.type(screen.getByLabelText('Conteúdo'), 'Texto para o paciente.');
+    await user.click(screen.getByRole('button', { name: 'Salvar mensagem' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/mensagens-rapidas', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('"uso":"HUMANO"'),
+    })));
+  });
 });

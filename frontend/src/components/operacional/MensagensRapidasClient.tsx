@@ -18,6 +18,7 @@ type MensagensRapidasClientProps = {
   categories: CategoriaMensagemRapida[];
   initialError: string | null;
   canManage: boolean;
+  canCreate?: boolean;
 };
 
 export function MensagensRapidasClient({
@@ -25,6 +26,7 @@ export function MensagensRapidasClient({
   categories,
   initialError,
   canManage,
+  canCreate = canManage,
 }: MensagensRapidasClientProps) {
   const [messages, setMessages] = useState(initialMessages);
   const [editing, setEditing] = useState<MensagemRapida | null>(null);
@@ -57,7 +59,7 @@ export function MensagensRapidasClient({
       atalho: String(form.get('atalho') ?? '').trim(),
       conteudo: String(form.get('conteudo') ?? '').trim(),
       ativo: form.get('ativo') === 'on',
-      uso: (String(form.get('uso') ?? 'AMBOS') as MensagemRapidaPayload['uso']),
+      uso: (String(form.get('uso') ?? (canManage ? 'AMBOS' : 'HUMANO')) as MensagemRapidaPayload['uso']),
     };
 
     try {
@@ -117,7 +119,7 @@ export function MensagensRapidasClient({
       <PageHeader
         title="Mensagens Rápidas"
         description={messages.length === 1 ? '1 mensagem cadastrada' : `${messages.length} mensagens cadastradas`}
-        actions={canManage ? (
+        actions={canCreate ? (
           <button type="button" onClick={openCreate} className="flex h-8 items-center gap-2 rounded-lg bg-clinic-primary px-3 text-[10px] font-bold text-white">
             <Plus className="h-3.5 w-3.5" />
             Nova mensagem
@@ -176,6 +178,7 @@ export function MensagensRapidasClient({
         <MensagemDialog
           message={editing}
           categories={categories}
+          allowChatbotUsage={canManage}
           error={submitError}
           isSubmitting={isSubmitting}
           onClose={() => setIsModalOpen(false)}
@@ -189,6 +192,7 @@ export function MensagensRapidasClient({
 function MensagemDialog({
   message,
   categories,
+  allowChatbotUsage,
   error,
   isSubmitting,
   onClose,
@@ -196,6 +200,7 @@ function MensagemDialog({
 }: {
   message: MensagemRapida | null;
   categories: CategoriaMensagemRapida[];
+  allowChatbotUsage: boolean;
   error: string | null;
   isSubmitting: boolean;
   onClose: () => void;
@@ -223,7 +228,7 @@ function MensagemDialog({
             <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Conteúdo</span>
             <textarea name="conteudo" required defaultValue={message?.conteudo ?? ''} className="h-28 w-full resize-none rounded-lg border border-clinic-border bg-clinic-input p-3 text-sm text-clinic-text outline-none focus:border-clinic-primary" />
           </label>
-          <label className="block">
+          {allowChatbotUsage ? <label className="block">
             <span className="mb-1.5 block text-[10px] font-bold text-clinic-text">Uso da mensagem</span>
             <FormSelect
               name="uso"
@@ -234,7 +239,7 @@ function MensagemDialog({
                 { value: 'AMBOS', label: 'Humano e chatbot' },
               ]}
             />
-          </label>
+          </label> : null}
           <ActiveCheckbox defaultChecked={message?.ativo ?? true} />
           <DialogActions isSubmitting={isSubmitting} submitLabel="Salvar mensagem" onClose={onClose} />
         </form>

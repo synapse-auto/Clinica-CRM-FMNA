@@ -33,6 +33,7 @@ export default async function MensagensRapidasPage() {
         categories={categories}
         initialError={error}
         canManage={user.perfil === 'GESTOR'}
+        canCreate={user.perfil === 'GESTOR' || user.perfil === 'RECEPCIONISTA'}
       />
     </div>
   );

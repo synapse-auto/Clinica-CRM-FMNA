@@ -53,10 +53,12 @@ public class MensagemRapidaController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('GESTOR')")
-    public MensagemRapidaResponse criar(@RequestBody @Valid MensagemRapidaRequest request) {
+    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
+    public MensagemRapidaResponse criar(@RequestBody @Valid MensagemRapidaRequest request,
+                                        @AuthenticationPrincipal Usuario usuario) {
         Clinica clinica = clinicaConfigService.obterClinicaAtual();
-        return service.criar(clinica, request);
+        boolean permitirUsoChatbot = usuario != null && "GESTOR".equals(usuario.getPerfil());
+        return service.criar(clinica, request, permitirUsoChatbot);
     }
 
     @PutMapping("/{id}")
