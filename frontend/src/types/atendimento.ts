@@ -190,6 +190,7 @@ export type AtendimentosAtivosContagem = {
 
 export type EncerramentoEmMassaRequest = {
   confirmado: true;
+  confirmacao: string;
   motivo?: string;
 };
 

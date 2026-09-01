@@ -9,7 +9,7 @@ type Props = {
   total?: number;
   processing: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  onConfirm: (confirmacao?: string) => void;
 };
 
 const CONFIRMACAO_EM_MASSA = 'ENCERRAR TODOS';
@@ -109,7 +109,7 @@ export function EncerrarAtendimentoDialog({
           <button
             type="button"
             disabled={!confirmationValid || processing}
-            onClick={onConfirm}
+            onClick={() => onConfirm(isMass ? confirmacao : undefined)}
             className="inline-flex h-9 items-center gap-2 rounded-lg bg-clinic-danger px-4 text-[11px] font-extrabold text-white hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {processing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <OctagonAlert className="h-4 w-4" />}

@@ -1,5 +1,6 @@
 package com.synapse.clinicafemina.service;
 
+import com.synapse.clinicafemina.domain.Gestor;
 import com.synapse.clinicafemina.dto.atendimento.EncerramentoEmMassaRequest;
 import com.synapse.clinicafemina.exception.BadRequestException;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
@@ -41,7 +42,7 @@ class AtendimentoEncerramentoEmMassaServiceTest {
         when(atendimentoRepository.encerrarTodosAtivos(eq(1L), org.mockito.ArgumentMatchers.any(), eq("Encerramento em massa pelo CRM")))
                 .thenReturn(37);
 
-        var result = service.encerrarTodos(1L, new EncerramentoEmMassaRequest(true, null));
+        var result = service.encerrarTodos(1L, gestor(), new EncerramentoEmMassaRequest(true, "ENCERRAR TODOS", null));
 
         assertEquals(37, result.encerrados());
         ArgumentCaptor<OffsetDateTime> data = ArgumentCaptor.forClass(OffsetDateTime.class);
@@ -55,21 +56,52 @@ class AtendimentoEncerramentoEmMassaServiceTest {
         when(atendimentoRepository.encerrarTodosAtivos(eq(1L), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn(0);
 
-        var result = service.encerrarTodos(1L, new EncerramentoEmMassaRequest(true, "Fim <b>manual</b>"));
+        var result = service.encerrarTodos(1L, gestor(), new EncerramentoEmMassaRequest(true, "ENCERRAR TODOS", "Fim <b>manual</b>"));
 
         assertEquals(0, result.encerrados());
         verify(atendimentoRepository).encerrarTodosAtivos(eq(1L), org.mockito.ArgumentMatchers.any(), eq("Fim manual"));
     }
 
     @Test
-    void should_reject_bulk_closure_without_confirmation() {
+    void should_reject_bulk_closure_without_boolean_confirmation() {
         AtendimentoEncerramentoEmMassaService service = new AtendimentoEncerramentoEmMassaService(atendimentoRepository);
 
         assertThrows(BadRequestException.class,
-                () -> service.encerrarTodos(1L, new EncerramentoEmMassaRequest(false, null)));
+                () -> service.encerrarTodos(1L, gestor(), new EncerramentoEmMassaRequest(false, "ENCERRAR TODOS", null)));
 
         verify(atendimentoRepository, never()).encerrarTodosAtivos(
                 org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()
         );
+    }
+
+    @Test
+    void should_reject_bulk_closure_without_confirmation_phrase() {
+        AtendimentoEncerramentoEmMassaService service = new AtendimentoEncerramentoEmMassaService(atendimentoRepository);
+
+        assertThrows(BadRequestException.class,
+                () -> service.encerrarTodos(1L, gestor(), new EncerramentoEmMassaRequest(true, null, null)));
+
+        verify(atendimentoRepository, never()).encerrarTodosAtivos(
+                org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()
+        );
+    }
+
+    @Test
+    void should_reject_bulk_closure_with_wrong_confirmation_phrase() {
+        AtendimentoEncerramentoEmMassaService service = new AtendimentoEncerramentoEmMassaService(atendimentoRepository);
+
+        assertThrows(BadRequestException.class,
+                () -> service.encerrarTodos(1L, gestor(), new EncerramentoEmMassaRequest(true, "ENCERRAR", null)));
+
+        verify(atendimentoRepository, never()).encerrarTodosAtivos(
+                org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()
+        );
+    }
+
+    private Gestor gestor() {
+        Gestor gestor = new Gestor();
+        gestor.setId(12L);
+        gestor.setPerfil("GESTOR");
+        return gestor;
     }
 }

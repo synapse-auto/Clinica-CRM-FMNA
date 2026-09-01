@@ -697,6 +697,18 @@ describe('AtendimentosClient encerramento', () => {
     expect(screen.queryByRole('button', { name: 'Encerrar todos' })).not.toBeInTheDocument();
   });
 
+  it('should_not_show_close_all_for_recepcionista', () => {
+    render(
+      <AtendimentosClient
+        initialConversations={[]}
+        atendentes={[]}
+        user={{ ...gestor, perfil: 'RECEPCIONISTA' }}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Encerrar todos' })).not.toBeInTheDocument();
+  });
+
   it('should_not_call_bulk_closure_when_active_count_is_zero', async () => {
     services.contarAtendimentosAtivos.mockResolvedValue({ total: 0 });
     const user = userEvent.setup();
@@ -725,7 +737,10 @@ describe('AtendimentosClient encerramento', () => {
     expect(confirm).toBeEnabled();
     await user.click(confirm);
 
-    await waitFor(() => expect(services.encerrarTodosAtendimentos).toHaveBeenCalledWith({ confirmado: true }));
+    await waitFor(() => expect(services.encerrarTodosAtendimentos).toHaveBeenCalledWith({
+      confirmado: true,
+      confirmacao: 'ENCERRAR TODOS',
+    }));
     await waitFor(() => expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('nenhum'));
     expect(screen.getByTestId('conversation-ids')).toHaveTextContent('');
     expect(window.location.search).toBe('');

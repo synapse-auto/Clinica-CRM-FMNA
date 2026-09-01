@@ -224,12 +224,13 @@ public class AtendimentoController {
     }
 
     @PostMapping("/encerrar-todos")
-    @Operation(summary = "Encerrar todos os atendimentos", description = "Operação destrutiva, permitida para Gestor e Recepcionista.")
-    @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
+    @Operation(summary = "Encerrar todos os atendimentos", description = "Operação destrutiva, permitida somente para Gestor com confirmação textual.")
+    @PreAuthorize("hasRole('GESTOR')")
     public EncerramentoEmMassaResponse encerrarTodos(
-            @RequestBody @Valid EncerramentoEmMassaRequest request
+            @RequestBody @Valid EncerramentoEmMassaRequest request,
+            @AuthenticationPrincipal Usuario usuario
     ) {
-        return atendimentoEncerramentoEmMassaService.encerrarTodos(clinicaId(), request);
+        return atendimentoEncerramentoEmMassaService.encerrarTodos(clinicaId(), usuario, request);
     }
 
     @GetMapping("/{id}/mensagens/{mensagemId}/midia")

@@ -760,12 +760,12 @@ export function AtendimentosClient({
     }
   }
 
-  async function encerrarTodosAtendimentosAtivos() {
+  async function encerrarTodosAtendimentosAtivos(confirmacao: string) {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      const resultado = await encerrarTodosAtendimentos({ confirmado: true });
+      const resultado = await encerrarTodosAtendimentos({ confirmado: true, confirmacao });
       setCloseAllDialogOpen(false);
       limparAtendimentoEncerrado();
       setComposerDrafts({});
@@ -841,7 +841,7 @@ export function AtendimentosClient({
         onSearchChange={setSearch}
         canStartManual={canManage}
         onStartManual={() => setStartDialogOpen(true)}
-        canCloseAll={canManage && view === 'ATIVOS'}
+        canCloseAll={user.perfil === 'GESTOR' && view === 'ATIVOS'}
         closeAllLoading={closeAllLoading}
         onCloseAll={() => void solicitarEncerramentoTodos()}
         onCloseAllTriggerReady={registerCloseAllActionFocus}
@@ -961,7 +961,7 @@ export function AtendimentosClient({
         total={closeAllTotal}
         processing={busy}
         onOpenChange={changeCloseAllDialogOpen}
-        onConfirm={() => void encerrarTodosAtendimentosAtivos()}
+        onConfirm={(confirmacao) => void encerrarTodosAtendimentosAtivos(confirmacao ?? '')}
       />
     </div>
   );
