@@ -63,6 +63,73 @@ class N8nAtendimentoControllerTest {
     private UserDetailsService userDetailsService;
 
     @Test
+    void should_close_attendance_with_valid_n8n_secret_without_jwt() throws Exception {
+        autorizar("test-secret");
+        when(atendimentoService.encerrarPorN8n(eq(30L), eq(7L), eq("Encerrado pelo N8N")))
+                .thenReturn(atendimentoEncerrado());
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/encerrar")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("{\"confirmado\":true,\"motivo\":\"Encerrado pelo N8N\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(30))
+                .andExpect(jsonPath("$.status").value("ENCERRADO"));
+
+        verify(atendimentoService).encerrarPorN8n(30L, 7L, "Encerrado pelo N8N");
+    }
+
+    @Test
+    void should_reject_n8n_closure_without_confirmation() throws Exception {
+        autorizar("test-secret");
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/encerrar")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details.confirmado").exists());
+
+        verify(atendimentoService, never()).encerrarPorN8n(any(), any(), any());
+    }
+
+    @Test
+    void should_reject_n8n_closure_without_secret() throws Exception {
+        rejeitarSecret(null);
+
+        mockMvc.perform(post("/api/n8n/atendimentos/30/encerrar")
+                        .contentType("application/json")
+                        .content("{\"confirmado\":true}"))
+                .andExpect(status().isUnauthorized());
+
+        verify(atendimentoService, never()).encerrarPorN8n(any(), any(), any());
+    }
+
+    @Test
+    void should_return_specific_error_for_invalid_n8n_closure_json() throws Exception {
+        mockMvc.perform(post("/api/n8n/atendimentos/30/encerrar")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("application/json")
+                        .content("{\"confirmado\":true"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_JSON"));
+
+        verify(atendimentoService, never()).encerrarPorN8n(any(), any(), any());
+    }
+
+    @Test
+    void should_return_clear_error_for_wrong_n8n_closure_content_type() throws Exception {
+        mockMvc.perform(post("/api/n8n/atendimentos/30/encerrar")
+                        .header("X-N8N-SECRET", "test-secret")
+                        .contentType("text/plain")
+                        .content("{\"confirmado\":true}"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"));
+
+        verify(atendimentoService, never()).encerrarPorN8n(any(), any(), any());
+    }
+
+    @Test
     void should_accept_valid_n8n_secret_without_jwt_and_delegate_response() throws Exception {
         autorizar("test-secret");
         when(mensagemService.responderIa(eq(30L), eq(7L), any(N8nResponderRequest.class)))
@@ -715,6 +782,19 @@ class N8nAtendimentoControllerTest {
                 0,
                 pacienteDto(),
                 null
+        );
+    }
+
+    private AtendimentoDetalheDTO atendimentoEncerrado() {
+        return new AtendimentoDetalheDTO(
+                30L,
+                "ENCERRADO",
+                false,
+                OffsetDateTime.parse("2026-07-03T12:00:00Z"),
+                OffsetDateTime.parse("2026-07-03T12:05:00Z"),
+                0,
+                pacienteDto(),
+                new AtendimentoDetalheDTO.AtendenteDTO(1L, "Atendente", "RECEPCIONISTA")
         );
     }
 

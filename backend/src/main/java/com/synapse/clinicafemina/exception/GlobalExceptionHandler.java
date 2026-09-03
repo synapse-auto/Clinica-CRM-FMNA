@@ -336,7 +336,7 @@ public class GlobalExceptionHandler {
     }
 
     private boolean isN8nTransferPath(WebRequest request) {
-        return path(request).matches("/api/n8n/atendimentos/[^/]+/transferir(-proximo)?-humano");
+        return path(request).matches("/api/n8n/atendimentos/[^/]+/(transferir(-proximo)?-humano|encerrar)");
     }
 
     private boolean isTransferenciaIdempotencyConstraint(DataIntegrityViolationException ex) {

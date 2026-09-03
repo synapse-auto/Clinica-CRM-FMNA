@@ -3,6 +3,66 @@
 Os endpoints `/api/n8n/**` são integrações servidor a servidor. Eles não usam
 JWT de usuário e exigem o segredo configurado no backend.
 
+## Encerrar um atendimento individual
+
+`POST /api/n8n/atendimentos/{atendimentoId}/encerrar`
+
+O callback encerra somente o atendimento informado, desde que ele pertença à
+clínica do deployment e a integração N8N esteja habilitada. O histórico de
+mensagens e o paciente são preservados.
+
+### Headers obrigatórios
+
+```http
+Content-Type: application/json
+X-N8N-SECRET: <N8N_CALLBACK_SECRET>
+```
+
+### Body oficial
+
+```json
+{
+  "confirmado": true,
+  "motivo": "Encerrado pelo N8N"
+}
+```
+
+`motivo` é opcional. Quando omitido, o backend usa `Encerrado manualmente pelo
+CRM`. A confirmação é somente booleana e deve ser exatamente `true`.
+
+### Resposta 200
+
+A resposta é o `AtendimentoDetalheDTO` atualizado, com `status` igual a
+`ENCERRADO`. Repetir a mesma operação é seguro: se o atendimento já estiver
+encerrado, o backend retorna os dados atuais sem alterar novamente o motivo ou
+a data de encerramento.
+
+### Erros
+
+| HTTP | Situação |
+|---|---|
+| 400 | `confirmado` ausente ou diferente de `true`, JSON inválido ou Content-Type incorreto |
+| 401 | `X-N8N-SECRET` ausente ou inválido |
+| 403 | Integração N8N desabilitada para a clínica |
+| 404 | Atendimento inexistente ou pertencente a outra clínica |
+
+### cURL
+
+```bash
+curl -X POST \
+  "https://<backend>/api/n8n/atendimentos/396/encerrar" \
+  -H "Content-Type: application/json" \
+  -H "X-N8N-SECRET: <segredo>" \
+  --data '{"confirmado":true,"motivo":"Encerrado pelo N8N"}'
+```
+
+### Postman
+
+1. Selecione `POST` e informe a URL do endpoint.
+2. Em **Headers**, adicione `Content-Type: application/json` e `X-N8N-SECRET`.
+3. Em **Body**, selecione **raw** e **JSON**.
+4. Envie o body oficial; retries do mesmo atendimento são idempotentes.
+
 ## Registrar resposta da IA no atendimento
 
 `POST /api/n8n/atendimentos/{atendimentoId}/responder`

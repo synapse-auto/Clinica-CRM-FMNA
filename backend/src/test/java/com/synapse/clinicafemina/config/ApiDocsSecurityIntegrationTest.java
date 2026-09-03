@@ -57,6 +57,7 @@ class ApiDocsSecurityIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/atendimentos']").exists());
         mockMvc.perform(get("/v3/api-docs/n8n").with(httpBasic("docs-local", "senha-local-forte-123")))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/n8n/atendimentos/{atendimentoId}/encerrar']").exists())
                 .andExpect(jsonPath("$.paths['/api/n8n/atendimentos/{atendimentoId}/transferir-humano']").exists())
                 .andExpect(jsonPath("$.paths['/api/n8n/atendimentos/{atendimentoId}/transferir-proximo-humano'].post.parameters[?(@.name == 'Idempotency-Key')]").exists());
     }

@@ -4,6 +4,7 @@ import com.synapse.clinicafemina.dto.AtendimentoDetalheDTO;
 import com.synapse.clinicafemina.dto.AtendenteOptionDTO;
 import com.synapse.clinicafemina.dto.MensagemDTO;
 import com.synapse.clinicafemina.dto.TransferirAtendimentoRequest;
+import com.synapse.clinicafemina.dto.atendimento.EncerramentoIndividualRequest;
 import com.synapse.clinicafemina.dto.n8n.N8nResponderRequest;
 import com.synapse.clinicafemina.dto.n8n.N8nTransferirHumanoRequest;
 import com.synapse.clinicafemina.dto.n8n.N8nTransferirProximoHumanoRequest;
@@ -13,6 +14,7 @@ import com.synapse.clinicafemina.service.N8nCallbackAuthorizationService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -43,6 +45,29 @@ public class N8nAtendimentoController {
     private final AtendimentoService atendimentoService;
     private final N8nCallbackAuthorizationService authorizationService;
     private final ObjectMapper objectMapper;
+
+    @PostMapping("/{atendimentoId}/encerrar")
+    @Operation(summary = "Encerrar atendimento via N8N", description = "Exige X-N8N-SECRET e encerra somente o atendimento informado, preservando o histórico.")
+    public ResponseEntity<AtendimentoDetalheDTO> encerrar(
+            @PathVariable Long atendimentoId,
+            @Parameter(name = "X-N8N-SECRET", description = "Segredo do callback N8N.", required = true)
+            @RequestHeader(value = "X-N8N-SECRET", required = false) String secret,
+            @RequestBody @Valid EncerramentoIndividualRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        N8nCallbackAuthorizationService.Autorizacao autorizacao =
+                authorizationService.autorizar(secret, atendimentoId);
+        log.info("Callback N8N de encerramento individual recebido. atendimentoId={} clinicaId={} ip={} userAgent={}",
+                atendimentoId,
+                autorizacao.clinicaId(),
+                sanitizarCabecalho(httpRequest.getRemoteAddr()),
+                sanitizarCabecalho(httpRequest.getHeader("User-Agent")));
+        AtendimentoDetalheDTO encerrado = atendimentoService.encerrarPorN8n(
+                atendimentoId, autorizacao.clinicaId(), request.motivo());
+        log.info("Callback N8N de encerramento individual concluído. atendimentoId={} clinicaId={} status={}",
+                atendimentoId, autorizacao.clinicaId(), encerrado.status());
+        return ResponseEntity.ok(encerrado);
+    }
 
     @GetMapping("/atendentes-transferencia")
     @Operation(summary = "Listar atendentes elegíveis para transferência", description = "Exige X-N8N-SECRET; não usa JWT do CRM.")
@@ -167,5 +192,13 @@ public class N8nAtendimentoController {
         body.put("notificacoesCriadas", resultado.notificacoesCriadas());
         body.put("transferidoEm", resultado.transferidoEm());
         return body;
+    }
+
+    private String sanitizarCabecalho(String valor) {
+        if (valor == null || valor.isBlank()) {
+            return "ausente";
+        }
+        String sanitizado = valor.replaceAll("[\\p{Cntrl}]", "").trim();
+        return sanitizado.length() <= 120 ? sanitizado : sanitizado.substring(0, 120);
     }
 }

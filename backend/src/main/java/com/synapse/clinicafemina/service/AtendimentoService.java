@@ -52,6 +52,8 @@ import java.util.Set;
 public class AtendimentoService {
 
     private static final Set<String> PERFIS_ATENDENTES = Set.of("GESTOR", "RECEPCIONISTA");
+    private static final String N8N_AUDIT_USER_ID = "N8N";
+    private static final String N8N_AUDIT_PROFILE = "N8N";
     private static final String AI_HANDOFF_ENDED = "AI_HANDOFF_ENDED";
     private static final String HUMAN_HANDOFF_START = "HUMAN_HANDOFF_START";
     private static final String AI_HANDOFF_SUMMARY = "AI_HANDOFF_SUMMARY";
@@ -431,6 +433,17 @@ public class AtendimentoService {
 
     @Transactional
     public AtendimentoDetalheDTO encerrar(Long id, Long clinicaId, String motivo, Usuario usuario) {
+        return encerrarInterno(id, clinicaId, motivo, String.valueOf(usuario.getId()), usuario.getPerfil());
+    }
+
+    @Transactional
+    public AtendimentoDetalheDTO encerrarPorN8n(Long id, Long clinicaId, String motivo) {
+        return encerrarInterno(id, clinicaId, motivo, N8N_AUDIT_USER_ID, N8N_AUDIT_PROFILE);
+    }
+
+    private AtendimentoDetalheDTO encerrarInterno(
+            Long id, Long clinicaId, String motivo, String usuarioId, String perfil
+    ) {
         Atendimento atendimento = atendimentoRepository.findByIdAndClinicaIdForUpdate(id, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
         if ("ENCERRADO".equals(atendimento.getStatus())) {
@@ -439,7 +452,7 @@ public class AtendimentoService {
         Long atendentePrincipalId = atendimento.getAtendentePrincipal() == null
                 ? null : atendimento.getAtendentePrincipal().getId();
         log.info("Solicitação de encerramento individual. clinicaId={}, atendimentoId={}, usuarioId={}, perfil={}, atendentePrincipalId={}",
-                clinicaId, id, usuario.getId(), usuario.getPerfil(), atendentePrincipalId);
+                clinicaId, id, usuarioId, perfil, atendentePrincipalId);
         atendimento.setStatus("ENCERRADO");
         atendimento.setDataEncerramento(OffsetDateTime.now());
         atendimento.setMotivoEncerramento(MotivoEncerramentoAtendimento.sanitizar(
@@ -447,7 +460,7 @@ public class AtendimentoService {
         ));
         Atendimento encerrado = atendimentoRepository.save(atendimento);
         log.info("Atendimento encerrado individualmente. clinicaId={}, atendimentoId={}, usuarioId={}, perfil={}, atendentePrincipalId={}",
-                clinicaId, id, usuario.getId(), usuario.getPerfil(), atendentePrincipalId);
+                clinicaId, id, usuarioId, perfil, atendentePrincipalId);
         return toDetalheDTO(encerrado);
     }
 
