@@ -28,6 +28,9 @@ resilience4j:
 
 app:
   environment: teste
+  atendimentos:
+    # IDs bloqueados somente para encerramento em massa (ex.: 7,12).
+    bulk-close-blocked-user-ids: ${ATENDIMENTOS_BULK_CLOSE_BLOCKED_USER_IDS:}
   clinic:
     slug: fmna
     name: Clínica Femina CRM

@@ -27,6 +27,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -379,7 +380,7 @@ class AtendimentoControllerTest {
                         .with(user(recepcionista))
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":true,\"origem\":\"DIALOG_ATENDIMENTO\",\"confirmacao\":\"ENCERRAR\"}"))
+                        .content("{\"confirmado\":true}"))
                 .andExpect(status().isOk());
 
         verify(atendimentoService).encerrar(30L, 9L, null, recepcionista);
@@ -396,26 +397,16 @@ class AtendimentoControllerTest {
 
     @Test
     @WithMockUser(roles = "RECEPCIONISTA")
-    void should_reject_individual_closure_without_confirmation() throws Exception {
+    void should_reject_individual_closure_without_boolean_confirmation() throws Exception {
         mockMvc.perform(post("/api/atendimentos/30/encerrar")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":false,\"origem\":\"DIALOG_ATENDIMENTO\",\"confirmacao\":\"ENCERRAR\"}"))
+                        .content("{\"confirmado\":false}"))
                 .andExpect(status().isBadRequest());
         mockMvc.perform(post("/api/atendimentos/30/encerrar")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":true,\"origem\":\"DIALOG_ATENDIMENTO\"}"))
-                .andExpect(status().isBadRequest());
-        mockMvc.perform(post("/api/atendimentos/30/encerrar")
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":true,\"origem\":\"DIALOG_ATENDIMENTO\",\"confirmacao\":\"CONFIRMAR\"}"))
-                .andExpect(status().isBadRequest());
-        mockMvc.perform(post("/api/atendimentos/30/encerrar")
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":true,\"origem\":\"OUTRA_ORIGEM\",\"confirmacao\":\"ENCERRAR\"}"))
+                        .content("{}"))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(atendimentoService);
@@ -426,7 +417,7 @@ class AtendimentoControllerTest {
         mockMvc.perform(post("/api/atendimentos/30/encerrar")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":true,\"origem\":\"DIALOG_ATENDIMENTO\",\"confirmacao\":\"ENCERRAR\"}"))
+                        .content("{\"confirmado\":true}"))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(atendimentoService);
@@ -437,7 +428,7 @@ class AtendimentoControllerTest {
         mockMvc.perform(post("/api/atendimentos/encerrar-todos")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":true,\"confirmacao\":\"ENCERRAR TODOS\"}"))
+                        .content("{\"confirmado\":true}"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -447,7 +438,7 @@ class AtendimentoControllerTest {
         mockMvc.perform(post("/api/atendimentos/encerrar-todos")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":true,\"confirmacao\":\"ENCERRAR TODOS\"}"))
+                        .content("{\"confirmado\":true}"))
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(atendimentoEncerramentoEmMassaService);
@@ -459,14 +450,14 @@ class AtendimentoControllerTest {
         mockMvc.perform(post("/api/atendimentos/30/encerrar")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":true,\"origem\":\"DIALOG_ATENDIMENTO\",\"confirmacao\":\"ENCERRAR\"}"))
+                        .content("{\"confirmado\":true}"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/atendimentos/ativos/contagem"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/atendimentos/encerrar-todos")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":true,\"confirmacao\":\"ENCERRAR TODOS\"}"))
+                        .content("{\"confirmado\":true}"))
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(atendimentoService, atendimentoEncerramentoEmMassaService);
@@ -500,9 +491,30 @@ class AtendimentoControllerTest {
                         .with(user(gestor))
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":true,\"confirmacao\":\"ENCERRAR TODOS\"}"))
+                        .content("{\"confirmado\":true}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.encerrados").value(37));
+
+        verify(atendimentoEncerramentoEmMassaService).encerrarTodos(eq(9L), eq(gestor), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void should_forbid_configured_user_from_bulk_closure() throws Exception {
+        com.synapse.clinicafemina.domain.Gestor gestor = new com.synapse.clinicafemina.domain.Gestor();
+        gestor.setId(7L);
+        gestor.setClinica(clinica);
+        gestor.setPerfil("GESTOR");
+        gestor.setAtivo(true);
+        when(atendimentoEncerramentoEmMassaService.encerrarTodos(
+                eq(9L), eq(gestor), org.mockito.ArgumentMatchers.any()
+        )).thenThrow(new AccessDeniedException("Usuário bloqueado para encerramento em massa."));
+
+        mockMvc.perform(post("/api/atendimentos/encerrar-todos")
+                        .with(user(gestor))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"confirmado\":true}"))
+                .andExpect(status().isForbidden());
 
         verify(atendimentoEncerramentoEmMassaService).encerrarTodos(eq(9L), eq(gestor), org.mockito.ArgumentMatchers.any());
     }
@@ -513,34 +525,34 @@ class AtendimentoControllerTest {
         mockMvc.perform(post("/api/atendimentos/encerrar-todos")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":false,\"confirmacao\":\"ENCERRAR TODOS\"}"))
+                        .content("{\"confirmado\":false}"))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(atendimentoEncerramentoEmMassaService);
     }
 
     @Test
-    @WithMockUser(roles = "GESTOR")
-    void should_reject_bulk_closure_without_confirmation_phrase() throws Exception {
+    void should_accept_bulk_closure_without_text_confirmation() throws Exception {
+        com.synapse.clinicafemina.domain.Gestor gestor = new com.synapse.clinicafemina.domain.Gestor();
+        gestor.setId(10L);
+        gestor.setClinica(clinica);
+        gestor.setPerfil("GESTOR");
+        gestor.setAtivo(true);
+        when(atendimentoEncerramentoEmMassaService.encerrarTodos(
+                eq(9L), eq(gestor), org.mockito.ArgumentMatchers.any()
+        )).thenReturn(new com.synapse.clinicafemina.dto.atendimento.EncerramentoEmMassaResponse(
+                0, OffsetDateTime.parse("2026-07-29T12:00:00Z")
+        ));
+
         mockMvc.perform(post("/api/atendimentos/encerrar-todos")
+                        .with(user(gestor))
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"confirmado\":true}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.encerrados").value(0));
 
-        verifyNoInteractions(atendimentoEncerramentoEmMassaService);
-    }
-
-    @Test
-    @WithMockUser(roles = "GESTOR")
-    void should_reject_bulk_closure_with_wrong_confirmation_phrase() throws Exception {
-        mockMvc.perform(post("/api/atendimentos/encerrar-todos")
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"confirmado\":true,\"confirmacao\":\"ENCERRAR\"}"))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(atendimentoEncerramentoEmMassaService);
+        verify(atendimentoEncerramentoEmMassaService).encerrarTodos(eq(9L), eq(gestor), org.mockito.ArgumentMatchers.any());
     }
 
 }

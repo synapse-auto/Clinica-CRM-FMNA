@@ -6,6 +6,7 @@ import com.synapse.clinicafemina.dto.auth.ChangePasswordRequest;
 import com.synapse.clinicafemina.dto.auth.LoginRequest;
 import com.synapse.clinicafemina.dto.auth.LoginResponse;
 import com.synapse.clinicafemina.service.AuthService;
+import com.synapse.clinicafemina.service.AtendimentoEncerramentoEmMassaService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +28,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 public class AuthController {
 
     private final AuthService authService;
+    private final AtendimentoEncerramentoEmMassaService atendimentoEncerramentoEmMassaService;
 
     @PostMapping("/login")
     @Operation(summary = "Autenticar no CRM", description = "Endpoint público que retorna o JWT do CRM.")
@@ -37,7 +39,10 @@ public class AuthController {
     @GetMapping("/me")
     @Operation(summary = "Consultar sessão atual", security = @SecurityRequirement(name = "bearerAuth"))
     public AuthUserResponse me(@AuthenticationPrincipal Usuario usuario) {
-        return AuthUserResponse.from(usuario);
+        return AuthUserResponse.from(
+                usuario,
+                atendimentoEncerramentoEmMassaService.podeExecutar(usuario)
+        );
     }
 
     @PatchMapping("/change-password")

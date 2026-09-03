@@ -1,7 +1,6 @@
 'use client';
 
 import { LoaderCircle, OctagonAlert, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
 
 type Props = {
   open: boolean;
@@ -9,11 +8,8 @@ type Props = {
   total?: number;
   processing: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (confirmacao?: string) => void;
+  onConfirm: () => void;
 };
-
-const CONFIRMACAO_EM_MASSA = 'ENCERRAR TODOS';
-const CONFIRMACAO_INDIVIDUAL = 'ENCERRAR';
 
 export function EncerrarAtendimentoDialog({
   open,
@@ -23,29 +19,20 @@ export function EncerrarAtendimentoDialog({
   onOpenChange,
   onConfirm,
 }: Props) {
-  const [confirmacao, setConfirmacao] = useState('');
-  const confirmRef = useRef<HTMLInputElement>(null);
   const isMass = mode === 'MASSA';
-  const confirmationPhrase = isMass ? CONFIRMACAO_EM_MASSA : CONFIRMACAO_INDIVIDUAL;
-  const confirmationValid = confirmacao === confirmationPhrase;
-
-  useEffect(() => {
-    if (!open) {
-      setConfirmacao('');
-      return;
-    }
-    window.requestAnimationFrame(() => confirmRef.current?.focus());
-  }, [isMass, open]);
 
   if (!open) return null;
 
-  const title = isMass ? 'Encerrar todos os atendimentos?' : 'Encerrar atendimento?';
+  const title = isMass ? 'ATENÇÃO: Encerrar todos os atendimentos?' : 'ATENÇÃO: Encerrar atendimento?';
   const description = isMass
-    ? `Esta ação encerrará ${total} atendimento${total === 1 ? '' : 's'} ativo${total === 1 ? '' : 's'} desta clínica. Os contatos e históricos não serão excluídos e continuarão disponíveis em Finalizados.`
-    : 'O atendimento sairá da lista ativa e continuará disponível em Finalizados. O contato e todo o histórico serão preservados.';
+    ? `Você está prestes a encerrar TODOS os ${total} atendimentos ativos desta clínica.`
+    : 'Você está prestes a encerrar este atendimento. A conversa sairá da lista de ativos, mas todo o histórico será preservado em Finalizados.';
+  const additionalDescription = isMass
+    ? 'Esta ação removerá todos esses atendimentos da lista de ativos. As conversas e o histórico de mensagens serão preservados em Finalizados.'
+    : null;
   const buttonLabel = isMass
-    ? `Encerrar ${total} atendimento${total === 1 ? '' : 's'}`
-    : 'Encerrar atendimento';
+    ? `Sim, encerrar todos os ${total} atendimentos`
+    : 'Sim, encerrar atendimento';
 
   return (
     <div
@@ -70,6 +57,7 @@ export function EncerrarAtendimentoDialog({
                 {title}
               </h2>
               <p className="mt-1 text-[11px] leading-4 text-clinic-muted">{description}</p>
+              {additionalDescription ? <p className="mt-2 text-[11px] font-semibold leading-4 text-clinic-danger">{additionalDescription}</p> : null}
             </div>
           </div>
           <button
@@ -83,18 +71,10 @@ export function EncerrarAtendimentoDialog({
           </button>
         </header>
 
-        <div className="space-y-2 p-5">
-          <label className="block text-[11px] font-bold text-clinic-text">
-            Para confirmar, digite <strong>{confirmationPhrase}</strong>
-            <input
-              ref={confirmRef}
-              value={confirmacao}
-              disabled={processing}
-              onChange={(event) => setConfirmacao(event.target.value)}
-              aria-label={isMass ? 'Confirmação para encerrar todos' : 'Confirmação para encerrar atendimento'}
-              className="mt-2 h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-[12px] text-clinic-text outline-none focus:border-clinic-danger focus:ring-4 focus:ring-clinic-danger/10 disabled:opacity-50"
-            />
-          </label>
+        <div className="p-5">
+          <p className="text-[11px] font-semibold text-clinic-muted">
+            Confirme somente clicando no botão de encerramento abaixo.
+          </p>
         </div>
 
         <footer className="flex justify-end gap-2 border-t border-clinic-border px-5 py-4">
@@ -108,8 +88,8 @@ export function EncerrarAtendimentoDialog({
           </button>
           <button
             type="button"
-            disabled={!confirmationValid || processing}
-            onClick={() => onConfirm(confirmacao)}
+            disabled={processing}
+            onClick={onConfirm}
             className="inline-flex h-9 items-center gap-2 rounded-lg bg-clinic-danger px-4 text-[11px] font-extrabold text-white hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {processing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <OctagonAlert className="h-4 w-4" />}

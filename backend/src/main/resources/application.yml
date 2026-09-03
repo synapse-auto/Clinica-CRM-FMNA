@@ -50,6 +50,8 @@ resilience4j:
 
 app:
   environment: ${APP_ENV:${APP_ENVIRONMENT:producao}}
+  atendimentos:
+    bulk-close-blocked-user-ids: ${ATENDIMENTOS_BULK_CLOSE_BLOCKED_USER_IDS:}
   performance:
     cache:
       enabled: ${PERFORMANCE_CACHE_ENABLED:true}

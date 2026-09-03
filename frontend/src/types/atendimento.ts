@@ -190,14 +190,12 @@ export type AtendimentosAtivosContagem = {
 
 export type EncerramentoEmMassaRequest = {
   confirmado: true;
-  confirmacao: string;
   motivo?: string;
 };
 
 export type EncerramentoIndividualRequest = {
   confirmado: true;
-  origem: 'DIALOG_ATENDIMENTO';
-  confirmacao: 'ENCERRAR';
+  motivo?: string;
 };
 
 export type EncerramentoEmMassaResponse = {

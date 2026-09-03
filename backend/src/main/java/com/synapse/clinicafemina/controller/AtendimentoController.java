@@ -239,7 +239,7 @@ public class AtendimentoController {
     }
 
     @PostMapping("/encerrar-todos")
-    @Operation(summary = "Encerrar todos os atendimentos", description = "Operação destrutiva, permitida somente para Gestor com confirmação textual.")
+    @Operation(summary = "Encerrar todos os atendimentos", description = "Operação destrutiva, permitida somente para Gestor autorizado com confirmação explícita.")
     @PreAuthorize("hasRole('GESTOR')")
     public EncerramentoEmMassaResponse encerrarTodos(
             @RequestBody @Valid EncerramentoEmMassaRequest request,

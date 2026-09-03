@@ -140,6 +140,7 @@ export function AtendimentosClient({
   const activeRequestVersion = useRef(0);
   const activeInFlight = useRef(false);
   const individualClosureInFlight = useRef(false);
+  const bulkClosureInFlight = useRef(false);
   const bloquearSelecaoAutomatica = useRef(false);
   const viewTransitioning = useRef(initialView === 'FINALIZADOS');
   const firstListEffect = useRef(initialView === 'ATIVOS');
@@ -745,17 +746,15 @@ export function AtendimentosClient({
     void refreshList();
   }
 
-  async function encerrarAtendimentoSelecionado(confirmacao: string) {
+  async function encerrarAtendimentoSelecionado() {
     const atendimentoId = activeIdRef.current;
-    if (confirmacao !== 'ENCERRAR' || !atendimentoId || busy || individualClosureInFlight.current) return;
+    if (!atendimentoId || busy || individualClosureInFlight.current) return;
     individualClosureInFlight.current = true;
     setBusy(true);
     setError(null);
     try {
       const request: EncerramentoIndividualRequest = {
         confirmado: true,
-        origem: 'DIALOG_ATENDIMENTO',
-        confirmacao: confirmacao as 'ENCERRAR',
       };
       const encerrado = await encerrarAtendimento(atendimentoId, request);
       setCloseIndividualDialogOpen(false);
@@ -769,12 +768,13 @@ export function AtendimentosClient({
     }
   }
 
-  async function encerrarTodosAtendimentosAtivos(confirmacao: string) {
-    if (busy) return;
+  async function encerrarTodosAtendimentosAtivos() {
+    if (busy || bulkClosureInFlight.current) return;
+    bulkClosureInFlight.current = true;
     setBusy(true);
     setError(null);
     try {
-      const resultado = await encerrarTodosAtendimentos({ confirmado: true, confirmacao });
+      const resultado = await encerrarTodosAtendimentos({ confirmado: true });
       setCloseAllDialogOpen(false);
       limparAtendimentoEncerrado();
       setComposerDrafts({});
@@ -784,6 +784,7 @@ export function AtendimentosClient({
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
+      bulkClosureInFlight.current = false;
       setBusy(false);
     }
   }
@@ -850,7 +851,7 @@ export function AtendimentosClient({
         onSearchChange={setSearch}
         canStartManual={canManage}
         onStartManual={() => setStartDialogOpen(true)}
-        canCloseAll={user.perfil === 'GESTOR' && view === 'ATIVOS'}
+        canCloseAll={user.perfil === 'GESTOR' && user.podeEncerrarEmMassa === true && view === 'ATIVOS'}
         closeAllLoading={closeAllLoading}
         onCloseAll={() => void solicitarEncerramentoTodos()}
         onCloseAllTriggerReady={registerCloseAllActionFocus}
@@ -962,7 +963,7 @@ export function AtendimentosClient({
         mode="INDIVIDUAL"
         processing={busy}
         onOpenChange={setCloseIndividualDialogOpen}
-        onConfirm={(confirmacao) => void encerrarAtendimentoSelecionado(confirmacao ?? '')}
+        onConfirm={() => void encerrarAtendimentoSelecionado()}
       />
       <EncerrarAtendimentoDialog
         open={closeAllDialogOpen}
@@ -970,7 +971,7 @@ export function AtendimentosClient({
         total={closeAllTotal}
         processing={busy}
         onOpenChange={changeCloseAllDialogOpen}
-        onConfirm={(confirmacao) => void encerrarTodosAtendimentosAtivos(confirmacao ?? '')}
+        onConfirm={() => void encerrarTodosAtendimentosAtivos()}
       />
     </div>
   );

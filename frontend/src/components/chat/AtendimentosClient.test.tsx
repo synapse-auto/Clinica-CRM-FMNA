@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEffect, useState } from 'react';
@@ -281,6 +281,7 @@ const gestor = {
   clinicaId: 1,
   mustChangePassword: false,
   podeGerenciarUsuarios: false,
+  podeEncerrarEmMassa: true,
 };
 
 describe('AtendimentosClient visões de atendimento', () => {
@@ -674,18 +675,14 @@ describe('AtendimentosClient encerramento', () => {
 
     const closeAction = screen.getByRole('button', { name: 'Encerrar atendimento' });
     await user.click(closeAction);
-    expect(screen.getByRole('dialog', { name: 'Encerrar atendimento?' })).toBeInTheDocument();
-    const confirm = screen.getAllByRole('button', { name: 'Encerrar atendimento' }).at(-1)!;
-    expect(confirm).toBeDisabled();
-    await user.type(screen.getByRole('textbox', { name: 'Confirmação para encerrar atendimento' }), 'ENCERRAR');
+    expect(screen.getByRole('dialog', { name: 'ATENÇÃO: Encerrar atendimento?' })).toBeInTheDocument();
+    const confirm = screen.getByRole('button', { name: 'Sim, encerrar atendimento' });
     expect(confirm).toBeEnabled();
 
     await user.click(confirm);
 
     await waitFor(() => expect(services.encerrarAtendimento).toHaveBeenCalledWith(7, {
       confirmado: true,
-      origem: 'DIALOG_ATENDIMENTO',
-      confirmacao: 'ENCERRAR',
     }));
     expect(services.encerrarAtendimento).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('8'));
@@ -694,25 +691,28 @@ describe('AtendimentosClient encerramento', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Atendimento encerrado.');
   });
 
-  it('should_not_call_individual_closure_until_the_human_confirmation_is_correct', async () => {
+  it('should_call_individual_closure_only_after_explicit_button_click', async () => {
     window.localStorage.setItem('clinica-crm-atendimentos-details-open', 'true');
+    services.encerrarAtendimento.mockResolvedValue({ id: 7, status: 'ENCERRADO' });
     const user = userEvent.setup();
     render(<AtendimentosClient initialConversations={[{ id: 7 }]} atendentes={[]} user={gestor} />);
 
     await user.click(screen.getByRole('button', { name: 'Encerrar atendimento' }));
+    const dialog = screen.getByRole('dialog', { name: 'ATENÇÃO: Encerrar atendimento?' });
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(services.encerrarAtendimento).not.toHaveBeenCalled();
+    fireEvent.mouseDown(dialog.parentElement!, { target: dialog.parentElement });
     expect(services.encerrarAtendimento).not.toHaveBeenCalled();
 
-    const confirm = screen.getAllByRole('button', { name: 'Encerrar atendimento' }).at(-1)!;
-    expect(confirm).toBeDisabled();
-    fireEvent.click(confirm);
-    expect(services.encerrarAtendimento).not.toHaveBeenCalled();
-    const input = screen.getByRole('textbox', { name: 'Confirmação para encerrar atendimento' });
-    await user.type(input, 'ERRADO');
-    expect(confirm).toBeDisabled();
-    fireEvent.click(confirm);
-    expect(services.encerrarAtendimento).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Encerrar atendimento' }));
     await user.click(screen.getByRole('button', { name: 'Cancelar' }));
     expect(services.encerrarAtendimento).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Encerrar atendimento' }));
+    const confirm = screen.getByRole('button', { name: 'Sim, encerrar atendimento' });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(services.encerrarAtendimento).toHaveBeenCalledTimes(1));
+    expect(services.encerrarAtendimento).toHaveBeenCalledTimes(1);
   });
 
   it('should_not_call_individual_closure_when_escape_is_pressed', async () => {
@@ -736,16 +736,13 @@ describe('AtendimentosClient encerramento', () => {
     render(<AtendimentosClient initialConversations={[{ id: 7 }]} atendentes={[]} user={gestor} />);
 
     await user.click(screen.getByRole('button', { name: 'Encerrar atendimento' }));
-    await user.type(screen.getByRole('textbox', { name: 'Confirmação para encerrar atendimento' }), 'ENCERRAR');
-    const confirm = screen.getAllByRole('button', { name: 'Encerrar atendimento' }).at(-1)!;
+    const confirm = screen.getByRole('button', { name: 'Sim, encerrar atendimento' });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
 
     await waitFor(() => expect(services.encerrarAtendimento).toHaveBeenCalledTimes(1));
     expect(services.encerrarAtendimento).toHaveBeenCalledWith(8, {
       confirmado: true,
-      origem: 'DIALOG_ATENDIMENTO',
-      confirmacao: 'ENCERRAR',
     });
     resolveRequest?.({ id: 7, status: 'ENCERRADO' });
   });
@@ -774,6 +771,18 @@ describe('AtendimentosClient encerramento', () => {
     expect(screen.queryByRole('button', { name: 'Encerrar todos' })).not.toBeInTheDocument();
   });
 
+  it('should_not_show_close_all_for_blocked_manager', () => {
+    render(
+      <AtendimentosClient
+        initialConversations={[]}
+        atendentes={[]}
+        user={{ ...gestor, id: 7, podeEncerrarEmMassa: false }}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Encerrar todos' })).not.toBeInTheDocument();
+  });
+
   it('should_not_call_bulk_closure_when_active_count_is_zero', async () => {
     services.contarAtendimentosAtivos.mockResolvedValue({ total: 0 });
     const user = userEvent.setup();
@@ -786,7 +795,27 @@ describe('AtendimentosClient encerramento', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Não há atendimentos ativos para encerrar.');
   });
 
-  it('should_require_strong_confirmation_and_clear_selection_after_bulk_closure', async () => {
+  it('should_not_call_bulk_closure_when_dialog_is_cancelled_or_dismissed', async () => {
+    services.contarAtendimentosAtivos.mockResolvedValue({ total: 2 });
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7 }, { id: 8 }]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Encerrar todos' }));
+    const dialog = await screen.findByRole('dialog', { name: 'ATENÇÃO: Encerrar todos os atendimentos?' });
+    expect(services.encerrarTodosAtendimentos).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(services.encerrarTodosAtendimentos).not.toHaveBeenCalled();
+    fireEvent.mouseDown(dialog.parentElement!, { target: dialog.parentElement });
+    expect(services.encerrarTodosAtendimentos).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Encerrar todos' }));
+    await screen.findByRole('dialog', { name: 'ATENÇÃO: Encerrar todos os atendimentos?' });
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(services.encerrarTodosAtendimentos).not.toHaveBeenCalled();
+  });
+
+  it('should_require_explicit_button_click_and_clear_selection_after_bulk_closure', async () => {
     services.contarAtendimentosAtivos.mockResolvedValue({ total: 2 });
     services.encerrarTodosAtendimentos.mockResolvedValue({ encerrados: 2, dataEncerramento: '2026-07-29T12:00:00Z' });
     services.listAtendimentos.mockResolvedValue({ content: [], totalElements: 0 });
@@ -794,21 +823,38 @@ describe('AtendimentosClient encerramento', () => {
     render(<AtendimentosClient initialConversations={[{ id: 7 }, { id: 8 }]} atendentes={[]} user={gestor} />);
 
     await user.click(screen.getByRole('button', { name: 'Encerrar todos' }));
-    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Encerrar todos os atendimentos?' })).toBeInTheDocument());
-    const confirm = screen.getAllByRole('button', { name: 'Encerrar 2 atendimentos' }).at(-1)!;
-    expect(confirm).toBeDisabled();
-
-    await user.type(screen.getByRole('textbox', { name: 'Confirmação para encerrar todos' }), 'ENCERRAR TODOS');
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'ATENÇÃO: Encerrar todos os atendimentos?' })).toBeInTheDocument());
+    const dialog = screen.getByRole('dialog', { name: 'ATENÇÃO: Encerrar todos os atendimentos?' });
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
+    const confirm = screen.getByRole('button', { name: 'Sim, encerrar todos os 2 atendimentos' });
     expect(confirm).toBeEnabled();
     await user.click(confirm);
 
     await waitFor(() => expect(services.encerrarTodosAtendimentos).toHaveBeenCalledWith({
       confirmado: true,
-      confirmacao: 'ENCERRAR TODOS',
     }));
     await waitFor(() => expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('nenhum'));
     expect(screen.getByTestId('conversation-ids')).toHaveTextContent('');
     expect(window.location.search).toBe('');
     expect(screen.getByRole('status')).toHaveTextContent('2 atendimentos encerrados.');
+  });
+
+  it('should_call_bulk_closure_only_once_on_double_click', async () => {
+    services.contarAtendimentosAtivos.mockResolvedValue({ total: 2 });
+    let resolveRequest: ((value: { encerrados: number; dataEncerramento: string }) => void) | undefined;
+    services.encerrarTodosAtendimentos.mockImplementation(() => new Promise((resolve) => {
+      resolveRequest = resolve;
+    }));
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7 }, { id: 8 }]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Encerrar todos' }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'ATENÇÃO: Encerrar todos os atendimentos?' })).toBeInTheDocument());
+    const confirm = screen.getByRole('button', { name: 'Sim, encerrar todos os 2 atendimentos' });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(services.encerrarTodosAtendimentos).toHaveBeenCalledTimes(1));
+    resolveRequest?.({ encerrados: 2, dataEncerramento: '2026-07-29T12:00:00Z' });
   });
 });
