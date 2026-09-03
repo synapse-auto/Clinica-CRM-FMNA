@@ -93,6 +93,23 @@ class UazapWebhookControllerTest {
         verify(dispatchService).despachar(bytes(payload));
     }
 
+    @Test
+    @DisplayName("diagnóstico reconhece media_id legado sem expor o identificador")
+    void legacyMediaIdPayload_logsPresenceWithoutLeakingId(CapturedOutput output) {
+        String payload = messagePayload("image", "5511988887777@s.whatsapp.net", "5511988887777")
+                .replace("\"id\":\"MEDIA-1\"", "\"media_id\":\"MEDIA-SECRET-123\"");
+
+        ResponseEntity<Void> response = controller(properties(true, "UAZAP", "PNID-1", null))
+                .receberWebhook(bytes(payload), null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(output.getOut())
+                .contains("message.type=image")
+                .contains("media_id_presente=true")
+                .doesNotContain("MEDIA-SECRET-123");
+        verify(dispatchService).despachar(bytes(payload));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"image", "video"})
     @DisplayName("Status inbound por key.remoteJid responde 200 e é descartado antes da fila")

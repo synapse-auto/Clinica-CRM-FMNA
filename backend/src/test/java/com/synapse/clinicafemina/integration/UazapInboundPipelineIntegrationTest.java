@@ -18,6 +18,7 @@ import com.synapse.clinicafemina.service.HorarioIaService;
 import com.synapse.clinicafemina.service.N8nEventService;
 import com.synapse.clinicafemina.service.RealtimeBroadcastService;
 import com.synapse.clinicafemina.service.WhatsappWebhookDispatchService;
+import com.synapse.clinicafemina.integration.whatsapp.WhatsappMediaDownloader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -91,6 +92,7 @@ class UazapInboundPipelineIntegrationTest {
     @Mock private WhatsappOutboundClient whatsappOutboundClient;
     @Mock private RealtimeBroadcastService broadcastService;
     @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock private WhatsappMediaDownloader uazapMediaDownloader;
 
     private WhatsappInboundMapper mapper;
     private WhatsappInboundListener listener;
@@ -99,6 +101,7 @@ class UazapInboundPipelineIntegrationTest {
     void setUp() {
         com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties whatsappProperties =
                 new com.synapse.clinicafemina.integration.whatsapp.config.WhatsappProperties();
+        whatsappProperties.setProvider("UAZAP");
         whatsappProperties.getUazap().setPhoneNumberId("uazap-fmna");
         mapper = new WhatsappInboundMapper(
                 pacienteRepository, atendimentoRepository, mensagemRepository, midiaMensagemRepository,
@@ -108,8 +111,7 @@ class UazapInboundPipelineIntegrationTest {
                 java.util.List.of(
                         new com.synapse.clinicafemina.integration.whatsapp.meta.MetaWhatsappMediaDownloader(
                                 whatsappOutboundClient, whatsappProperties),
-                        new com.synapse.clinicafemina.integration.whatsapp.uazap.UazapWhatsappMediaDownloader(
-                                whatsappProperties)),
+                        uazapMediaDownloader),
                 eventPublisher,
                 whatsappProperties,
                 new com.synapse.clinicafemina.service.WhatsappPhoneIdentityService(
@@ -410,6 +412,31 @@ class UazapInboundPipelineIntegrationTest {
             "video":{"caption":"","id":"media-uazap-video","mime_type":"video/mp4","sha256":"hash-sanitizado"}}]}}]}]}
             """;
 
+    // Fixture defensivo para payloads que não repetem contacts[]; a identidade continua
+    // disponível em messages[].from e não deve ser descartada prematuramente pelo mapper.
+    private static final String UAZAP_IMAGE_WITHOUT_CONTACTS_RAW = """
+            {"object":"whatsapp_business_account","entry":[{"id":"INST-FMNA","changes":[{"field":"messages","value":{
+            "messaging_product":"whatsapp",
+            "metadata":{"display_phone_number":"5543000000000","phone_number_id":"uazap-fmna"},
+            "messages":[{"from":"5543988887777","id":"UZ-IMG-NO-CONTACTS","timestamp":"1781455200","type":"image",
+            "image":{"id":"media-uazap-img-no-contacts","mime_type":"image/jpeg"}}]}}]}]}
+            """;
+
+    // Fixture estruturalmente compatível com UAZAPI, usando media_id como alias estrutural para
+    // garantir que a normalização não converta a mensagem para OUTRO.
+    private static final String UAZAP_IMAGE_WITH_MEDIA_ID_RAW = """
+            {"object":"whatsapp_business_account","entry":[{"id":"INST-FMNA","changes":[{"field":"messages","value":{
+            "messaging_product":"whatsapp",
+            "metadata":{"display_phone_number":"5543000000000","phone_number_id":"uazap-fmna"},
+            "contacts":[{"profile":{"name":"Paciente FMNA"},"wa_id":"5543988887777"}],
+            "messages":[{"from":"5543988887777","id":"UZ-IMG-MEDIA-ID","timestamp":"1781455200","type":"image",
+            "image":{"media_id":"media-uazap-img-media-id","mimeType":"image/png"}}]}}]}]}
+            """;
+
+    private static final String UAZAP_IMAGE_SUCCESS_RAW = UAZAP_IMAGE_WITHOUT_CONTACTS_RAW
+            .replace("UZ-IMG-NO-CONTACTS", "UZ-IMG-SUCCESS")
+            .replace("media-uazap-img-no-contacts", "media-uazap-img-success");
+
     @Test
     @DisplayName("5/6. Mídia UAZAP: falha no download do binário não impede persistência da mensagem nem o envio ao N8N")
     void uazapMediaDownloadFailure_doesNotBlockPersistence_orN8nDelivery() {
@@ -459,5 +486,66 @@ class UazapInboundPipelineIntegrationTest {
         verifyNoInteractions(whatsappOutboundClient);
         capturarUnicoEventoN8n();
         verify(notificationService).notificarNovaMensagem(eq(atendimento), any());
+    }
+
+    @Test
+    @DisplayName("imagem UAZAPI sem contacts[] usa messages.from e não é descartada antes da persistência")
+    void uazapImageWithoutContacts_isStillPersisted() {
+        Clinica clinica = clinicaFmna();
+        Paciente paciente = paciente(clinica);
+        Atendimento atendimento = atendimento(clinica, paciente, true);
+        stubHappyPath(clinica, paciente, atendimento, "UZ-IMG-NO-CONTACTS");
+
+        listener.processarMensagem(UAZAP_IMAGE_WITHOUT_CONTACTS_RAW.getBytes(StandardCharsets.UTF_8));
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository).save(mensagemCaptor.capture());
+        assertEquals("IMAGEM", mensagemCaptor.getValue().getTipoMedia());
+        verify(midiaMensagemRepository).save(any());
+        verify(notificationService).notificarNovaMensagem(eq(atendimento), any());
+    }
+
+    @Test
+    @DisplayName("imagem UAZAPI com media_id é normalizada como IMAGEM e permanece no CRM")
+    void uazapImageWithMediaIdAlias_isPersistedAsImage() {
+        Clinica clinica = clinicaFmna();
+        Paciente paciente = paciente(clinica);
+        Atendimento atendimento = atendimento(clinica, paciente, true);
+        stubHappyPath(clinica, paciente, atendimento, "UZ-IMG-MEDIA-ID");
+
+        listener.processarMensagem(UAZAP_IMAGE_WITH_MEDIA_ID_RAW.getBytes(StandardCharsets.UTF_8));
+
+        ArgumentCaptor<Mensagem> mensagemCaptor = ArgumentCaptor.forClass(Mensagem.class);
+        verify(mensagemRepository).save(mensagemCaptor.capture());
+        assertEquals("IMAGEM", mensagemCaptor.getValue().getTipoMedia());
+        ArgumentCaptor<com.synapse.clinicafemina.domain.MidiaMensagem> midiaCaptor =
+                ArgumentCaptor.forClass(com.synapse.clinicafemina.domain.MidiaMensagem.class);
+        verify(midiaMensagemRepository).save(midiaCaptor.capture());
+        assertEquals("media-uazap-img-media-id", midiaCaptor.getValue().getWhatsappMediaId());
+        assertEquals("image/png", midiaCaptor.getValue().getMimeType());
+    }
+
+    @Test
+    @DisplayName("imagem UAZAPI baixada é persistida com bytes e MIME, sem depender do client Meta")
+    void uazapImageDownloadSuccess_persistsBinaryAndKeepsMetaIsolated() {
+        Clinica clinica = clinicaFmna();
+        Paciente paciente = paciente(clinica);
+        Atendimento atendimento = atendimento(clinica, paciente, true);
+        stubHappyPath(clinica, paciente, atendimento, "UZ-IMG-SUCCESS");
+        byte[] jpeg = new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff, 1, 2, 3};
+        when(uazapMediaDownloader.supports("uazap-fmna")).thenReturn(true);
+        when(uazapMediaDownloader.download("media-uazap-img-success"))
+                .thenReturn(new WhatsappOutboundClient.MidiaBaixada(jpeg, "image/jpeg"));
+
+        listener.processarMensagem(UAZAP_IMAGE_SUCCESS_RAW.getBytes(StandardCharsets.UTF_8));
+
+        ArgumentCaptor<com.synapse.clinicafemina.domain.MidiaMensagem> midiaCaptor =
+                ArgumentCaptor.forClass(com.synapse.clinicafemina.domain.MidiaMensagem.class);
+        verify(midiaMensagemRepository).save(midiaCaptor.capture());
+        assertEquals("IMAGEM", midiaCaptor.getValue().getTipoMedia());
+        assertEquals("image/jpeg", midiaCaptor.getValue().getMimeType());
+        assertEquals((long) jpeg.length, midiaCaptor.getValue().getTamanhoBytes());
+        assertTrue(java.util.Arrays.equals(jpeg, midiaCaptor.getValue().getS3Chave()));
+        verify(whatsappOutboundClient, never()).baixarMidia(any());
     }
 }

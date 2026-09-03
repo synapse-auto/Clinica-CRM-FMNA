@@ -84,6 +84,22 @@ class UazapWhatsappMediaDownloaderTest {
     }
 
     @Test
+    @DisplayName("detecta JPEG válido quando metadados e Content-Type do binário estão ausentes")
+    void detectsJpegWhenBothMimeHeadersAreMissing() {
+        byte[] jpeg = new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff, 1};
+        expectMetadata("media-1", DOWNLOAD_URL, null);
+        server.expect(requestTo(DOWNLOAD_URL))
+                .andRespond(withSuccess().body(jpeg));
+
+        WhatsappOutboundClient.MidiaBaixada result = downloader.download("media-1");
+
+        assertThat(result).isNotNull();
+        assertThat(result.mimeType()).isEqualTo("image/jpeg");
+        assertThat(result.bytes()).isEqualTo(jpeg);
+        server.verify();
+    }
+
+    @Test
     @DisplayName("recusa resposta HTML mesmo quando a etapa de metadados teve sucesso")
     void rejectsInvalidContentType() {
         expectMetadata("media-1", DOWNLOAD_URL, "image/jpeg");
@@ -139,7 +155,7 @@ class UazapWhatsappMediaDownloaderTest {
 
     private void expectMetadata(String id, String url, String mimeType) {
         String body = "{\"id\":\"" + id + "\",\"url\":\"" + url
-                + "\",\"mime_type\":\"" + mimeType + "\"}";
+                + "\"" + (mimeType == null ? "" : ",\"mime_type\":\"" + mimeType + "\"") + "}";
         server.expect(requestTo(METADATA_URL))
                 .andExpect(method(GET))
                 .andExpect(header(AUTHORIZATION, "Bearer secret-token"))
@@ -161,6 +177,7 @@ class UazapWhatsappMediaDownloaderTest {
     private static Stream<Arguments> supportedMedia() {
         return Stream.of(
                 Arguments.of("imagem", "image/jpeg", new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff, 1}),
+                Arguments.of("imagem webp", "image/webp", new byte[] {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B', 'P'}),
                 Arguments.of("áudio", "audio/ogg", "OggS-audio".getBytes()),
                 Arguments.of("documento", "application/pdf", "%PDF-doc".getBytes()),
                 Arguments.of("vídeo", "video/mp4", new byte[] {0, 0, 0, 20, 'f', 't', 'y', 'p', 1})

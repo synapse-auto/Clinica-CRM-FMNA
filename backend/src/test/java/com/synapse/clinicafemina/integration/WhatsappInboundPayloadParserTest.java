@@ -257,6 +257,57 @@ class WhatsappInboundPayloadParserTest {
     }
 
     @Test
+    @DisplayName("variações estruturais UAZAPI preservam o tipo IMAGEM e o mediaId")
+    void should_normalizeUazapImageMediaAliases() {
+        WhatsappInboundPayloadParser.DadosMensagem nestedAlias = parser.extrairDados(Map.of(
+                "id", "uazap-image-alias",
+                "type", "image",
+                "image", Map.of("media_id", "media-image-alias", "mimeType", "image/png")
+        ));
+        WhatsappInboundPayloadParser.DadosMensagem envelopeAlias = parser.extrairDados(Map.of(
+                "id", "uazap-image-envelope",
+                "type", "image",
+                "media", Map.of("mediaId", "media-image-envelope", "mime_type", "image/jpeg")
+        ));
+
+        assertEquals("IMAGEM", nestedAlias.tipoMedia());
+        assertEquals("media-image-alias", nestedAlias.mediaId());
+        assertEquals("image/png", nestedAlias.mimeType());
+        assertEquals("IMAGEM", envelopeAlias.tipoMedia());
+        assertEquals("media-image-envelope", envelopeAlias.mediaId());
+        assertEquals("image/jpeg", envelopeAlias.mimeType());
+    }
+
+    @Test
+    @DisplayName("tipo de mídia UAZAPI com capitalização diferente segue o contrato canônico")
+    void should_normalizeMediaTypeCase() {
+        WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
+                "id", "uazap-image-case",
+                "type", "IMAGE",
+                "image", Map.of("id", "media-image-case", "mime_type", "image/jpeg")
+        ));
+
+        assertEquals("IMAGEM", dados.tipoMedia());
+        assertEquals("media-image-case", dados.mediaId());
+    }
+
+    @Test
+    @DisplayName("imagem com legenda preserva o texto e imagem sem legenda usa descrição amigável")
+    void should_preserveImageCaptionAndUseFallbackWithoutCaption() {
+        WhatsappInboundPayloadParser.DadosMensagem comLegenda = parser.extrairDados(Map.of(
+                "type", "image",
+                "image", Map.of("id", "media-caption", "mime_type", "image/jpeg", "caption", "Carteirinha")
+        ));
+        WhatsappInboundPayloadParser.DadosMensagem semLegenda = parser.extrairDados(Map.of(
+                "type", "image",
+                "image", Map.of("id", "media-no-caption", "mime_type", "image/jpeg")
+        ));
+
+        assertEquals("Carteirinha", comLegenda.conteudo());
+        assertEquals("Imagem recebida", semLegenda.conteudo());
+    }
+
+    @Test
     void should_render_reaction_as_text_without_creating_fake_media() {
         WhatsappInboundPayloadParser.DadosMensagem dados = parser.extrairDados(Map.of(
                 "id", "wamid-reaction",

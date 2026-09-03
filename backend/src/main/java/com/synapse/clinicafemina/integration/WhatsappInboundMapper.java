@@ -205,7 +205,11 @@ public class WhatsappInboundMapper {
                 contarCodePoints(mensagem.getConteudoPrevia()));
  
         if (dados.mediaId() != null) {
-            midiaRepository.save(criarMidia(mensagem, dados, resolvida.phoneNumberId()));
+            MidiaMensagem midia = criarMidia(mensagem, dados, resolvida.phoneNumberId());
+            midiaRepository.save(midia);
+            log.info("Metadados de mídia inbound persistidos: mensagemId={}, tipoMedia={}, tamanhoBytes={}, mimeType={}, mediaId={}",
+                    mensagem.getId(), midia.getTipoMedia(), midia.getTamanhoBytes(), midia.getMimeType(),
+                    maskId(midia.getWhatsappMediaId()));
         }
 
         AtivacaoModoIaResultado ativacaoReset = ativarModoIaPorComandoSeNecessario(
@@ -329,17 +333,28 @@ public class WhatsappInboundMapper {
  
     @SuppressWarnings("unchecked")
     private List<EntradaResolvida> resolverEntradas(Map<String, Object> value, byte[] payloadMetaOriginal) {
-        List<Map<String, Object>> contatos = (List<Map<String, Object>>) value.get("contacts");
-        List<Map<String, Object>> mensagens = (List<Map<String, Object>>) value.get("messages");
-        if (contatos == null || contatos.isEmpty() || mensagens == null || mensagens.isEmpty()) {
+        List<Map<String, Object>> contatos = objetos(value.get("contacts"));
+        List<Map<String, Object>> mensagens = objetos(value.get("messages"));
+        if (mensagens.isEmpty()) {
+            log.warn("Payload WhatsApp sem mensagem");
+            return List.of();
+        }
+        String phoneNumberId = extrairPhoneNumberId(value);
+        if (contatos.isEmpty() && !permiteContatoAusenteUazap(phoneNumberId)) {
+            // Preserva o descarte original quando o provider ativo não for UAZAP.
             log.warn("Payload WhatsApp sem contato ou mensagem");
             return List.of();
+        }
+        if (contatos.isEmpty()) {
+            // No payload UAZAP, o remetente da própria mensagem é suficiente para preservar o
+            // inbound sem inventar dados de perfil. O payload original continua sendo encaminhado
+            // ao N8N sem alteração.
+            log.warn("Payload WhatsApp sem contacts[]: usando identificador do remetente da mensagem");
         }
         Optional<Clinica> clinica = resolverClinicaPorPayload(value);
         if (clinica.isEmpty()) {
             return List.of();
         }
-        String phoneNumberId = extrairPhoneNumberId(value);
         return mensagens.stream()
                 .map(mensagem -> new EntradaResolvida(
                         clinica.get(),
@@ -348,6 +363,26 @@ public class WhatsappInboundMapper {
                         payloadMetaParaMensagem(value, contatos, mensagem, payloadMetaOriginal),
                         phoneNumberId
                 ))
+                .toList();
+    }
+
+    private boolean permiteContatoAusenteUazap(String phoneNumberId) {
+        if (whatsappProperties.resolveProvider() != WhatsappProviderType.UAZAP) {
+            return false;
+        }
+        String configurado = whatsappProperties.getUazap().getPhoneNumberId();
+        return configurado == null || configurado.isBlank()
+                || phoneNumberId == null || configurado.equals(phoneNumberId);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> objetos(Object valor) {
+        if (!(valor instanceof List<?> lista)) {
+            return List.of();
+        }
+        return lista.stream()
+                .filter(Map.class::isInstance)
+                .map(item -> (Map<String, Object>) item)
                 .toList();
     }
 
@@ -436,9 +471,17 @@ public class WhatsappInboundMapper {
             return contatos.stream()
                     .filter(contato -> from.equals(String.valueOf(contato.get("wa_id"))))
                     .findFirst()
-                    .orElse(contatos.getFirst());
+                    .orElseGet(() -> contatos.isEmpty() ? contatoSintetico(mensagem) : contatos.getFirst());
         }
-        return contatos.getFirst();
+        return contatos.isEmpty() ? Map.of() : contatos.getFirst();
+    }
+
+    private Map<String, Object> contatoSintetico(Map<String, Object> mensagem) {
+        Object remetente = mensagem.get("from");
+        if (remetente == null || String.valueOf(remetente).isBlank()) {
+            return Map.of();
+        }
+        return Map.of("wa_id", String.valueOf(remetente));
     }
 
     private String normalizarMessageId(Map<String, Object> payloadMensagem) {
@@ -486,9 +529,13 @@ public class WhatsappInboundMapper {
             return;
         }
         try {
-            MidiaBaixada baixada = resolveMediaDownloader(phoneNumberId).download(mediaId);
+            WhatsappMediaDownloader downloader = resolveMediaDownloader(phoneNumberId);
+            log.info("Download de mídia inbound iniciado: provider={}, tipoMedia={}, phoneNumberId={}, mediaId={}",
+                    downloader.getClass().getSimpleName(), midia.getTipoMedia(), maskId(phoneNumberId), maskId(mediaId));
+            MidiaBaixada baixada = downloader.download(mediaId);
             if (baixada == null || baixada.bytes() == null || baixada.bytes().length == 0) {
-                log.warn("Mídia inbound não foi persistida localmente: bytes ausentes. mediaId={}", maskId(mediaId));
+                log.warn("Mídia inbound não foi persistida localmente: bytes ausentes. provider={}, tipoMedia={}, mediaId={}",
+                        downloader.getClass().getSimpleName(), midia.getTipoMedia(), maskId(mediaId));
                 return;
             }
             midia.setS3Bucket("database");
@@ -497,9 +544,12 @@ public class WhatsappInboundMapper {
             if (baixada.mimeType() != null && !baixada.mimeType().isBlank()) {
                 midia.setMimeType(baixada.mimeType());
             }
+            log.info("Binário de mídia inbound pronto para persistência: provider={}, tipoMedia={}, tamanhoBytes={}, mimeType={}, mediaId={}",
+                    downloader.getClass().getSimpleName(), midia.getTipoMedia(), baixada.bytes().length,
+                    midia.getMimeType(), maskId(mediaId));
         } catch (Exception exception) {
-            log.warn("Mídia inbound não foi persistida localmente. mediaId={}, tipoErro={}",
-                    maskId(mediaId), exception.getClass().getSimpleName());
+            log.warn("Mídia inbound não foi persistida localmente. phoneNumberId={}, mediaId={}, tipoErro={}",
+                    maskId(phoneNumberId), maskId(mediaId), exception.getClass().getSimpleName());
         }
     }
 

@@ -21,7 +21,11 @@ public class WhatsappInboundPayloadParser {
 
     @SuppressWarnings("unchecked")
     public DadosMensagem extrairDados(Map<String, Object> mensagem) {
-        String tipo = String.valueOf(mensagem.getOrDefault("type", "text"));
+        String tipo = texto(mensagem.get("type"));
+        if (tipo.isBlank()) {
+            tipo = "text";
+        }
+        tipo = tipo.toLowerCase(Locale.ROOT);
         if ("text".equals(tipo)) {
             Map<String, Object> texto = (Map<String, Object>) mensagem.get("text");
             String conteudo = texto == null ? "" : String.valueOf(texto.getOrDefault("body", ""));
@@ -58,8 +62,15 @@ public class WhatsappInboundPayloadParser {
             return extrairRespostaInterativa(interactive);
         }
 
-        Map<String, Object> media = (Map<String, Object>) mensagem.get(tipo);
-        if (media == null || media.get("id") == null) {
+        Map<String, Object> media = objetoMedia(mensagem, tipo);
+        String mediaId = primeiroTexto(media, "id", "media_id", "mediaId");
+        if (mediaId.isBlank()) {
+            mediaId = primeiroTexto(mensagem, "media_id", "mediaId");
+        }
+        if (media == null && !mediaId.isBlank()) {
+            media = Map.of();
+        }
+        if (media == null || mediaId.isBlank()) {
             return new DadosMensagem(
                     "OUTRO",
                     conteudoGenerico(tipo),
@@ -70,14 +81,27 @@ public class WhatsappInboundPayloadParser {
             );
         }
         String tipoMedia = mapearTipoMedia(tipo);
-        String mimeType = String.valueOf(media.getOrDefault("mime_type", mimePadrao(tipoMedia, tipo)));
-        String nome = normalizarNomeArquivo(media.get("filename"), tipo, tipoMedia, mimeType);
-        String legenda = String.valueOf(media.getOrDefault("caption", ""));
+        String mimeType = primeiroTexto(media, "mime_type", "mimeType", "mimetype");
+        if (mimeType.isBlank()) {
+            mimeType = primeiroTexto(mensagem, "mime_type", "mimeType", "mimetype");
+        }
+        if (mimeType.isBlank()) {
+            mimeType = mimePadrao(tipoMedia, tipo);
+        }
+        Object nomeRecebido = media.get("filename");
+        if (nomeRecebido == null) {
+            nomeRecebido = media.get("file_name");
+        }
+        if (nomeRecebido == null) {
+            nomeRecebido = media.get("fileName");
+        }
+        String nome = normalizarNomeArquivo(nomeRecebido, tipo, tipoMedia, mimeType);
+        String legenda = texto(media.get("caption"));
         String conteudo = legenda.isBlank() ? descricaoMidia(tipo, tipoMedia, nome) : legenda;
         return new DadosMensagem(
                 tipoMedia,
                 conteudo,
-                String.valueOf(media.get("id")),
+                mediaId,
                 mimeType,
                 nome,
                 false
@@ -86,6 +110,25 @@ public class WhatsappInboundPayloadParser {
 
     public String normalizarTelefone(String telefone) {
         return WhatsappPhoneNormalizer.normalize(telefone);
+    }
+
+    /**
+     * UAZAPI documenta o objeto de mídia como {@code image.id}. Para tolerar payloads compatíveis
+     * de versões/rotas que usem {@code media_id}, {@code mediaId} ou um envelope {@code media}, a
+     * normalização é deliberadamente limitada a essas chaves estruturais e mantém o contrato Meta.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> objetoMedia(Map<String, Object> mensagem, String tipo) {
+        Object valor = mensagem.get(tipo);
+        if (!(valor instanceof Map<?, ?>)) {
+            valor = mensagem.get("media");
+        }
+        if (!(valor instanceof Map<?, ?> mapa)) {
+            return null;
+        }
+        Map<String, Object> resultado = new java.util.LinkedHashMap<>();
+        mapa.forEach((chave, item) -> resultado.put(String.valueOf(chave), item));
+        return resultado;
     }
 
     /**
@@ -179,6 +222,9 @@ public class WhatsappInboundPayloadParser {
     }
 
     private String primeiroTexto(Map<String, Object> origem, String... chaves) {
+        if (origem == null) {
+            return "";
+        }
         for (String chave : chaves) {
             String valor = texto(origem.get(chave));
             if (!valor.isBlank()) {
