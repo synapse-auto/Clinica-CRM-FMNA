@@ -36,6 +36,34 @@ class ImportacaoCsvContatoParserTest {
     }
 
     @Test
+    void should_ignore_completely_empty_columns_without_headers_from_spreadsheet_exports() {
+        var result = parser.parse(("NOME,TELEFONE,EMPRESA,\n"
+                + ",+5561981275298,,\n"
+                + "541696581,+5561991000358,,\n").getBytes(), "telefones.csv");
+
+        assertEquals(java.util.List.of("NOME", "TELEFONE", "EMPRESA"), result.headers());
+        assertEquals(java.util.List.of("", "+5561981275298", ""), result.rows().getFirst().values());
+        assertEquals(2, result.rows().size());
+    }
+
+    @Test
+    void should_accept_the_supported_spreadsheet_export_volume_with_a_trailing_empty_column() {
+        String csv = "NOME,TELEFONE,EMPRESA,\n" + ",+5561981275298,,\n".repeat(38_591);
+
+        var result = parser.parse(csv.getBytes(), "telefones.csv");
+
+        assertEquals(java.util.List.of("NOME", "TELEFONE", "EMPRESA"), result.headers());
+        assertEquals(38_591, result.rows().size());
+    }
+
+    @Test
+    void should_reject_blank_header_when_the_column_contains_data() {
+        assertThrows(BadRequestException.class, () -> parser.parse(
+                "nome,,telefone\nAna,dado,5583999999999\n".getBytes(), "contatos.csv"
+        ));
+    }
+
+    @Test
     void should_decode_windows_1252_when_utf8_is_invalid() {
         var result = parser.parse("nome;telefone\nJoão;5583999999999\n".getBytes(Charset.forName("windows-1252")), "contatos.csv");
 
@@ -49,7 +77,7 @@ class ImportacaoCsvContatoParserTest {
         assertThrows(BadRequestException.class, () -> parser.parse("nome;telefone".getBytes(), "contatos.xlsx"));
         assertThrows(BadRequestException.class, () -> parser.parse(new byte[] {'n', 0, 'm'}, "contatos.csv"));
         assertThrows(BadRequestException.class, () -> parser.parse("Nome; nome \nA;1\n".getBytes(), "contatos.csv"));
-        String csv = "nome;telefone\n" + "Ana;5583999999999\n".repeat(10_001);
+        String csv = "nome;telefone\n" + "Ana;5583999999999\n".repeat(50_001);
         assertThrows(BadRequestException.class, () -> parser.parse(csv.getBytes(), "contatos.csv"));
     }
 

@@ -7,9 +7,12 @@ criado recebe a origem interna `IMPORTACAO`, exibida como **Importação**.
 
 ## Formato e limites
 
-São aceitos arquivos `.csv` de até 5 MB, com até 10.000 linhas de dados e 100 colunas.
+São aceitos arquivos `.csv` de até 5 MB, com até 50.000 linhas de dados e 100 colunas.
 O parser aceita vírgula ou ponto e vírgula, UTF-8 (com ou sem BOM), Windows-1252,
-CRLF/LF e valores entre aspas. XLS/XLSX, ODS, PDF, compactados e JSON não são aceitos.
+CRLF/LF e valores entre aspas. Colunas sem cabeçalho são aceitas somente quando estão
+inteiramente vazias (por exemplo, uma vírgula final gerada por uma planilha); se houver
+qualquer valor nessa coluna, o arquivo é rejeitado. XLS/XLSX, ODS, PDF, compactados e JSON
+não são aceitos.
 
 Modelo:
 

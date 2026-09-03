@@ -26,7 +26,7 @@ import java.util.Set;
 public class ImportacaoCsvContatoParser {
 
     public static final int MAX_FILE_SIZE = 5 * 1024 * 1024;
-    public static final int MAX_DATA_ROWS = 10_000;
+    public static final int MAX_DATA_ROWS = 50_000;
     public static final int MAX_COLUMNS = 100;
 
     public ArquivoCsvLido parse(MultipartFile file) {
@@ -66,14 +66,16 @@ public class ImportacaoCsvContatoParser {
         if (records.isEmpty()) {
             throw new BadRequestException("O arquivo está vazio.");
         }
-        List<String> headers = copyValues(records.getFirst());
+        List<String> rawHeaders = copyValues(records.getFirst());
+        Set<Integer> emptyColumnsWithoutData = findEmptyColumnsWithoutData(rawHeaders, records);
+        List<String> headers = removeColumns(rawHeaders, emptyColumnsWithoutData);
         validarHeaders(headers);
         List<LinhaCsv> rows = new ArrayList<>();
         for (int index = 1; index < records.size(); index++) {
             if (rows.size() >= MAX_DATA_ROWS) {
-                throw new BadRequestException("O arquivo possui mais de 10.000 contatos.");
+                throw new BadRequestException("O arquivo possui mais de 50.000 contatos.");
             }
-            rows.add(new LinhaCsv(index + 1, copyValues(records.get(index))));
+            rows.add(new LinhaCsv(index + 1, removeColumns(copyValues(records.get(index)), emptyColumnsWithoutData)));
         }
         return new ArquivoCsvLido(
                 sha256(bytes),
@@ -120,6 +122,41 @@ public class ImportacaoCsvContatoParser {
                 throw new BadRequestException("O CSV possui cabeçalhos duplicados.");
             }
         }
+    }
+
+    /**
+     * Exportações de planilha com vírgula/ponto e vírgula final costumam criar uma coluna sem
+     * cabeçalho e sem nenhum valor. Ela não representa dado de contato e pode ser removida com
+     * segurança. Uma coluna sem cabeçalho que contenha qualquer valor continua sendo rejeitada.
+     */
+    private Set<Integer> findEmptyColumnsWithoutData(List<String> headers, List<CSVRecord> records) {
+        Set<Integer> emptyColumns = new HashSet<>();
+        for (int index = 0; index < headers.size(); index++) {
+            if (!normalizarHeader(headers.get(index)).isBlank()) {
+                continue;
+            }
+            int columnIndex = index;
+            boolean hasValue = records.stream()
+                    .skip(1)
+                    .anyMatch(record -> columnIndex < record.size() && !record.get(columnIndex).isBlank());
+            if (!hasValue) {
+                emptyColumns.add(index);
+            }
+        }
+        return emptyColumns;
+    }
+
+    private List<String> removeColumns(List<String> values, Set<Integer> indicesToRemove) {
+        if (indicesToRemove.isEmpty()) {
+            return values;
+        }
+        List<String> filtered = new ArrayList<>(Math.max(0, values.size() - indicesToRemove.size()));
+        for (int index = 0; index < values.size(); index++) {
+            if (!indicesToRemove.contains(index)) {
+                filtered.add(values.get(index));
+            }
+        }
+        return filtered;
     }
 
     static String normalizarHeader(String value) {

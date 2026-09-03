@@ -152,7 +152,7 @@ function FileStep({ file, busy, inputRef, onSelect, onAnalyze }: {
     <button type="button" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onSelect(event.dataTransfer.files?.[0] ?? null); }} className="flex min-h-36 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-clinic-border bg-clinic-soft px-4 text-center hover:border-clinic-primary/50">
       <Upload className="mb-2 h-6 w-6 text-clinic-primary" />
       <span className="text-[11px] font-extrabold text-clinic-text">Selecionar arquivo CSV</span>
-      <span className="mt-1 text-[9px] text-clinic-muted">Máximo de 5 MB. Também é possível arrastar o arquivo aqui.</span>
+      <span className="mt-1 text-[9px] text-clinic-muted">Máximo de 5 MB e 50 mil contatos. Também é possível arrastar o arquivo aqui.</span>
     </button>
     {file ? <div className="flex items-center gap-2 rounded-lg border border-clinic-border px-3 py-2 text-[10px]"><FileSpreadsheet className="h-4 w-4 text-clinic-primary" /><span className="min-w-0 flex-1 truncate font-bold text-clinic-text">{file.name}</span><span className="text-clinic-muted">{formatSize(file.size)}</span></div> : null}
     <div className="flex flex-wrap justify-between gap-2">
@@ -203,5 +203,5 @@ function downloadModel() { downloadText('modelo-contatos.csv', '\uFEFFnome;telef
 function downloadErrors(errors: ImportacaoCsvContatoResultado['errors']) { const lines = ['linha;campo;codigo;erro', ...errors.map((error) => [error.rowNumber, error.field, error.code, error.message].map(csvCell).join(';'))]; downloadText('relatorio-importacao-contatos.csv', `\uFEFF${lines.join('\r\n')}\r\n`); }
 function csvCell(value: string | number) { const safe = String(value).replace(/^([=+\-@])/, "'$1").replace(/"/g, '""'); return /[;"\r\n]/.test(safe) ? `"${safe}"` : safe; }
 function downloadText(filename: string, content: string) { const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url); }
-function formatSize(size: number) { return `${(size / 1024).toFixed(size < 1024 * 1024 ? 0 : 1)} ${size < 1024 * 1024 ? 'KB' : 'MB'}`; }
+export function formatSize(size: number) { return `${(size / (size < 1024 * 1024 ? 1024 : 1024 * 1024)).toFixed(size < 1024 * 1024 ? 0 : 1)} ${size < 1024 * 1024 ? 'KB' : 'MB'}`; }
 function messageOf(cause: unknown) { return cause instanceof Error ? cause.message : 'Não foi possível concluir a importação.'; }
