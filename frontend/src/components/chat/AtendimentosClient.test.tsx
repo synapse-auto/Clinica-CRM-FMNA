@@ -675,14 +675,79 @@ describe('AtendimentosClient encerramento', () => {
     const closeAction = screen.getByRole('button', { name: 'Encerrar atendimento' });
     await user.click(closeAction);
     expect(screen.getByRole('dialog', { name: 'Encerrar atendimento?' })).toBeInTheDocument();
+    const confirm = screen.getAllByRole('button', { name: 'Encerrar atendimento' }).at(-1)!;
+    expect(confirm).toBeDisabled();
+    await user.type(screen.getByRole('textbox', { name: 'Confirmação para encerrar atendimento' }), 'ENCERRAR');
+    expect(confirm).toBeEnabled();
 
-    await user.click(screen.getAllByRole('button', { name: 'Encerrar atendimento' }).at(-1)!);
+    await user.click(confirm);
 
-    await waitFor(() => expect(services.encerrarAtendimento).toHaveBeenCalledWith(7));
+    await waitFor(() => expect(services.encerrarAtendimento).toHaveBeenCalledWith(7, {
+      confirmado: true,
+      origem: 'DIALOG_ATENDIMENTO',
+      confirmacao: 'ENCERRAR',
+    }));
+    expect(services.encerrarAtendimento).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByTestId('selected-atendimento')).toHaveTextContent('8'));
     expect(screen.getByTestId('conversation-ids')).toHaveTextContent('8');
     expect(window.location.search).toBe('?atendimentoId=8');
     expect(screen.getByRole('status')).toHaveTextContent('Atendimento encerrado.');
+  });
+
+  it('should_not_call_individual_closure_until_the_human_confirmation_is_correct', async () => {
+    window.localStorage.setItem('clinica-crm-atendimentos-details-open', 'true');
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7 }]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Encerrar atendimento' }));
+    expect(services.encerrarAtendimento).not.toHaveBeenCalled();
+
+    const confirm = screen.getAllByRole('button', { name: 'Encerrar atendimento' }).at(-1)!;
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(services.encerrarAtendimento).not.toHaveBeenCalled();
+    const input = screen.getByRole('textbox', { name: 'Confirmação para encerrar atendimento' });
+    await user.type(input, 'ERRADO');
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(services.encerrarAtendimento).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(services.encerrarAtendimento).not.toHaveBeenCalled();
+  });
+
+  it('should_not_call_individual_closure_when_escape_is_pressed', async () => {
+    window.localStorage.setItem('clinica-crm-atendimentos-details-open', 'true');
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7 }]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Encerrar atendimento' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(services.encerrarAtendimento).not.toHaveBeenCalled();
+  });
+
+  it('should_call_individual_closure_only_once_on_double_click', async () => {
+    window.localStorage.setItem('clinica-crm-atendimentos-details-open', 'true');
+    let resolveRequest: ((value: { id: number; status: string }) => void) | undefined;
+    services.encerrarAtendimento.mockImplementation(() => new Promise((resolve) => {
+      resolveRequest = resolve;
+    }));
+    const user = userEvent.setup();
+    render(<AtendimentosClient initialConversations={[{ id: 7 }]} atendentes={[]} user={gestor} />);
+
+    await user.click(screen.getByRole('button', { name: 'Encerrar atendimento' }));
+    await user.type(screen.getByRole('textbox', { name: 'Confirmação para encerrar atendimento' }), 'ENCERRAR');
+    const confirm = screen.getAllByRole('button', { name: 'Encerrar atendimento' }).at(-1)!;
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(services.encerrarAtendimento).toHaveBeenCalledTimes(1));
+    expect(services.encerrarAtendimento).toHaveBeenCalledWith(8, {
+      confirmado: true,
+      origem: 'DIALOG_ATENDIMENTO',
+      confirmacao: 'ENCERRAR',
+    });
+    resolveRequest?.({ id: 7, status: 'ENCERRADO' });
   });
 
   it('should_not_show_close_all_for_medico', () => {

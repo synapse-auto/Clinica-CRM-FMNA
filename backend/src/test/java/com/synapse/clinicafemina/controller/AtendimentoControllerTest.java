@@ -368,13 +368,68 @@ class AtendimentoControllerTest {
     }
 
     @Test
-    @WithMockUser(roles = "RECEPCIONISTA")
     void should_allow_recepcionista_to_close_single_attendance() throws Exception {
+        Recepcionista recepcionista = new Recepcionista();
+        recepcionista.setId(11L);
+        recepcionista.setClinica(clinica);
+        recepcionista.setPerfil("RECEPCIONISTA");
+        recepcionista.setAtivo(true);
+        recepcionista.setNome("Recepcionista");
         mockMvc.perform(post("/api/atendimentos/30/encerrar")
-                        .with(csrf()))
+                        .with(user(recepcionista))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"confirmado\":true,\"origem\":\"DIALOG_ATENDIMENTO\",\"confirmacao\":\"ENCERRAR\"}"))
                 .andExpect(status().isOk());
 
-        verify(atendimentoService).encerrar(30L, 9L, null);
+        verify(atendimentoService).encerrar(30L, 9L, null, recepcionista);
+    }
+
+    @Test
+    @WithMockUser(roles = "RECEPCIONISTA")
+    void should_reject_individual_closure_without_body() throws Exception {
+        mockMvc.perform(post("/api/atendimentos/30/encerrar").with(csrf()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(atendimentoService);
+    }
+
+    @Test
+    @WithMockUser(roles = "RECEPCIONISTA")
+    void should_reject_individual_closure_without_confirmation() throws Exception {
+        mockMvc.perform(post("/api/atendimentos/30/encerrar")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"confirmado\":false,\"origem\":\"DIALOG_ATENDIMENTO\",\"confirmacao\":\"ENCERRAR\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/atendimentos/30/encerrar")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"confirmado\":true,\"origem\":\"DIALOG_ATENDIMENTO\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/atendimentos/30/encerrar")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"confirmado\":true,\"origem\":\"DIALOG_ATENDIMENTO\",\"confirmacao\":\"CONFIRMAR\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/atendimentos/30/encerrar")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"confirmado\":true,\"origem\":\"OUTRA_ORIGEM\",\"confirmacao\":\"ENCERRAR\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(atendimentoService);
+    }
+
+    @Test
+    void should_reject_unauthenticated_individual_closure() throws Exception {
+        mockMvc.perform(post("/api/atendimentos/30/encerrar")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"confirmado\":true,\"origem\":\"DIALOG_ATENDIMENTO\",\"confirmacao\":\"ENCERRAR\"}"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(atendimentoService);
     }
 
     @Test
@@ -401,7 +456,10 @@ class AtendimentoControllerTest {
     @Test
     @WithMockUser(roles = "MEDICO")
     void should_forbid_medico_from_closing_attendances() throws Exception {
-        mockMvc.perform(post("/api/atendimentos/30/encerrar").with(csrf()))
+        mockMvc.perform(post("/api/atendimentos/30/encerrar")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"confirmado\":true,\"origem\":\"DIALOG_ATENDIMENTO\",\"confirmacao\":\"ENCERRAR\"}"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/atendimentos/ativos/contagem"))
                 .andExpect(status().isForbidden());

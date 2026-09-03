@@ -12,6 +12,7 @@ import com.synapse.clinicafemina.dto.atendimento.AtendimentoLembreteResponse;
 import com.synapse.clinicafemina.dto.atendimento.AtendimentosAtivosContagemResponse;
 import com.synapse.clinicafemina.dto.atendimento.EncerramentoEmMassaRequest;
 import com.synapse.clinicafemina.dto.atendimento.EncerramentoEmMassaResponse;
+import com.synapse.clinicafemina.dto.atendimento.EncerramentoIndividualRequest;
 import com.synapse.clinicafemina.dto.atendimento.IniciarAtendimentoRequest;
 import com.synapse.clinicafemina.dto.atendimento.IniciarAtendimentoResponse;
 import com.synapse.clinicafemina.dto.operacional.TagResponse;
@@ -26,7 +27,9 @@ import com.synapse.clinicafemina.service.ConvenioReviewService;
 import com.synapse.clinicafemina.service.MensagemService;
 import com.synapse.clinicafemina.service.IniciarAtendimentoService;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -47,6 +50,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 @RestController
 @RequestMapping("/api/atendimentos")
 @RequiredArgsConstructor
+@Slf4j
 @PreAuthorize("hasAnyRole('GESTOR', 'MEDICO', 'RECEPCIONISTA')")
 @Tag(name = "Atendimentos", description = "Operações isoladas à clínica do usuário autenticado.")
 @SecurityRequirement(name = "bearerAuth")
@@ -211,9 +215,20 @@ public class AtendimentoController {
     @PreAuthorize("hasAnyRole('GESTOR', 'RECEPCIONISTA')")
     public AtendimentoDetalheDTO encerrar(
             @PathVariable Long id,
-            @RequestParam(required = false) String motivo
+            @RequestBody @Valid EncerramentoIndividualRequest request,
+            @AuthenticationPrincipal Usuario usuario,
+            HttpServletRequest httpRequest
     ) {
-        return atendimentoService.encerrar(id, clinicaId(), motivo);
+        log.info("Solicitação HTTP de encerramento individual. ip={}, userAgent={}",
+                sanitizarCabecalho(httpRequest.getRemoteAddr()),
+                sanitizarCabecalho(httpRequest.getHeader("User-Agent")));
+        return atendimentoService.encerrar(id, clinicaId(), request.motivo(), usuario);
+    }
+
+    private String sanitizarCabecalho(String valor) {
+        if (valor == null || valor.isBlank()) return "ausente";
+        String sanitizado = valor.replaceAll("[\\p{Cntrl}]", "").trim();
+        return sanitizado.length() <= 120 ? sanitizado : sanitizado.substring(0, 120);
     }
 
     @GetMapping("/ativos/contagem")

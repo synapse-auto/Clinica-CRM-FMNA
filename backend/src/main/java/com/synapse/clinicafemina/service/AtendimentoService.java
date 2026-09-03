@@ -430,18 +430,25 @@ public class AtendimentoService {
     }
 
     @Transactional
-    public AtendimentoDetalheDTO encerrar(Long id, Long clinicaId, String motivo) {
+    public AtendimentoDetalheDTO encerrar(Long id, Long clinicaId, String motivo, Usuario usuario) {
         Atendimento atendimento = atendimentoRepository.findByIdAndClinicaIdForUpdate(id, clinicaId)
                 .orElseThrow(() -> new NotFoundException("Atendimento não encontrado"));
         if ("ENCERRADO".equals(atendimento.getStatus())) {
             return toDetalheDTO(atendimento);
         }
+        Long atendentePrincipalId = atendimento.getAtendentePrincipal() == null
+                ? null : atendimento.getAtendentePrincipal().getId();
+        log.info("Solicitação de encerramento individual. clinicaId={}, atendimentoId={}, usuarioId={}, perfil={}, atendentePrincipalId={}",
+                clinicaId, id, usuario.getId(), usuario.getPerfil(), atendentePrincipalId);
         atendimento.setStatus("ENCERRADO");
         atendimento.setDataEncerramento(OffsetDateTime.now());
         atendimento.setMotivoEncerramento(MotivoEncerramentoAtendimento.sanitizar(
                 motivo, MotivoEncerramentoAtendimento.PADRAO_MANUAL
         ));
-        return toDetalheDTO(atendimentoRepository.save(atendimento));
+        Atendimento encerrado = atendimentoRepository.save(atendimento);
+        log.info("Atendimento encerrado individualmente. clinicaId={}, atendimentoId={}, usuarioId={}, perfil={}, atendentePrincipalId={}",
+                clinicaId, id, usuario.getId(), usuario.getPerfil(), atendentePrincipalId);
+        return toDetalheDTO(encerrado);
     }
 
     @Transactional

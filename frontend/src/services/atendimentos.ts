@@ -9,6 +9,7 @@ import type {
   EnviarTemplateWhatsappRequest,
   EncerramentoEmMassaRequest,
   EncerramentoEmMassaResponse,
+  EncerramentoIndividualRequest,
   IniciarAtendimentoRequest,
   IniciarAtendimentoResponse,
   MensagemAtendimento,
@@ -167,9 +168,14 @@ export function ativarIaAtendimento(id: number): Promise<AtendimentoDetalhe> {
   return requestJson(`/api/atendimentos/${id}/modo-ia`, { method: 'PATCH' });
 }
 
-export function encerrarAtendimento(id: number, motivo?: string): Promise<AtendimentoDetalhe> {
-  const search = motivo?.trim() ? `?motivo=${encodeURIComponent(motivo.trim())}` : '';
-  return requestJson(`/api/atendimentos/${id}/encerrar${search}`, { method: 'POST' });
+export function encerrarAtendimento(
+  id: number,
+  request: EncerramentoIndividualRequest,
+): Promise<AtendimentoDetalhe> {
+  return requestJson(`/api/atendimentos/${id}/encerrar`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
 }
 
 export function contarAtendimentosAtivos(): Promise<AtendimentosAtivosContagem> {

@@ -41,6 +41,7 @@ import type {
   AtendimentoLembrete,
   AtendimentoResumo,
   AtendimentoView,
+  EncerramentoIndividualRequest,
   EnviarTemplateWhatsappRequest,
   MensagemAtendimento,
   NovoAtendimentoLembrete,
@@ -138,6 +139,7 @@ export function AtendimentosClient({
   const activeAbortController = useRef<AbortController | null>(null);
   const activeRequestVersion = useRef(0);
   const activeInFlight = useRef(false);
+  const individualClosureInFlight = useRef(false);
   const bloquearSelecaoAutomatica = useRef(false);
   const viewTransitioning = useRef(initialView === 'FINALIZADOS');
   const firstListEffect = useRef(initialView === 'ATIVOS');
@@ -743,19 +745,26 @@ export function AtendimentosClient({
     void refreshList();
   }
 
-  async function encerrarAtendimentoSelecionado() {
+  async function encerrarAtendimentoSelecionado(confirmacao: string) {
     const atendimentoId = activeIdRef.current;
-    if (!atendimentoId || busy) return;
+    if (confirmacao !== 'ENCERRAR' || !atendimentoId || busy || individualClosureInFlight.current) return;
+    individualClosureInFlight.current = true;
     setBusy(true);
     setError(null);
     try {
-      const encerrado = await encerrarAtendimento(atendimentoId);
+      const request: EncerramentoIndividualRequest = {
+        confirmado: true,
+        origem: 'DIALOG_ATENDIMENTO',
+        confirmacao: confirmacao as 'ENCERRAR',
+      };
+      const encerrado = await encerrarAtendimento(atendimentoId, request);
       setCloseIndividualDialogOpen(false);
       aplicarEncerramentoIndividual(atendimentoId, encerrado);
       setFeedback('Atendimento encerrado.');
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
+      individualClosureInFlight.current = false;
       setBusy(false);
     }
   }
@@ -953,7 +962,7 @@ export function AtendimentosClient({
         mode="INDIVIDUAL"
         processing={busy}
         onOpenChange={setCloseIndividualDialogOpen}
-        onConfirm={() => void encerrarAtendimentoSelecionado()}
+        onConfirm={(confirmacao) => void encerrarAtendimentoSelecionado(confirmacao ?? '')}
       />
       <EncerrarAtendimentoDialog
         open={closeAllDialogOpen}

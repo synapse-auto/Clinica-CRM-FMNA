@@ -13,6 +13,7 @@ type Props = {
 };
 
 const CONFIRMACAO_EM_MASSA = 'ENCERRAR TODOS';
+const CONFIRMACAO_INDIVIDUAL = 'ENCERRAR';
 
 export function EncerrarAtendimentoDialog({
   open,
@@ -25,14 +26,15 @@ export function EncerrarAtendimentoDialog({
   const [confirmacao, setConfirmacao] = useState('');
   const confirmRef = useRef<HTMLInputElement>(null);
   const isMass = mode === 'MASSA';
-  const confirmationValid = !isMass || confirmacao === CONFIRMACAO_EM_MASSA;
+  const confirmationPhrase = isMass ? CONFIRMACAO_EM_MASSA : CONFIRMACAO_INDIVIDUAL;
+  const confirmationValid = confirmacao === confirmationPhrase;
 
   useEffect(() => {
     if (!open) {
       setConfirmacao('');
       return;
     }
-    if (isMass) window.requestAnimationFrame(() => confirmRef.current?.focus());
+    window.requestAnimationFrame(() => confirmRef.current?.focus());
   }, [isMass, open]);
 
   if (!open) return null;
@@ -81,21 +83,19 @@ export function EncerrarAtendimentoDialog({
           </button>
         </header>
 
-        {isMass ? (
-          <div className="space-y-2 p-5">
-            <label className="block text-[11px] font-bold text-clinic-text">
-              Para confirmar, digite <strong>{CONFIRMACAO_EM_MASSA}</strong>
-              <input
-                ref={confirmRef}
-                value={confirmacao}
-                disabled={processing}
-                onChange={(event) => setConfirmacao(event.target.value)}
-                aria-label="Confirmação para encerrar todos"
-                className="mt-2 h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-[12px] text-clinic-text outline-none focus:border-clinic-danger focus:ring-4 focus:ring-clinic-danger/10 disabled:opacity-50"
-              />
-            </label>
-          </div>
-        ) : null}
+        <div className="space-y-2 p-5">
+          <label className="block text-[11px] font-bold text-clinic-text">
+            Para confirmar, digite <strong>{confirmationPhrase}</strong>
+            <input
+              ref={confirmRef}
+              value={confirmacao}
+              disabled={processing}
+              onChange={(event) => setConfirmacao(event.target.value)}
+              aria-label={isMass ? 'Confirmação para encerrar todos' : 'Confirmação para encerrar atendimento'}
+              className="mt-2 h-10 w-full rounded-lg border border-clinic-border bg-clinic-input px-3 text-[12px] text-clinic-text outline-none focus:border-clinic-danger focus:ring-4 focus:ring-clinic-danger/10 disabled:opacity-50"
+            />
+          </label>
+        </div>
 
         <footer className="flex justify-end gap-2 border-t border-clinic-border px-5 py-4">
           <button
@@ -109,7 +109,7 @@ export function EncerrarAtendimentoDialog({
           <button
             type="button"
             disabled={!confirmationValid || processing}
-            onClick={() => onConfirm(isMass ? confirmacao : undefined)}
+            onClick={() => onConfirm(confirmacao)}
             className="inline-flex h-9 items-center gap-2 rounded-lg bg-clinic-danger px-4 text-[11px] font-extrabold text-white hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {processing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <OctagonAlert className="h-4 w-4" />}

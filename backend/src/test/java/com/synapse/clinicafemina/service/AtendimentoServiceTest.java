@@ -54,6 +54,7 @@ class AtendimentoServiceTest {
     private AtendimentoService service;
     private Atendimento atendimento;
     private Clinica clinica;
+    private Usuario usuario;
 
     @BeforeEach
     void setUp() {
@@ -74,6 +75,9 @@ class AtendimentoServiceTest {
                 .thenReturn(new WhatsappWindowService.WindowState(false, null, null, false));
         clinica = new Clinica();
         clinica.setId(1L);
+        usuario = new Gestor();
+        usuario.setId(7L);
+        usuario.setPerfil("GESTOR");
         Paciente paciente = new Paciente();
         paciente.setId(2L);
         paciente.setClinica(clinica);
@@ -137,7 +141,7 @@ class AtendimentoServiceTest {
                 .thenReturn(Optional.of(atendimento));
         when(atendimentoRepository.save(atendimento)).thenReturn(atendimento);
 
-        service.encerrar(3L, 1L, null);
+        service.encerrar(3L, 1L, null, usuario);
 
         assertEquals("ENCERRADO", atendimento.getStatus());
         assertTrue(atendimento.getDataEncerramento() != null);
@@ -159,7 +163,7 @@ class AtendimentoServiceTest {
         when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 1L))
                 .thenReturn(Optional.of(atendimento));
 
-        service.encerrar(3L, 1L, "Outro motivo");
+        service.encerrar(3L, 1L, "Outro motivo", usuario);
 
         assertEquals(encerradoEm, atendimento.getDataEncerramento());
         assertEquals("Motivo original", atendimento.getMotivoEncerramento());
@@ -171,7 +175,7 @@ class AtendimentoServiceTest {
         when(atendimentoRepository.findByIdAndClinicaIdForUpdate(3L, 2L))
                 .thenReturn(Optional.empty());
 
-        assertThrows(NotFoundException.class, () -> service.encerrar(3L, 2L, null));
+        assertThrows(NotFoundException.class, () -> service.encerrar(3L, 2L, null, usuario));
 
         verify(atendimentoRepository, never()).save(any());
     }

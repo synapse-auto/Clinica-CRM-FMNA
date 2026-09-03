@@ -194,6 +194,12 @@ export type EncerramentoEmMassaRequest = {
   motivo?: string;
 };
 
+export type EncerramentoIndividualRequest = {
+  confirmado: true;
+  origem: 'DIALOG_ATENDIMENTO';
+  confirmacao: 'ENCERRAR';
+};
+
 export type EncerramentoEmMassaResponse = {
   encerrados: number;
   dataEncerramento: string;
