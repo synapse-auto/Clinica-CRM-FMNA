@@ -68,6 +68,20 @@ public class GlobalExceptionHandler {
     }
 
     // ── 409 Conflito de estado ────────────────────────────────────────────────
+    @ExceptionHandler(WhatsappPatientIdentityConflictException.class)
+    public ResponseEntity<Object> handleWhatsappPatientIdentityConflict(
+            WhatsappPatientIdentityConflictException ex,
+            WebRequest request
+    ) {
+        log.warn("Conflito de identidade WhatsApp em [{}]", path(request));
+        return buildResponse(
+                HttpStatus.CONFLICT,
+                ex.getMessage(),
+                WhatsappPatientIdentityConflictException.CODE,
+                request
+        );
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Object> handleIllegalState(IllegalStateException ex, WebRequest request) {
         log.warn("IllegalStateException: {}", ex.getMessage());

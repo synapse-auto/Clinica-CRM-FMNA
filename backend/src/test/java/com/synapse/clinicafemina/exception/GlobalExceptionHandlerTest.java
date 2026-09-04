@@ -47,6 +47,19 @@ class GlobalExceptionHandlerTest {
         assertFalse(body.toString().contains("paciente_fk"));
     }
 
+    @Test
+    void should_return_structured_conflict_for_ambiguous_whatsapp_patient_identity() {
+        ResponseEntity<Object> response = handler.handleWhatsappPatientIdentityConflict(
+                new WhatsappPatientIdentityConflictException("Conflito de identidade."),
+                transferRequest()
+        );
+        Map<?, ?> body = (Map<?, ?>) response.getBody();
+
+        assertEquals(409, response.getStatusCode().value());
+        assertEquals(WhatsappPatientIdentityConflictException.CODE, body.get("code"));
+        assertEquals("Conflito de identidade.", body.get("message"));
+    }
+
     private WebRequest transferRequest() {
         WebRequest request = mock(WebRequest.class);
         when(request.getDescription(false))

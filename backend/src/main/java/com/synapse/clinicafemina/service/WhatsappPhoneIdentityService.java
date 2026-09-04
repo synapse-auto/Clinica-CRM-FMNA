@@ -2,6 +2,7 @@ package com.synapse.clinicafemina.service;
 
 import com.synapse.clinicafemina.domain.Atendimento;
 import com.synapse.clinicafemina.domain.Paciente;
+import com.synapse.clinicafemina.exception.WhatsappPatientIdentityConflictException;
 import com.synapse.clinicafemina.integration.external.ExternalProviderType;
 import com.synapse.clinicafemina.integration.whatsapp.WhatsappPhoneNormalizer;
 import com.synapse.clinicafemina.repository.AtendimentoRepository;
@@ -39,18 +40,54 @@ public class WhatsappPhoneIdentityService {
     }
 
     public Optional<PatientResolution> resolvePatient(Long clinicId, PhoneIdentity identity) {
+        /*
+         * O match exato tem precedência sobre qualquer alias. A busca antiga usava
+         * Optional<Paciente>; como telefone não é único no legado, isso podia lançar
+         * IncorrectResultSizeDataAccessException e virar o 500 observado no modal.
+         * A consulta em lista permite resolver duplicidades de forma explícita.
+         */
+        List<Paciente> exactCandidates = pacienteRepository
+                .findAtivosByClinicaIdAndTelefoneNormalizado(clinicId, identity.normalized())
+                .stream()
+                .filter(patient -> patient.getDeletadoEm() == null)
+                .toList();
+        if (!exactCandidates.isEmpty()) {
+            if (exactCandidates.size() == 1) {
+                return Optional.of(resolution(exactCandidates.getFirst(), identity));
+            }
+            return Optional.of(resolveConflictSafely(clinicId, identity, exactCandidates));
+        }
+
         List<Paciente> candidates = pacienteRepository.findByClinicaIdAndTelefoneNormalizadoIn(
                         clinicId, identity.aliases()
                 ).stream()
                 .filter(patient -> patient.getDeletadoEm() == null)
                 .toList();
+
+        // Mantém compatibilidade com callers/repositorios que fornecem apenas a consulta de aliases.
+        exactCandidates = candidates.stream()
+                .filter(patient -> identity.normalized().equals(patient.getTelefoneNormalizado()))
+                .toList();
+        if (!exactCandidates.isEmpty()) {
+            if (exactCandidates.size() == 1) {
+                return Optional.of(resolution(exactCandidates.getFirst(), identity));
+            }
+            return Optional.of(resolveConflictSafely(clinicId, identity, exactCandidates));
+        }
+        /*
+         * Compatibilidade transitória com adaptadores/repositorios que ainda não expõem a
+         * consulta em lista. O repositório JPA desta versão sempre executa a consulta acima;
+         * esse fallback só é alcançado quando ela e a consulta de aliases não retornam dados,
+         * preservando integrações de teste e implementações legadas sem reintroduzir o caminho
+         * de resultado múltiplo no cenário real.
+         */
         if (candidates.isEmpty()) {
-            candidates = pacienteRepository.findByClinicaIdAndTelefoneNormalizado(
-                            clinicId, identity.normalized()
-                    )
-                    .filter(patient -> patient.getDeletadoEm() == null)
-                    .map(List::of)
-                    .orElseGet(List::of);
+            Optional<Paciente> legacyExact = pacienteRepository.findByClinicaIdAndTelefoneNormalizado(
+                    clinicId, identity.normalized()
+            );
+            if (legacyExact.isPresent() && legacyExact.get().getDeletadoEm() == null) {
+                return Optional.of(resolution(legacyExact.get(), identity));
+            }
         }
         if (candidates.isEmpty()) {
             return Optional.empty();
@@ -103,15 +140,27 @@ public class WhatsappPhoneIdentityService {
         List<CandidateEvidence> evidence = candidates.stream()
                 .map(patient -> evidence(clinicId, patient))
                 .toList();
-        List<CandidateEvidence> established = evidence.stream()
+        List<CandidateEvidence> ranked = evidence;
+        List<CandidateEvidence> active = ranked.stream()
+                .filter(CandidateEvidence::activeAttendance)
+                .toList();
+        if (!active.isEmpty()) {
+            ranked = active;
+        }
+        List<CandidateEvidence> confirmed = ranked.stream()
+                .filter(CandidateEvidence::confirmedChat)
+                .toList();
+        if (!confirmed.isEmpty()) {
+            ranked = confirmed;
+        }
+        List<CandidateEvidence> established = ranked.stream()
                 .filter(item -> !item.provisional())
                 .toList();
-        boolean remainingAreProvisional = established.size() == 1
-                && evidence.stream()
-                .filter(item -> !item.patient().getId().equals(established.getFirst().patient().getId()))
-                .allMatch(CandidateEvidence::provisional);
-        if (remainingAreProvisional) {
-            CandidateEvidence winner = established.getFirst();
+        if (established.size() == 1) {
+            ranked = established;
+        }
+        if (ranked.size() == 1) {
+            CandidateEvidence winner = ranked.getFirst();
             log.warn(
                     "Identidade WhatsApp duplicada resolvida sem merge. clinicaId={} pacienteId={} "
                             + "candidatos={} inbound={} chatConfirmado={} origemResolucao={}",
@@ -126,7 +175,7 @@ public class WhatsappPhoneIdentityService {
                 evidence.size(),
                 evidence.stream().map(CandidateEvidence::safeDescription).toList()
         );
-        throw new IllegalStateException(CONFLICT_MESSAGE);
+        throw new WhatsappPatientIdentityConflictException(CONFLICT_MESSAGE);
     }
 
     private CandidateEvidence evidence(Long clinicId, Paciente patient) {
@@ -139,12 +188,14 @@ public class WhatsappPhoneIdentityService {
         boolean confirmedChat = attendances.stream()
                 .map(Atendimento::getWhatsappChatId)
                 .anyMatch(value -> value != null && !value.isBlank());
+        boolean activeAttendance = attendances.stream()
+                .anyMatch(attendance -> "ATIVO".equals(attendance.getStatus()));
         boolean provisional = patient.getExternalSource() == ExternalProviderType.WHATSAPP
                 && isPlaceholder(patient)
                 && inbound == 0
                 && !confirmedChat
                 && !hasClinicalData(patient);
-        return new CandidateEvidence(patient, inbound, confirmedChat, provisional);
+        return new CandidateEvidence(patient, inbound, confirmedChat, activeAttendance, provisional);
     }
 
     private boolean isPlaceholder(Paciente patient) {
@@ -200,6 +251,7 @@ public class WhatsappPhoneIdentityService {
             Paciente patient,
             long inboundMessages,
             boolean confirmedChat,
+            boolean activeAttendance,
             boolean provisional
     ) {
         private String safeDescription() {

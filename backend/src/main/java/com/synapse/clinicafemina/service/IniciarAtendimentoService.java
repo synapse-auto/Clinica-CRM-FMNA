@@ -112,13 +112,17 @@ public class IniciarAtendimentoService {
             );
             return new PacienteResolvido(patient, false);
         }
-        pacienteRepository.findByClinicaIdAndTelefoneNormalizado(
-                clinica.getId(), identity.normalized()
-        ).filter(patient -> patient.getDeletadoEm() != null).ifPresent(patient -> {
-            throw new IllegalStateException(
-                    "Nao foi possivel iniciar o atendimento para este contato."
-            );
-        });
+        var historicalMatches = pacienteRepository.findTodosByClinicaIdAndTelefoneNormalizadoIn(
+                clinica.getId(), identity.aliases()
+        );
+        historicalMatches.stream()
+                .filter(patient -> patient.getDeletadoEm() != null)
+                .findFirst()
+                .ifPresent(patient -> {
+                    throw new IllegalStateException(
+                            "Nao foi possivel iniciar o atendimento para este contato."
+                    );
+                });
         Paciente paciente = new Paciente();
         paciente.setClinica(clinica);
         paciente.setNome(nome);
